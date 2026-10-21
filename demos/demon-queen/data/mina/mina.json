@@ -1112,7 +1112,7 @@
    "speed": 1.35
   },
   {
-   "kind": "enemy",
+   "kind": "miniboss",
    "room": 16,
    "p": [
     -19.375,
@@ -1125,9 +1125,22 @@
    ],
    "moved": 0.0,
    "definition": "bone_guard",
-   "health": 71.9,
-   "damage": 13.0,
-   "speed": 1.0
+   "health": 179.8,
+   "damage": 20.6,
+   "speed": 1.0,
+   "name": "El Señor de la Cripta",
+   "size": 2.6,
+   "power": "alzar",
+   "reward": {
+    "gold": 50,
+    "potions": 0,
+    "herbs": 2,
+    "materials": {
+     "hueso_viejo": 6,
+     "craneo_campeon": 1
+    },
+    "relic": false
+   }
   },
   {
    "kind": "seal",
@@ -1204,7 +1217,7 @@
    "speed": 1.35
   },
   {
-   "kind": "enemy",
+   "kind": "miniboss",
    "room": 14,
    "p": [
     3.625,
@@ -1217,9 +1230,21 @@
    ],
    "moved": 0.0,
    "definition": "grave_mage",
-   "health": 45.4,
-   "damage": 9.0,
-   "speed": 1.08
+   "health": 113.4,
+   "damage": 14.2,
+   "speed": 1.08,
+   "name": "La Bibliotecaria",
+   "size": 2.5,
+   "power": "andanada",
+   "reward": {
+    "gold": 45,
+    "potions": 2,
+    "herbs": 0,
+    "materials": {
+     "ceniza_arcana": 2
+    },
+    "relic": false
+   }
   },
   {
    "kind": "enemy",
@@ -1362,7 +1387,7 @@
    "speed": 1.3
   },
   {
-   "kind": "enemy",
+   "kind": "miniboss",
    "room": 19,
    "p": [
     22.125,
@@ -1375,9 +1400,21 @@
    ],
    "moved": 0.0,
    "definition": "bone_guard",
-   "health": 71.2,
-   "damage": 13.0,
-   "speed": 1.0
+   "health": 178.1,
+   "damage": 20.6,
+   "speed": 1.0,
+   "name": "El Herrero Hueco",
+   "size": 2.7,
+   "power": "chispas",
+   "reward": {
+    "gold": 60,
+    "potions": 1,
+    "herbs": 0,
+    "materials": {
+     "ceniza_arcana": 3
+    },
+    "relic": false
+   }
   },
   {
    "kind": "enemy",
@@ -1750,7 +1787,7 @@
    "speed": 1.35
   },
   {
-   "kind": "elite",
+   "kind": "miniboss",
    "room": 26,
    "p": [
     73.625,
@@ -1763,9 +1800,19 @@
    ],
    "moved": 0.0,
    "definition": "bone_guard",
-   "health": 130.7,
-   "damage": 16.4,
-   "speed": 1.0
+   "health": 204.2,
+   "damage": 20.6,
+   "speed": 1.0,
+   "name": "El Centinela del Tesoro",
+   "size": 2.5,
+   "power": "furia",
+   "reward": {
+    "gold": 90,
+    "potions": 1,
+    "herbs": 0,
+    "materials": {},
+    "relic": false
+   }
   },
   {
    "kind": "chest",

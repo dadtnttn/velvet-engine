@@ -199,12 +199,29 @@ impl FloorGrid {
         best
     }
 
-    /// The room of the floor under a point: the highest floor at most half a metre over it.
+    /// The room of the floor under a point: the highest floor at most half a metre over it. A
+    /// floor of no room (the top of a crate, a ledge between places) takes the room of the floors
+    /// round it, out to about a metre.
     pub fn room_at(&self, x: f32, y: f32, z: f32) -> Option<usize> {
-        self.floors(x, z)
-            .filter(|(floor, _)| *floor <= y + 0.5)
-            .max_by(|a, b| a.0.total_cmp(&b.0))
-            .and_then(|(_, span)| span.room.map(usize::from))
+        let here = |x: f32, z: f32| {
+            self.floors(x, z)
+                .filter(|(floor, _)| *floor <= y + 0.5 && *floor >= y - 2.5)
+                .max_by(|a, b| a.0.total_cmp(&b.0))
+                .and_then(|(_, span)| span.room.map(usize::from))
+        };
+        if let Some(room) = here(x, z) {
+            return Some(room);
+        }
+        for ring in 1..=4 {
+            let r = ring as f32 * self.cell;
+            for k in 0..8 {
+                let a = k as f32 * std::f32::consts::FRAC_PI_4;
+                if let Some(room) = here(x + a.cos() * r, z + a.sin() * r) {
+                    return Some(room);
+                }
+            }
+        }
+        None
     }
 
     /// How many floors the grid holds.

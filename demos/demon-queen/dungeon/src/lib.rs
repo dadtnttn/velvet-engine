@@ -37,6 +37,8 @@ pub mod i18n;
 mod incidents;
 #[path = "mine_art.rs"]
 mod mine_art;
+#[path = "pickups.rs"]
+pub mod pickups;
 #[path = "prompt_icons.rs"]
 pub mod prompt_icons;
 #[path = "replay.rs"]
@@ -610,6 +612,16 @@ pub struct Dungeon {
     pub auto_walk: bool,
     /// How many times she has talked to the mine's people (the line they say next).
     pub npc_talks: usize,
+    /// What fallen foes left on the floor, on its way to her.
+    pub pickups: Vec<pickups::Pickup>,
+    /// Kills one after another (each within a few seconds of the last), and when the last was.
+    pub streak: u32,
+    pub streak_at: f32,
+    /// What she has picked up lately, for the notice, and when.
+    loot_note: Vec<(String, u32)>,
+    loot_note_at: f32,
+    /// The named champions' clocks and the turning points they have passed, by spawn.
+    champion_state: std::collections::BTreeMap<usize, (f32, u8)>,
 }
 /// The 3D map opens turned a third of the way round and looking down at
 /// about fifty degrees.
@@ -783,6 +795,12 @@ impl Dungeon {
             jump_requested: false,
             auto_walk: false,
             npc_talks: 0,
+            pickups: Vec::new(),
+            streak: 0,
+            streak_at: -100.0,
+            loot_note: Vec::new(),
+            loot_note_at: -100.0,
+            champion_state: Default::default(),
         }
     }
     pub fn seed(&self) -> u64 {
@@ -893,12 +911,18 @@ impl Dungeon {
     }
     /// The living boss or miniboss the player is facing: (name, health
     /// fraction, enraged), for the HUD's bar.
-    pub fn boss_bar(&self) -> Option<(&'static str, f32, bool)> {
+    pub fn boss_bar(&self) -> Option<(&str, f32, bool)> {
         let player = self.controller.position;
         let current = self.map.region_at(player);
         self.actors.iter().find_map(|actor| {
             let spawn = &self.map.spawns[actor.spawn];
+            let named = self
+                .authored
+                .as_ref()
+                .and_then(|mine| mine.champions.get(&spawn.id))
+                .map(|c| c.name.as_str());
             let name = match spawn.kind {
+                _ if named.is_some() => named.unwrap_or_default(),
                 SpawnKind::Boss => "Guardián del Corazón",
                 SpawnKind::Miniboss if self.map.rooms[spawn.room].role == Role::Miniboss => {
                     "Custodio del Sello"
@@ -975,8 +999,22 @@ impl Dungeon {
     /// each mark glowing on the floor before it bursts.
     fn heart_spit(&mut self, room: usize, enraged: bool, fx: &mut Vec<combat::Fx>) {
         let from = self.heart_center(room);
-        let player = self.controller.position;
         let count = if enraged { 5 } else { 3 };
+        self.orbs_at_her(from, count, 9.0, combat::BOSS_CRIMSON, fx);
+        let at = self.heart_center(room);
+        self.sound(sound::Sfx::SpellBurst, Some(at), 0.7);
+    }
+
+    /// Orbs arcing from `from` to where she stands and round it, each marked on the floor first.
+    fn orbs_at_her(
+        &mut self,
+        from: Vec3,
+        count: usize,
+        damage: f32,
+        color: [f32; 3],
+        fx: &mut Vec<combat::Fx>,
+    ) {
+        let player = self.controller.position;
         let turn = self.elapsed * 1.3;
         for k in 0..count {
             let mut to = if k == 0 {
@@ -1005,17 +1043,161 @@ impl Dungeon {
                 from,
                 to,
                 age: -lag,
-                damage: 9.0,
+                damage,
                 radius: 1.25,
-                color: combat::BOSS_CRIMSON,
+                color,
             });
         }
-        let at = self.heart_center(room);
-        self.sound(sound::Sfx::SpellBurst, Some(at), 0.7);
+    }
+
+    /// The named champions' powers while she is in their room: embers, volleys, the dead
+    /// raised, their fury.
+    fn champions_tick(&mut self, current: usize, dt: f32, fx: &mut Vec<combat::Fx>) {
+        let Some(mine) = self.authored.clone() else {
+            return;
+        };
+        let player = self.controller.position;
+        for (&id, champion) in &mine.champions {
+            let Some(index) = self.actors.iter().position(|a| a.spawn == id) else {
+                continue;
+            };
+            let (health, enraged, at) = {
+                let a = &self.actors[index];
+                (a.health, a.enraged, a.position)
+            };
+            let (full, room) = {
+                let s = &self.map.spawns[id];
+                (s.health.max(1.0), s.room)
+            };
+            if health <= 0.0 || room != current || horizontal(at - player).length() > 22.0 {
+                continue;
+            }
+            let life = health / full;
+            let state = self.champion_state.entry(id).or_insert((4.0, 0));
+            state.0 -= dt;
+            let mut fire = false;
+            let mut turn = false;
+            match champion.power {
+                authored::Power::Sparks | authored::Power::Volley if state.0 <= 0.0 => {
+                    let calm = if champion.power == authored::Power::Sparks {
+                        7.0
+                    } else {
+                        9.0
+                    };
+                    state.0 = if enraged { calm * 0.7 } else { calm };
+                    fire = true;
+                }
+                authored::Power::Raise => {
+                    let points = [0.66f32, 0.33];
+                    if (state.1 as usize) < points.len() && life < points[state.1 as usize] {
+                        state.1 += 1;
+                        turn = true;
+                    }
+                }
+                authored::Power::Fury if state.1 == 0 && life < 0.5 => {
+                    state.1 = 1;
+                    turn = true;
+                }
+                _ => {}
+            }
+            let head = at + Vec3::Y * (champion.size * 0.85);
+            match champion.power {
+                authored::Power::Sparks if fire => {
+                    self.orbs_at_her(head, 4, 8.0, [1.0, 0.42, 0.1], fx);
+                    self.sound(sound::Sfx::SpellCharge, Some(head), 0.8);
+                }
+                authored::Power::Volley if fire => {
+                    self.orbs_at_her(head, 5, 7.0, combat::MAGE_VIOLET, fx);
+                    self.sound(sound::Sfx::SpellCharge, Some(head), 0.8);
+                }
+                authored::Power::Raise if turn => {
+                    self.summon_around(room, Some(at), 3, fx);
+                    self.sound(sound::Sfx::Summon, Some(at), 1.0);
+                    self.message(format!("{} alza a los muertos.", champion.name));
+                }
+                authored::Power::Fury if turn => {
+                    self.actors[index].enraged = true;
+                    self.summon_around(room, Some(at), 2, fx);
+                    self.sound(sound::Sfx::Roar, Some(at), 1.0);
+                    self.message(format!(
+                        "{} se enfurece y llama a los suyos.",
+                        champion.name
+                    ));
+                }
+                _ => {}
+            }
+        }
+    }
+
+    /// What reached her from the floor: into her purse and her bag, with a note of it all.
+    fn take_loot(&mut self, taken: &[pickups::Loot]) {
+        if self.elapsed - self.loot_note_at > 2.4 {
+            self.loot_note.clear();
+        }
+        self.loot_note_at = self.elapsed;
+        let mut coins = false;
+        for loot in taken {
+            let (label, n) = match *loot {
+                pickups::Loot::Gold(n) => {
+                    self.gold += n;
+                    coins = true;
+                    ("oro".to_string(), n)
+                }
+                pickups::Loot::Material(id, n) => {
+                    *self.materials.entry(id.to_string()).or_default() += n;
+                    let name = MATERIALS
+                        .iter()
+                        .find(|(m, _)| *m == id)
+                        .map_or(id, |(_, name)| *name);
+                    (crate::i18n::tr(name).to_string(), n)
+                }
+                pickups::Loot::Tonic => {
+                    self.potions += 1;
+                    self.unbanked_potions += 1;
+                    (crate::i18n::tr("tónico").to_string(), 1)
+                }
+                pickups::Loot::Herbs(n) => {
+                    self.herbs += n;
+                    self.unbanked_herbs += n;
+                    (crate::i18n::tr("hierbas").to_string(), n)
+                }
+            };
+            match self.loot_note.iter_mut().find(|(l, _)| *l == label) {
+                Some(entry) => entry.1 += n,
+                None => self.loot_note.push((label, n)),
+            }
+        }
+        self.sound(
+            if coins {
+                sound::Sfx::Coins
+            } else {
+                sound::Sfx::Pickup
+            },
+            None,
+            0.5,
+        );
+        let note = self
+            .loot_note
+            .iter()
+            .map(|(label, n)| format!("+{n} {label}"))
+            .collect::<Vec<_>>()
+            .join(" · ");
+        self.message(note);
     }
 
     /// Raise `count` minions around the Heart's chamber.
     fn heart_summon(&mut self, room: usize, count: usize, fx: &mut Vec<combat::Fx>) {
+        self.summon_around(room, None, count, fx);
+    }
+
+    /// Raise `count` minions in a room, round `at` (else round the Heart or the room's centre).
+    fn summon_around(
+        &mut self,
+        room: usize,
+        at: Option<Vec3>,
+        count: usize,
+        fx: &mut Vec<combat::Fx>,
+    ) {
         let living = self.actors[self.base_actors..]
             .iter()
             .filter(|a| a.health > 0.0)
@@ -1026,10 +1208,10 @@ impl Dungeon {
         };
         // in the hand-made mine they rise round the Heart, on its chamber's floor
         let authored = self.authored.is_some();
-        let center = if authored {
-            self.heart_floor(room)
-        } else {
-            r.center
+        let center = match at {
+            Some(at) => at,
+            None if authored => self.heart_floor(room),
+            None => r.center,
         };
         let player = self.controller.position;
         let template = self
@@ -1642,7 +1824,7 @@ impl Dungeon {
                     .max(floor);
                 }
                 if (actor.burning * 2.5).floor() != before {
-                    let size = combat::body_size(spawn.kind);
+                    let size = authored::foe_size(self.authored.as_deref(), &spawn);
                     self.fx.push(combat::Fx::Burst {
                         at: actor.position + Vec3::Y * (0.9 * size),
                         color: [1.0, 0.52, 0.16],
@@ -1705,7 +1887,7 @@ impl Dungeon {
                 actor.gait = combat::Gait::Guard;
                 continue;
             }
-            let size = combat::body_size(spawn.kind);
+            let size = authored::foe_size(self.authored.as_deref(), &spawn);
             let moves = combat::moves(&spawn.definition, spawn.kind, spawn.id);
             let chest = player + Vec3::Y * 1.15;
             // Half-dead, a champion roars and fights enraged from then on.
@@ -2363,6 +2545,11 @@ impl Dungeon {
             }
         }
         self.heart_tick(current, dt, &mut new_fx);
+        self.champions_tick(current, dt, &mut new_fx);
+        let taken = pickups::update(&mut self.pickups, &self.map, self.controller.position, dt);
+        if !taken.is_empty() {
+            self.take_loot(&taken);
+        }
         // Bolts and orbs land (or miss) and effects fade.
         let mut bursts = Vec::new();
         let mut fx_sounds = Vec::new();
@@ -2630,7 +2817,7 @@ impl Dungeon {
             (actor.health - spawn.health * share / combat::toughness(spawn.kind)).max(0.0);
         let stage_after = actor.fracture_stage(spawn.health);
         let dead = actor.health <= 0.0;
-        let size = combat::body_size(spawn.kind);
+        let size = authored::foe_size(self.authored.as_deref(), &spawn);
         let chest_at = at + Vec3::Y * (1.1 * size);
         let seed = (spawn.id as u32).wrapping_mul(2654435761) ^ (self.elapsed * 997.0) as u32;
         let bone = [0.92, 0.86, 0.7];
@@ -2716,32 +2903,66 @@ impl Dungeon {
         self.sword_hit_flash = 0.16;
         self.sword_hit_stop = 0.065;
         if actor.health <= 0.0 {
-            // Foes leave materials, not gold; what the Heart raised crumbles
-            // to nothing.
+            // What it leaves bursts out of it onto the floor: its materials, gold, the odd tonic
+            // and herbs, a champion's own reward. What the Heart raised crumbles to nothing, but
+            // still counts for a streak.
             let summoned = index >= self.base_actors;
-            let loot = if summoned {
-                String::new()
+            let at = self.actors[index].position;
+            self.streak = if self.elapsed - self.streak_at < 6.0 {
+                self.streak + 1
             } else {
-                self.gather(&skeleton_drops(self.map.seed, &spawn))
+                1
             };
+            self.streak_at = self.elapsed;
+            let mut loot: Vec<pickups::Loot> = Vec::new();
+            if !summoned {
+                loot.extend(
+                    skeleton_drops(self.map.seed, &spawn)
+                        .into_iter()
+                        .map(|(id, n)| pickups::Loot::Material(id, n)),
+                );
+                loot.extend(pickups::extra_loot(self.map.seed, spawn.id, spawn.kind));
+            }
+            let champion = self
+                .authored
+                .as_ref()
+                .and_then(|mine| mine.champions.get(&spawn.id))
+                .cloned();
+            if let Some(c) = &champion {
+                loot.extend(pickups::coins(c.reward.gold));
+                loot.extend((0..c.reward.potions).map(|_| pickups::Loot::Tonic));
+                if c.reward.herbs > 0 {
+                    loot.push(pickups::Loot::Herbs(c.reward.herbs));
+                }
+                for (id, n) in &c.reward.materials {
+                    if let Some((known, _)) = MATERIALS.iter().find(|(m, _)| *m == id.as_str()) {
+                        loot.push(pickups::Loot::Material(known, *n));
+                    }
+                }
+            }
+            if self.streak >= 3 {
+                loot.extend(pickups::coins(self.streak * 3));
+            }
+            let seed = self.map.seed
+                ^ (spawn.id as u64).rotate_left(17)
+                ^ u64::from(self.elapsed.to_bits());
+            self.pickups.extend(pickups::burst(at, &loot, seed));
             if spawn.kind == SpawnKind::Miniboss {
                 if self.map.rooms[spawn.room].role == Role::Miniboss {
                     self.crest = true;
-                    self.message(format!(
-                        "Custodio derrotado. Obtienes la llave del Corazon. {loot}."
-                    ));
+                    self.message("Custodio derrotado. Obtienes la llave del Corazon.");
+                } else if let Some(c) = &champion {
+                    self.message(format!("{} ha caído. Recoge su botín.", c.name));
                 } else {
-                    self.message(format!("Campeon de los Acechadores derrotado. {loot}."));
+                    self.message("Campeon de los Acechadores derrotado.");
                 }
             } else if spawn.kind == SpawnKind::Boss {
                 self.won = true;
-                self.message(format!(
-                    "El Corazon ha caido. La salida esta abierta. {loot}."
-                ));
+                self.message("El Corazon ha caido. La salida esta abierta.");
+            } else if self.streak >= 3 {
+                self.message(format!("¡Racha ×{}! Botín extra.", self.streak));
             } else if summoned {
                 self.message("El siervo del Corazón se deshace en ceniza.");
-            } else {
-                self.message(format!("{loot}."));
             }
         }
     }
@@ -4041,7 +4262,12 @@ mod champion_tests {
             run.update(Input::default(), 1.0 / 60.0);
         }
         assert!(run.actors[foe].health <= 0.0, "the cut lands");
-        assert_eq!(run.gold, gold, "foes no longer pay in gold");
+        // what it leaves lies on the floor a moment, then comes to her
+        for _ in 0..900 {
+            run.update(Input::default(), 1.0 / 60.0);
+        }
+        assert!(run.pickups.is_empty(), "everything it left reached her");
+        assert!(run.gold >= gold, "foes may pay a little gold now");
         let sounds = run.take_sounds();
         assert!(
             sounds.iter().any(|s| s.sfx == sound::Sfx::Swing),

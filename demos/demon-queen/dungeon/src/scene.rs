@@ -1539,6 +1539,7 @@ impl Scene {
                 }
             }
         }
+        self.draw_pickups(run, &mut draws, &mut lights);
         for water in &self.mine_waters {
             if (water.surface.center - camera.position).length() > 60.0 {
                 continue;
@@ -1732,7 +1733,7 @@ impl Scene {
                 if dying && a.death >= super::combat::DEATH_SECONDS {
                     continue;
                 }
-                let size = super::combat::body_size(s.kind);
+                let size = super::authored::foe_size(run.authored.as_deref(), s);
                 let loadout = super::combat::loadout(&s.definition, s.kind, s.id);
                 let moves = super::combat::moves(&s.definition, s.kind, s.id);
                 let yaw = a.yaw;
@@ -3676,6 +3677,158 @@ impl Scene {
                     }
                 }
             }
+        }
+    }
+
+    /// What fallen foes left on the floor: each thing bobbing and turning where it lies (or on
+    /// its way to her), the rare ones glowing.
+    fn draw_pickups(
+        &self,
+        run: &Dungeon,
+        draws: &mut Vec<MeshDraw3D>,
+        lights: &mut Vec<PointLight3D>,
+    ) {
+        use super::pickups::Loot;
+        let t = run.elapsed;
+        let mut glows: Vec<(f32, Vec3, [f32; 3])> = Vec::new();
+        for p in &run.pickups {
+            let bob = if p.landed {
+                0.06 * (t * 3.0 + p.phase).sin() + 0.08
+            } else {
+                0.0
+            };
+            let at = p.position + Vec3::Y * bob;
+            let yaw = t * 2.4 + p.phase;
+            let glow = match p.loot {
+                Loot::Gold(n) => {
+                    let size = if n >= 10 { 0.075 } else { 0.055 };
+                    if self.assets.draw("coin", draws, at, size, yaw).is_none() {
+                        self.draw(
+                            draws,
+                            self.crystal,
+                            at,
+                            Vec3::new(0.08, 0.08, 0.08),
+                            yaw,
+                            [1.0, 0.78, 0.2],
+                        );
+                    }
+                    [1.0, 0.8, 0.35]
+                }
+                Loot::Tonic => {
+                    self.draw(
+                        draws,
+                        self.healing_potion,
+                        at,
+                        Vec3::new(0.2, 0.22, 0.2),
+                        yaw,
+                        [1.0; 3],
+                    );
+                    [1.0, 0.3, 0.45]
+                }
+                Loot::Herbs(_) => {
+                    if self
+                        .assets
+                        .draw("healing_herbs", draws, at, 0.2, yaw)
+                        .is_none()
+                    {
+                        self.draw(
+                            draws,
+                            self.crystal,
+                            at,
+                            Vec3::new(0.07, 0.1, 0.07),
+                            yaw,
+                            [0.3, 0.8, 0.3],
+                        );
+                    }
+                    [0.45, 1.0, 0.45]
+                }
+                Loot::Material(id, _) => {
+                    let (mesh, scale, color, emission, light) = match id {
+                        "ceniza_arcana" => (
+                            self.crystal,
+                            Vec3::new(0.07, 0.13, 0.07),
+                            [0.6, 0.3, 1.0],
+                            1.8,
+                            [0.65, 0.35, 1.0],
+                        ),
+                        "esquirla_corazon" => (
+                            self.crystal,
+                            Vec3::new(0.09, 0.17, 0.09),
+                            [1.0, 0.12, 0.15],
+                            2.4,
+                            [1.0, 0.15, 0.2],
+                        ),
+                        "craneo_campeon" => (
+                            self.fx_orb,
+                            Vec3::new(0.08, 0.085, 0.095),
+                            [0.86, 0.8, 0.66],
+                            0.15,
+                            [1.0, 0.9, 0.7],
+                        ),
+                        "gelatina_azul" => (
+                            self.fx_orb,
+                            Vec3::new(0.1, 0.07, 0.1),
+                            [0.3, 0.6, 1.0],
+                            0.6,
+                            [0.3, 0.6, 1.0],
+                        ),
+                        "gelatina_verde" => (
+                            self.fx_orb,
+                            Vec3::new(0.1, 0.07, 0.1),
+                            [0.4, 1.0, 0.45],
+                            0.6,
+                            [0.4, 1.0, 0.45],
+                        ),
+                        // an old bone: a shaft with its knobs
+                        _ => {
+                            let along = Vec3::new(yaw.cos(), 0.0, -yaw.sin());
+                            for end in [-1.0f32, 1.0] {
+                                self.draw(
+                                    draws,
+                                    self.fx_orb,
+                                    at + along * (0.11 * end),
+                                    Vec3::new(0.04, 0.04, 0.04),
+                                    0.0,
+                                    [0.85, 0.79, 0.64],
+                                );
+                            }
+                            (
+                                self.cube,
+                                Vec3::new(0.035, 0.035, 0.2),
+                                [0.82, 0.76, 0.6],
+                                0.1,
+                                [0.0; 3],
+                            )
+                        }
+                    };
+                    self.draw(
+                        draws,
+                        mesh,
+                        at,
+                        scale,
+                        yaw + std::f32::consts::FRAC_PI_2,
+                        color,
+                    );
+                    if let Some(draw) = draws.last_mut() {
+                        draw.material = draw.material.with_emission(emission);
+                    }
+                    light
+                }
+            };
+            let rarity = p.loot.rarity();
+            if rarity > 0.0 {
+                glows.push((rarity, at, glow));
+            }
+        }
+        // the brightest few light the floor round them
+        glows.sort_by(|a, b| b.0.total_cmp(&a.0));
+        for (rarity, at, color) in glows.into_iter().take(5) {
+            lights.push(PointLight3D::new(
+                at + Vec3::Y * 0.3,
+                color,
+                1.6 + 2.2 * rarity,
+                2.6,
+            ));
         }
     }
 

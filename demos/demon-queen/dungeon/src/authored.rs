@@ -114,6 +114,47 @@ struct SpawnData {
     gold: u32,
     #[serde(default)]
     loot: Option<Loot>,
+    /// A champion's name, height in metres, power and own reward.
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    size: Option<f32>,
+    #[serde(default)]
+    power: Option<String>,
+    #[serde(default)]
+    reward: Option<Loot>,
+}
+
+/// What a named champion does besides its blows.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Power {
+    /// Embers rain on her and round her now and then.
+    Sparks,
+    /// A volley of violet orbs at her now and then.
+    Volley,
+    /// At two thirds and a third of its life it raises the dead round it.
+    Raise,
+    /// At half its life it rages and calls two of its own.
+    Fury,
+    None,
+}
+
+/// A foe of the mine with a name of its own (the HUD's bar shows it), its height, its power and
+/// what it leaves when it falls besides the usual.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Champion {
+    pub name: String,
+    /// Its height in metres.
+    pub size: f32,
+    pub power: Power,
+    pub reward: Loot,
+}
+
+/// How big a foe stands: a champion's own height, else its kind's.
+pub fn foe_size(mine: Option<&Authored>, spawn: &Spawn) -> f32 {
+    mine.and_then(|m| m.champions.get(&spawn.id))
+        .map(|c| c.size / 1.95)
+        .unwrap_or_else(|| super::combat::body_size(spawn.kind))
 }
 
 /// What a chest of the mine holds (rolled by the export: the same every expedition).
@@ -243,6 +284,8 @@ pub struct Authored {
     pub lamps: Vec<Lamp>,
     pub npcs: Vec<Npc>,
     pub pools: Vec<Pool>,
+    /// The foes with names of their own, by spawn id.
+    pub champions: BTreeMap<usize, Champion>,
     /// The Heart's middle (it beats round it) and the floor under it (its chamber breathes round it).
     pub heart: Option<(Vec3, Vec3)>,
     /// The floor, metre by metre, for the map: every floor with room over it and a room.
@@ -521,6 +564,7 @@ pub fn load() -> Result<(Blueprint, Authored, Vec<Slime>), String> {
     let mut faces = Vec::new();
     let mut loot = BTreeMap::new();
     let mut slimes = Vec::new();
+    let mut champions = BTreeMap::new();
     for (n, s) in file.spawns.iter().enumerate() {
         let position = v3(s.p);
         let room = s.room.min(last);
@@ -544,6 +588,23 @@ pub fn load() -> Result<(Blueprint, Authored, Vec<Slime>), String> {
         let id = spawns.len();
         if let Some(l) = &s.loot {
             loot.insert(id, l.clone());
+        }
+        if let Some(name) = &s.name {
+            champions.insert(
+                id,
+                Champion {
+                    name: name.clone(),
+                    size: s.size.unwrap_or(2.4),
+                    power: match s.power.as_deref() {
+                        Some("chispas") => Power::Sparks,
+                        Some("andanada") => Power::Volley,
+                        Some("alzar") => Power::Raise,
+                        Some("furia") => Power::Fury,
+                        _ => Power::None,
+                    },
+                    reward: s.reward.clone().unwrap_or_default(),
+                },
+            );
         }
         faces.push(Vec3::new(s.face[0], 0.0, s.face[1]));
         spawns.push(Spawn {
@@ -633,6 +694,7 @@ pub fn load() -> Result<(Blueprint, Authored, Vec<Slime>), String> {
             .chain(file.lake.as_ref().and_then(|w| pool(w, true)))
             .collect(),
         chart,
+        champions,
         heart: file.heart.as_ref().map(|h| (v3(h.center), v3(h.floor))),
         spawn: v3(file.spawn.p),
         spawn_yaw: file.spawn.yaw,
@@ -653,7 +715,13 @@ mod tests {
         let (map, mine, slimes) = load().unwrap();
         let count = |k: SpawnKind| map.spawns.iter().filter(|s| s.kind == k).count();
         assert_eq!(count(SpawnKind::Seal), 3, "three rune stones");
-        assert_eq!(count(SpawnKind::Miniboss), 1, "the Custodio");
+        let custodians = map
+            .spawns
+            .iter()
+            .filter(|s| s.kind == SpawnKind::Miniboss && map.rooms[s.room].role == Role::Miniboss)
+            .count();
+        assert_eq!(custodians, 1, "the Custodio");
+        assert!(mine.champions.len() >= 4, "named champions round the mine");
         assert_eq!(count(SpawnKind::Boss), 1, "the Heart's guardian");
         assert_eq!(count(SpawnKind::Entrance), 1);
         assert_eq!(count(SpawnKind::Exit), 1);
@@ -1052,5 +1120,83 @@ mod tests {
             run.update(Input::default(), 1.0 / 60.0);
         }
         assert!(run.heart.wave_hit, "the ring caught her");
+    }
+
+    /// A named champion: it falls, its own reward bursts out onto the floor with the rest and
+    /// reaches her; and the forge's master rains embers on her while she is in his room.
+    #[test]
+    fn champions_fight_and_pay() {
+        use crate::{combat::Fx, Dungeon};
+        use velvet_dungeon::controller::Input;
+        if !available() {
+            return;
+        }
+        let mut run = Dungeon::mine().unwrap();
+        let mine = run.authored.clone().unwrap();
+        let (&id, smith) = mine
+            .champions
+            .iter()
+            .find(|(_, c)| c.power == Power::Sparks)
+            .expect("the smith");
+        let index = run.actors.iter().position(|a| a.spawn == id).unwrap();
+        let home = run.actors[index].position;
+        let (at, y) = (0..24)
+            .find_map(|k| {
+                let a = k as f32 * std::f32::consts::TAU / 24.0;
+                let at = home + Vec3::new(a.cos(), 0.0, a.sin()) * 4.0;
+                run.map
+                    .capsule_floor(at + Vec3::Y * 0.4, 0.28)
+                    .filter(|y| (y - home.y).abs() < 0.5)
+                    .map(|y| (at, y))
+            })
+            .expect("room by the smith");
+        run.controller.position = Vec3::new(at.x, y, at.z);
+        let mut embers = false;
+        for _ in 0..(9 * 60) {
+            run.actors[index].cooldown = 9.0;
+            run.actors[index].position = home;
+            run.update(Input::default(), 1.0 / 60.0);
+            embers |= run.fx.iter().any(
+                |fx| matches!(fx, Fx::Spell { color, .. } if color[1] < 0.5 && color[0] > 0.9),
+            );
+            run.health = 100.0;
+        }
+        assert!(embers, "{} rains embers", smith.name);
+        assert_eq!(
+            run.boss_bar().map(|b| b.0.to_string()),
+            Some(smith.name.clone())
+        );
+        // it falls: its reward and the rest lie on the floor, then reach her
+        let gold = run.gold;
+        run.actors[index].health = 0.5;
+        run.controller.yaw = {
+            let d = run.actors[index].position - run.controller.position;
+            (-d.x).atan2(-d.z)
+        };
+        run.controller.position = home + (run.controller.position - home).normalize_or_zero() * 1.8;
+        run.controller.position.y = home.y;
+        run.controller.pitch = 0.0;
+        run.swing_sword();
+        for _ in 0..60 {
+            run.update(Input::default(), 1.0 / 60.0);
+            run.health = 100.0;
+        }
+        assert!(run.actors[index].health <= 0.0, "the blow lands");
+        assert!(
+            !run.pickups.is_empty() || run.gold > gold,
+            "it left something"
+        );
+        for _ in 0..(14 * 60) {
+            run.update(Input::default(), 1.0 / 60.0);
+            run.health = 100.0;
+        }
+        assert!(run.pickups.is_empty(), "all of it reached her");
+        assert!(
+            run.gold >= gold + smith.reward.gold,
+            "its reward reached her purse ({} -> {})",
+            gold,
+            run.gold
+        );
+        assert!(run.materials.get("ceniza_arcana").copied().unwrap_or(0) >= 3);
     }
 }

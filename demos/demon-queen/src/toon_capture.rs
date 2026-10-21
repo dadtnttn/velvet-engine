@@ -7091,6 +7091,81 @@ pub(super) fn capture(out: &Path) -> Result<()> {
                 app.dungeon.heart = Default::default();
             }
         }
+        // What a fallen foe leaves on the floor, and a named champion with its bar.
+        if only
+            .as_deref()
+            .is_none_or(|o| o.split(',').any(|v| v == "botin"))
+        {
+            use dungeon::pickups::{burst, update, Loot};
+            let eye = Vec3::new(-1.5, -3.0, -48.0);
+            let y = app
+                .dungeon
+                .map
+                .capsule_floor(eye + Vec3::Y * 0.4, 0.28)
+                .unwrap_or(-3.0);
+            app.dungeon.controller.position = Vec3::new(eye.x, y, eye.z);
+            app.dungeon.controller.yaw = 0.0;
+            app.dungeon.controller.pitch = -0.35;
+            app.player = app.dungeon.controller.position;
+            let at = Vec3::new(eye.x, y, eye.z - 3.2);
+            let loot = [
+                Loot::Gold(6),
+                Loot::Gold(5),
+                Loot::Gold(20),
+                Loot::Tonic,
+                Loot::Herbs(2),
+                Loot::Material("hueso_viejo", 2),
+                Loot::Material("ceniza_arcana", 1),
+                Loot::Material("esquirla_corazon", 1),
+                Loot::Material("craneo_campeon", 1),
+            ];
+            let mut lying = burst(at, &loot, 7);
+            for _ in 0..90 {
+                update(
+                    &mut lying,
+                    &app.dungeon.map,
+                    at + Vec3::new(0.0, 0.0, 40.0),
+                    1.0 / 60.0,
+                );
+            }
+            app.dungeon.pickups = lying;
+            save(&mut app, out, "mina-botin")?;
+            app.dungeon.pickups.clear();
+        }
+        if only
+            .as_deref()
+            .is_none_or(|o| o.split(',').any(|v| v == "herrero"))
+        {
+            let named = app.dungeon.authored.as_ref().and_then(|m| {
+                m.champions
+                    .iter()
+                    .find(|(_, c)| c.power == dungeon::authored::Power::Sparks)
+                    .map(|(id, _)| *id)
+            });
+            if let Some(index) =
+                named.and_then(|id| app.dungeon.actors.iter().position(|a| a.spawn == id))
+            {
+                let home = app.dungeon.actors[index].position;
+                let face = app
+                    .dungeon
+                    .authored
+                    .as_ref()
+                    .and_then(|m| m.face(app.dungeon.actors[index].spawn))
+                    .unwrap_or(Vec3::Z);
+                let eye = home + face * 5.5;
+                let y = app
+                    .dungeon
+                    .map
+                    .capsule_floor(eye + Vec3::Y * 0.4, 0.28)
+                    .unwrap_or(home.y);
+                app.dungeon.controller.position = Vec3::new(eye.x, y, eye.z);
+                let d = home - eye;
+                app.dungeon.controller.yaw = (-d.x).atan2(-d.z);
+                app.dungeon.controller.pitch = 0.12;
+                app.player = app.dungeon.controller.position;
+                save(&mut app, out, "mina-herrero")?;
+            }
+        }
         // The chests 2.0: each kind, the treasure's open with its loot showing.
         for (tier, open) in [("comun", false), ("rico", false), ("tesoro", true)] {
             let Some(index) = app.dungeon.actors.iter().position(|a| {
