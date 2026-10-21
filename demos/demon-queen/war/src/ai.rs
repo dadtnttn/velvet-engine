@@ -197,17 +197,20 @@ impl BattleAi {
                         continue;
                     };
                     if line_gap > 85.0 && role != Role::Hero && d_to(&regs[target]) > 70.0 {
-                        // advance as a line, not a stampede
+                        // advance as a line, not a stampede: 36 m along the way to them (over the
+                        // bridge, round the wood; straight ahead may be the river)
                         if time - m.at > 4.0 || !r.is_moving_order() {
                             m.at = time;
                             m.target = None;
-                            todo.push(Do::Move(
-                                ri,
-                                r.cx + fwd.0 * 36.0,
-                                r.cz + fwd.1 * 36.0,
-                                Some(fwd.0.atan2(fwd.1)),
-                                false,
-                            ));
+                            let t = &regs[target];
+                            let way = sim.field.route(r.cx, r.cz, t.cx, t.cz);
+                            let (x, z, dx, dz) = along(&way, (r.cx, r.cz), 36.0);
+                            let heading = if dx.hypot(dz) > 0.1 {
+                                dx.atan2(dz)
+                            } else {
+                                fwd.0.atan2(fwd.1)
+                            };
+                            todo.push(Do::Move(ri, x, z, Some(heading), false));
                         }
                     } else {
                         let run = d_to(&regs[target]) < 60.0;
@@ -379,17 +382,19 @@ impl BattleAi {
                 m.at = time;
                 todo.push(Do::Attack(ri, t, run));
             };
+            // (only those it can walk to: a wall between is not charged through)
+            let reach = |f: &Regiment| sim.field.reachable(me.0, me.1, f.cx, f.cz);
             if r.ty.flyer || ranged {
-                // over the walls, or from behind them: the nearest enemy
+                // over the walls, or from behind them: the nearest enemy in range, or one it can
+                // walk up to (not one behind a shut gate: it would wait in the gateway)
+                let range = r.ty.ranged.as_ref().map_or(0.0, |w| w.range);
                 if let Some((t, d)) = nearest(me, &|_| true) {
-                    if r.ty.flyer || d < 230.0 {
+                    if r.ty.flyer || (d < 230.0 && (d <= range || reach(&regs[t]))) {
                         attack(m, t, false, &mut todo);
                     }
                 }
                 continue;
             }
-            // (only those it can walk to: a wall between is not charged through)
-            let reach = |f: &Regiment| sim.field.reachable(me.0, me.1, f.cx, f.cz);
             if attacking {
                 if let Some((t, d)) = nearest(me, &|f| !inside(f.cx, f.cz) && reach(f)) {
                     if d < 70.0 {
@@ -476,4 +481,25 @@ impl BattleAi {
             }
         }
     }
+}
+
+/// The point `dist` metres along a way (from `from` through its points), and the direction of the
+/// leg it is on; the way's end if it is shorter.
+fn along(way: &[crate::field::Point], from: (f32, f32), dist: f32) -> (f32, f32, f32, f32) {
+    let (mut px, mut pz) = from;
+    let mut left = dist;
+    let (mut dx, mut dz) = (0.0, 0.0);
+    for p in way {
+        let (lx, lz) = (p.x - px, p.z - pz);
+        let l = lx.hypot(lz);
+        if l > 1e-3 {
+            (dx, dz) = (lx / l, lz / l);
+        }
+        if l >= left {
+            return (px + dx * left, pz + dz * left, dx, dz);
+        }
+        left -= l;
+        (px, pz) = (p.x, p.z);
+    }
+    (px, pz, dx, dz)
 }
