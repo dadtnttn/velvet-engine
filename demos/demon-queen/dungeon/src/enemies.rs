@@ -21,12 +21,23 @@ struct ModelDefinition {
     id: String,
     path: String,
     height_m: Option<f32>,
+    /// A body with its own proportions on the shared rig's bones (the realistic skeletons): the
+    /// shared clips only turn its bones (see `GltfModel::append_rotations_from`).
+    #[serde(default)]
+    own_proportions: bool,
+    /// The model it stands in for: once loaded it takes that one's id, so every foe asking for the
+    /// old model (and the weapons fitted to it) gets this one.
+    #[serde(default)]
+    replaces: Option<String>,
 }
 
 #[derive(Deserialize)]
 struct RoleDefinition {
     id: String,
     variants: Vec<String>,
+    /// The models the role falls back on when none of its variants loaded.
+    #[serde(default)]
+    fallback: Vec<String>,
 }
 
 struct Model {
@@ -200,12 +211,20 @@ impl Enemies {
 
         let mut models = BTreeMap::new();
         let mut texture_cache = TextureCache::new();
-        for definition in manifest.models {
+        // Models standing in for others load after them and take their ids.
+        let mut definitions = manifest.models;
+        definitions.sort_by_key(|definition| definition.replaces.is_some());
+        let mut replaced: Vec<String> = Vec::new();
+        for definition in definitions {
             let path = directory.join(&definition.path);
             let result = (|| -> anyhow::Result<Model> {
                 let mut source = GltfModel::load(&path)?;
                 for animations in &animation_sets {
-                    source.append_animations_from(animations)?;
+                    if definition.own_proportions {
+                        source.append_rotations_from(animations, &["root", "hips"])?;
+                    } else {
+                        source.append_animations_from(animations)?;
+                    }
                 }
                 anyhow::ensure!(!source.meshes.is_empty(), "model contains no meshes");
                 anyhow::ensure!(
@@ -334,21 +353,31 @@ impl Enemies {
 
             match result {
                 Ok(model) => {
-                    models.insert(definition.id, model);
+                    if let Some(old) = &definition.replaces {
+                        replaced.push(old.clone());
+                    }
+                    models.insert(definition.replaces.unwrap_or(definition.id), model);
                 }
                 Err(error) => eprintln!("[dungeon] enemy model {}: {error}", path.display()),
             }
+        }
+        if !replaced.is_empty() {
+            eprintln!("[dungeon] new models stand in for {}", replaced.join(", "));
         }
 
         let roles = manifest
             .roles
             .into_iter()
             .filter_map(|role| {
-                let variants = role
-                    .variants
-                    .into_iter()
-                    .filter(|variant| models.contains_key(variant))
-                    .collect::<Vec<_>>();
+                let loaded = |list: Vec<String>| {
+                    list.into_iter()
+                        .filter(|variant| models.contains_key(variant))
+                        .collect::<Vec<_>>()
+                };
+                let mut variants = loaded(role.variants);
+                if variants.is_empty() {
+                    variants = loaded(role.fallback);
+                }
                 (!variants.is_empty()).then_some((role.id, variants))
             })
             .collect::<BTreeMap<_, _>>();
@@ -871,7 +900,15 @@ mod tests {
             .map(|path| GltfModel::load(directory.join(path)).expect("shared animation set"))
             .collect::<Vec<_>>();
 
-        assert_eq!(manifest.models.len(), 4);
+        // the four KayKit skeletons, and whatever stands in for them
+        assert_eq!(
+            manifest
+                .models
+                .iter()
+                .filter(|definition| definition.replaces.is_none())
+                .count(),
+            4
+        );
         for definition in manifest.models {
             let mut model =
                 GltfModel::load(directory.join(definition.path)).expect("skeleton model");
@@ -886,9 +923,15 @@ mod tests {
                 .any(|name| name.ends_with("_ArmRight")));
             assert!(model.meshes.iter().any(|mesh| mesh.skinning.is_some()));
             for animation_set in &animations {
-                model
-                    .append_animations_from(animation_set)
-                    .expect("animation rig node names match");
+                if definition.own_proportions {
+                    model
+                        .append_rotations_from(animation_set, &["root", "hips"])
+                        .expect("animation rig node names match");
+                } else {
+                    model
+                        .append_animations_from(animation_set)
+                        .expect("animation rig node names match");
+                }
             }
             for clip_name in [
                 "Idle_A",

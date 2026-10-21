@@ -2030,6 +2030,55 @@ impl GltfModel {
         Ok(appended)
     }
 
+    /// Appends another file's clips to a skeleton with the same bones but its own proportions (a
+    /// realistic body on a stylised rig's bones): only the rotations carry over. Translations are
+    /// kept only on the `moving` nodes (a root, the hips), scaled by how much farther that node
+    /// rests from its parent here than in the clips' skeleton, so the body keeps its own lengths.
+    pub fn append_rotations_from(
+        &mut self,
+        source: &GltfModel,
+        moving: &[&str],
+    ) -> Result<usize, Render3DError> {
+        let before = self.animation_clips.len();
+        let appended = self.append_animations_from(source)?;
+        let factors: Vec<Option<f32>> = self
+            .node_names
+            .iter()
+            .enumerate()
+            .map(|(node, name)| {
+                if !moving.contains(&name.as_str()) {
+                    return None;
+                }
+                let here = self.nodes.get(node)?.translation.length();
+                let there = source
+                    .node_names
+                    .iter()
+                    .position(|candidate| candidate == name)
+                    .and_then(|index| source.nodes.get(index))
+                    .map(|pose| pose.translation.length())
+                    .unwrap_or(0.0);
+                Some(if there > 1.0e-6 { here / there } else { 1.0 })
+            })
+            .collect();
+        for clip in &mut self.animation_clips[before..] {
+            clip.channels.retain_mut(|channel| match channel {
+                AnimationChannel3D::Translation { node, keys } => {
+                    match factors.get(*node).copied().flatten() {
+                        Some(factor) => {
+                            for (_, value) in keys.iter_mut() {
+                                *value = *value * factor;
+                            }
+                            true
+                        }
+                        None => false,
+                    }
+                }
+                _ => true,
+            });
+        }
+        Ok(appended)
+    }
+
     /// Bind-pose local-to-world transform for one imported mesh primitive.
     pub fn mesh_transform(&self, mesh_index: usize) -> Mat4 {
         self.mesh_transforms
