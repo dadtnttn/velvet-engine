@@ -16,6 +16,7 @@ impl App {
 
     pub(super) fn open_shop(&mut self) {
         self.achievement_event("shop:open");
+        shop::set_counter(shop::Counter::Villa);
         self.map_open = false;
         self.shop_open = true;
         self.shop_tab = shop::Tab::Buy;
@@ -220,6 +221,10 @@ impl App {
         self.shop_preview_dragging = false;
         self.shop_preview_drag_anchor = None;
         self.clear_input();
+        if shop::counter() == shop::Counter::Bocamina {
+            shop::set_counter(shop::Counter::Villa);
+            self.leave_bocamina();
+        }
     }
 
     pub(super) fn move_shop_selection(&mut self, delta: isize) {
@@ -242,6 +247,15 @@ impl App {
     pub(super) fn toggle_shop_tab(&mut self) {
         if self.venue.open {
             // The book has one page: the house's girls.
+            return;
+        }
+        // At the mine's mouth: buy and sell, no altar.
+        if shop::counter() == shop::Counter::Bocamina {
+            let tab = match self.shop_tab {
+                shop::Tab::Buy => shop::Tab::Sell,
+                shop::Tab::Sell => shop::Tab::Buy,
+            };
+            self.show_shelves(tab);
             return;
         }
         // Buy, sell, the altar, and round again.
@@ -277,6 +291,9 @@ impl App {
                 let p = &shop::catalog().products[i];
                 if self.shop_tab == shop::Tab::Sell {
                     self.inventory.get(&p.id).copied().unwrap_or(0)
+                } else if shop::counter() == shop::Counter::Bocamina {
+                    // a pick or a bag: one
+                    1
                 } else {
                     p.stock
                         .map(|s| self.shop_stock.get(&p.id).copied().unwrap_or(s))
@@ -461,6 +478,15 @@ impl App {
         let Some(hit) = map_overlay::shop_hit_test(x, y, &pick) else {
             return;
         };
+        // The mine's counter has no altar and the Tendero does not haggle.
+        if shop::counter() == shop::Counter::Bocamina
+            && matches!(
+                hit,
+                map_overlay::ShopHit::TabFuse | map_overlay::ShopHit::Haggle
+            )
+        {
+            return;
+        }
 
         match hit {
             map_overlay::ShopHit::TabBuy => {
@@ -525,8 +551,8 @@ impl App {
         let id = product.id.clone();
         let name = product.name.clone();
         let quantity = self.shop_quantity.max(1);
-        let buy_cost = total.unwrap_or(product.buy_price.saturating_mul(quantity));
-        let sell_reward = total.unwrap_or(product.sell_price.saturating_mul(quantity));
+        let buy_cost = total.unwrap_or(shop::buy_price(product).saturating_mul(quantity));
+        let sell_reward = total.unwrap_or(shop::sell_price(product).saturating_mul(quantity));
         match self.shop_tab {
             shop::Tab::Buy => {
                 if let Some(stock) = product.stock {
@@ -562,6 +588,9 @@ impl App {
                     self.backpack = pack;
                     self.apply_equipment();
                 }
+                // (a pick or a bag bought at the mine's mouth leaves its shelf)
+                let count = self.shop_product_indices().len();
+                self.shop_selection = self.shop_selection.min(count.saturating_sub(1));
             }
             shop::Tab::Sell => {
                 let owned = self.inventory.get(&id).copied().unwrap_or(0);

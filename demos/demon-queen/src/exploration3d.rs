@@ -1381,7 +1381,8 @@ impl App {
             audio.set_paused(false);
         }
         self.clear_input();
-        if self.dungeon_mode || self.boss.is_some() {
+        // (not back to looking about at the Tendero's counter)
+        if (self.dungeon_mode && !self.modal_is_open()) || self.boss.is_some() {
             self.dungeon_mouse_captured = self.capture_dungeon_mouse();
         }
     }
@@ -1398,7 +1399,10 @@ impl App {
             || self.caricias.is_some()
             || self.mage.is_some()
             || self.brothel.as_ref().is_some_and(|b| b.escort.is_some())
-            || (self.dungeon_mode && (self.dungeon.seed_input.is_some() || self.dungeon.map_open))
+            || (self.dungeon_mode
+                && (self.dungeon.seed_input.is_some()
+                    || self.dungeon.map_open
+                    || self.dungeon.stall.open))
     }
 
     /// Consumed by the host once the player presses `F` beside a villa

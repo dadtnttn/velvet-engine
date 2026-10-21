@@ -748,7 +748,8 @@ impl Hud {
         if run.pozo.is_some() {
             self.pozo_hud(run, &tone, v);
         } else if run.stall.open {
-            // the stall over the scene: the mine's cards wait
+            // at the Tendero's counter the host's shop window covers the frame: nothing of the mine's
+            return;
         } else {
             self.location_plate(run, &tone, v);
             self.objective_card(run, &tone, v);
@@ -845,9 +846,6 @@ impl Hud {
                     [0.8, 0.004, 0.0, (run.hit_flash * 3.0).min(1.0)],
                 );
             }
-        }
-        if run.stall.open {
-            self.stall_panel(run, v);
         }
     }
 }

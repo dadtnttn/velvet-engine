@@ -23,6 +23,8 @@ const CLOSE_HOLD: f32 = 1.5;
 /// His illustration, once it exists (under `data/assets`, without the extension). His other faces
 /// sit beside it as `tendero_<face>.png`; a face that is not there yet shows this one.
 const MERCHANT_ART: &str = "ui/shop/tendero";
+/// The Tendero at the mine's mouth (rendered from his 3D model: tools/enano_blender.py).
+const MOUTH_ART: &str = "ui/shop/tendero_bocamina";
 /// How long his face answers an outcome before it settles back (s); a deal or his «out» keep theirs.
 const FACE_HOLD: f32 = 1.8;
 /// How long he keeps smiling after greeting her (s).
@@ -393,6 +395,9 @@ pub(super) fn item_name(id: &str) -> String {
 impl App {
     /// The lit product's haggle starts (if he will still haggle over it today).
     pub(super) fn start_haggle(&mut self) {
+        if shop::counter() == shop::Counter::Bocamina {
+            return;
+        }
         let Some(index) = self.selected_shop_product_index() else {
             ui_sfx::play(UiSfx::Error);
             return;
@@ -404,7 +409,11 @@ impl App {
         }
         let p = &shop::catalog().products[index];
         let selling = self.shop_tab == shop::Tab::Sell;
-        let base = if selling { p.sell_price } else { p.buy_price };
+        let base = if selling {
+            shop::sell_price(p)
+        } else {
+            shop::buy_price(p)
+        };
         self.haggle = Some(Haggle::new(
             index,
             selling,
@@ -942,6 +951,7 @@ impl App {
                 .map(|(text, at)| (text.clone(), ms(*at))),
             merchant: merchant_art().map(|crop| merchant_face(face, crop)),
             merchant_from: merchant_art().map(|crop| merchant_face(before, crop)),
+            bocamina: shop::counter() == shop::Counter::Bocamina,
             merchant_ms: ms(changed),
             haggle,
             fuse,
@@ -981,6 +991,13 @@ impl App {
 /// His picture with `face` («normal» is his illustration itself), or his illustration when that
 /// face has not been drawn yet.
 pub(super) fn merchant_face(face: &'static str, crop: [u32; 4]) -> map_overlay::PortraitRef {
+    // The mine's Tendero has one face.
+    if shop::counter() == shop::Counter::Bocamina {
+        return map_overlay::PortraitRef {
+            image: MOUTH_ART.to_owned(),
+            crop,
+        };
+    }
     static FOUND: OnceLock<std::collections::HashSet<&'static str>> = OnceLock::new();
     let found = FOUND.get_or_init(|| {
         let dir = crate::exploration3d_state::data_dir().join("assets");
@@ -1009,11 +1026,16 @@ pub(super) const FUSE_COLUMNS: usize = 4;
 
 /// His illustration's square (the top of it, full width), if it exists (looked for once).
 pub(super) fn merchant_art() -> Option<[u32; 4]> {
-    static FOUND: OnceLock<Option<[u32; 4]>> = OnceLock::new();
-    *FOUND.get_or_init(|| {
+    static VILLA: OnceLock<Option<[u32; 4]>> = OnceLock::new();
+    static MOUTH: OnceLock<Option<[u32; 4]>> = OnceLock::new();
+    let (found, art) = match shop::counter() {
+        shop::Counter::Villa => (&VILLA, MERCHANT_ART),
+        shop::Counter::Bocamina => (&MOUTH, MOUTH_ART),
+    };
+    *found.get_or_init(|| {
         let path = crate::exploration3d_state::data_dir()
             .join("assets")
-            .join(format!("{MERCHANT_ART}.png"));
+            .join(format!("{art}.png"));
         let (w, h) = image::image_dimensions(path).ok()?;
         let side = w.min(h);
         Some([(w - side) / 2, 0, side, side])

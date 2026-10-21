@@ -7162,7 +7162,11 @@ pub(super) fn capture(out: &Path) -> Result<()> {
             save(&mut app, out, &format!("mina-poses-{tag}"))?;
         }
         // The Tendero in 3D by his stall, the winch over the miner's shaft beside it; his stall open.
-        for (view, open) in [("tendero3d", false), ("tienda_mina", true)] {
+        for (view, open) in [
+            ("tendero3d", false),
+            ("tienda_mina", true),
+            ("tienda_mina_vender", true),
+        ] {
             if !only
                 .as_deref()
                 .is_some_and(|o| o.split(',').any(|v| v == view))
@@ -7193,8 +7197,21 @@ pub(super) fn capture(out: &Path) -> Result<()> {
                     app.dungeon.materials.insert("gema_rubi".into(), 2);
                     app.dungeon.open_stall();
                     app.dungeon.stall.said_at -= 5.0;
+                    // his counter: the shop's window, settled in
+                    app.open_bocamina();
+                    if view == "tienda_mina_vender" {
+                        app.show_shelves(shop::Tab::Sell);
+                    }
+                    app.shop_opened_at -= 5.0;
+                    app.shop_page_at -= 5.0;
+                    if let Some((_, at)) = app.shop_said.as_mut() {
+                        *at -= 5.0;
+                    }
                 }
                 save(&mut app, out, &format!("mina-{view}"))?;
+                if app.shop_open {
+                    app.close_shop();
+                }
                 app.dungeon.close_stall();
             }
         }

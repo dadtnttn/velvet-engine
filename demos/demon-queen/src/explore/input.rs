@@ -21,8 +21,7 @@ impl ApplicationHandler for App {
         }
         if let DeviceEvent::MouseMotion { delta } = event {
             if self.dungeon_mouse_captured
-                && self.dungeon.seed_input.is_none()
-                && !self.dungeon.map_open
+                && !self.modal_is_open()
                 && self.window.as_ref().is_some_and(|w| w.has_focus())
             {
                 let k = crate::exploration3d::prefs::look_scale();
@@ -101,10 +100,6 @@ impl ApplicationHandler for App {
             }
             WindowEvent::CursorMoved { position, .. } => {
                 self.cursor_position = Some((position.x as f32, position.y as f32));
-                if self.dungeon_mode && self.dungeon.stall.open {
-                    let at = self.shop_pointer_position().map(|(x, y)| [x, y]);
-                    self.dungeon.stall_pointer(at);
-                }
                 if self.war.is_some() {
                     self.war_pointer();
                 }
@@ -183,7 +178,11 @@ impl ApplicationHandler for App {
                 state: ElementState::Released,
                 button: MouseButton::Left,
                 ..
-            } if self.dungeon_mode && !self.dungeon.map_open && self.dungeon.pozo.is_some() => {
+            } if self.dungeon_mode
+                && !self.dungeon.map_open
+                && !self.shop_open
+                && self.dungeon.pozo.is_some() =>
+            {
                 self.dungeon.release_attack();
             }
             WindowEvent::MouseInput { state, button, .. }
@@ -353,14 +352,11 @@ impl ApplicationHandler for App {
                         None => {}
                     }
                 }
-                if self.dungeon_mode {
-                    if self.dungeon.stall.open {
-                        if let Some((x, y)) = self.shop_pointer_position() {
-                            self.dungeon.stall_click([x, y]);
-                        }
-                        return;
+                // (at the Tendero's counter the click is the shop's)
+                if self.dungeon_mode && !self.shop_open {
+                    if !self.dungeon.stall.open {
+                        self.dungeon.swing_sword();
                     }
-                    self.dungeon.swing_sword();
                     return;
                 }
                 if self.shop_open {
@@ -408,7 +404,8 @@ impl ApplicationHandler for App {
                     }
                     return;
                 }
-                if self.dungeon_mode {
+                // (at the Tendero's counter the keys are the shop's)
+                if self.dungeon_mode && !self.shop_open {
                     if self.dungeon.seed_input.is_none() {
                         self.set_key(code, event.state == ElementState::Pressed);
                     }
@@ -650,7 +647,8 @@ impl ApplicationHandler for App {
                             }
                             KeyCode::Equal | KeyCode::NumpadAdd => self.adjust_shop_quantity(1),
                             KeyCode::Enter | KeyCode::Space => self.commit_shop_transaction(),
-                            KeyCode::KeyF => self.close_shop(),
+                            // (not the F held from opening it)
+                            KeyCode::KeyF if !event.repeat => self.close_shop(),
                             _ => {}
                         }
                         return;

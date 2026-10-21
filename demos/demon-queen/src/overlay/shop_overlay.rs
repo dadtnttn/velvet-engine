@@ -38,6 +38,8 @@ pub struct ShopView {
     pub fuse: Option<FuseView>,
     /// Products he will not haggle over again today (catalog indices).
     pub refused: Vec<usize>,
+    /// The Tendero's counter at the mine's mouth: no altar, no haggle.
+    pub bocamina: bool,
 }
 
 /// A haggle on show.
@@ -370,11 +372,16 @@ pub(super) fn draw(
         merchant_from,
         open,
         f.time,
-        "Tienda de la villa · se aceptan regateos",
+        if view.bocamina {
+            "La Bocamina · paga un poco menos"
+        } else {
+            "Tienda de la villa · se aceptan regateos"
+        },
     );
     let title = match view.page {
         1 => "¡A regatear!",
         2 => "El altar de fusión",
+        _ if view.bocamina => "La Bocamina",
         _ => "Tienda de la villa",
     };
     heading(font, v, 620.0, 28.0, title, open.min(age + 0.3));
@@ -442,6 +449,14 @@ pub(super) fn draw(
             ("H", "regatear"),
             ("Esc", "salir"),
         ],
+    };
+    // (the Tendero at the mine's mouth does not haggle)
+    let mine: Vec<(&str, &str)>;
+    let keys = if shop::counter() == shop::Counter::Bocamina && view.page == 0 {
+        mine = keys.iter().copied().filter(|(k, _)| *k != "H").collect();
+        &mine[..]
+    } else {
+        keys
     };
     hints(font, v, keys);
 }
@@ -872,7 +887,13 @@ fn tabs(font: &FontAtlas, v: &mut Vec<MapVertex>, f: &ShopFrame, page: u8, age: 
         page == 2,
     ];
     let hits = [ShopHit::TabBuy, ShopHit::TabSell, ShopHit::TabFuse];
-    for (i, label) in ["Comprar", "Vender", "Fusión"].iter().enumerate() {
+    // (the mine's counter has no altar)
+    let shown = if shop::counter() == shop::Counter::Bocamina {
+        2
+    } else {
+        3
+    };
+    for (i, label) in ["Comprar", "Vender", "Fusión"].iter().enumerate().take(shown) {
         let a = entrance(age, 0.04 * i as f32, 0.24);
         faded(v, a, |v| {
             shifted(v, [0.0, (1.0 - a) * -30.0], |v| {
@@ -957,9 +978,9 @@ fn draw_shelves(
         let over = f.hover == Some(ShopHit::Item(start + row));
         let a = entrance(age, 0.08 + 0.035 * row as f32, 0.28);
         let price = if f.tab == Tab::Buy {
-            p.buy_price
+            shop::buy_price(p)
         } else {
-            p.sell_price
+            shop::sell_price(p)
         };
         let refused = view.refused.contains(&index);
         faded(v, a, |v| {
@@ -1358,9 +1379,9 @@ fn card(
     // What it costs (what he pays, selling): big, under its words; with more than one, the
     // price of each beside the total.
     let unit = if f.tab == Tab::Buy {
-        p.buy_price
+        shop::buy_price(p)
     } else {
-        p.sell_price
+        shop::sell_price(p)
     };
     let total = unit.saturating_mul(f.quantity);
     wire(
@@ -1586,9 +1607,12 @@ fn card(
         } else if f.tab == Tab::Buy && total > f.gold {
             format!("Te faltan {} de oro.", total - f.gold)
         } else if f.tab == Tab::Buy {
-            format!("Él te la compraría por {} oro.", p.sell_price)
+            format!("Él te la compraría por {} oro.", shop::sell_price(p))
+        } else if shop::counter() == shop::Counter::Bocamina {
+            // what the villa would pay, so she knows what he keeps
+            format!("En la villa te darían {} oro.", p.sell_price)
         } else {
-            format!("En la tienda cuesta {} oro.", p.buy_price)
+            format!("En la tienda cuesta {} oro.", shop::buy_price(p))
         }
     });
     let status_size = fit(font, Face::Italic, &status, 20.0, 400.0);
@@ -1621,6 +1645,9 @@ fn card(
         28.0,
         f.time,
     );
+    if view.bocamina {
+        return;
+    }
     let refused = view.refused.contains(&index);
     plate(
         font,
@@ -3229,5 +3256,41 @@ mod tests {
         assert_eq!(i.len(), 1);
         assert_eq!(shop::catalog().products[i[0]].id, "tela_resistente");
         assert!(shop::visible_indices(Tab::Sell, Category::Consumables, &inv).is_empty());
+    }
+
+    #[test]
+    fn the_mines_counter_sells_gear_ahead_and_buys_the_shafts_goods_for_less() {
+        let ids = |tab, inv: &BTreeMap<String, u32>| -> Vec<String> {
+            shop::visible_indices(tab, Category::All, inv)
+                .into_iter()
+                .map(|i| shop::catalog().products[i].id.clone())
+                .collect()
+        };
+        let mut inv = BTreeMap::new();
+        inv.insert("pico_acero".to_owned(), 1);
+        inv.insert("mochila_cuero".to_owned(), 1);
+        inv.insert("gema_rubi".to_owned(), 2);
+        inv.insert("tela_resistente".to_owned(), 2);
+        shop::set_counter(shop::Counter::Bocamina);
+        let buy = ids(Tab::Buy, &inv);
+        let sell = ids(Tab::Sell, &inv);
+        let rubi = shop::catalog()
+            .products
+            .iter()
+            .find(|p| p.id == "gema_rubi")
+            .unwrap();
+        let mouth = shop::sell_price(rubi);
+        shop::set_counter(shop::Counter::Villa);
+        // no step back, nothing twice: the picks after steel, the bags after leather
+        assert_eq!(buy[0], "pico_templado");
+        assert!(!buy.iter().any(|id| id == "pico_hierro" || id == "pico_acero"));
+        assert!(buy.iter().any(|id| id == "mochila_reforzada"));
+        assert!(!buy.iter().any(|id| id == "mochila_cuero"));
+        // he buys what comes out of the shaft, and only that, for 80 %
+        assert_eq!(sell, ["gema_rubi"]);
+        assert_eq!(mouth, 52);
+        assert_eq!(shop::sell_price(rubi), 65);
+        // the villa's shelves never show them
+        assert!(!ids(Tab::Buy, &inv).iter().any(|id| id.starts_with("pico_")));
     }
 }

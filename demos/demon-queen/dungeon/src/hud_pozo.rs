@@ -1,9 +1,9 @@
 //! The HUD down the miner's shaft (her depth and record, her bag, her pick, the rock in front of her
-//! and how much of it is left, what the shaft just gave her, the keys) and the Tendero's stall.
-use super::glass::{self, diamond, Tone, INK, IVORY};
+//! and how much of it is left, what the shaft just gave her, the keys). The Tendero's stall is the
+//! game's shop window (the host draws it).
+use super::glass::{self, diamond, Tone, IVORY};
 use super::{rect, Dungeon, Hud, Vertex};
 use crate::pozo::{self, Pozo};
-use crate::stall;
 
 impl Hud {
     /// Cards of the shaft, instead of the mine's.
@@ -173,138 +173,5 @@ impl Hud {
             );
         }
         let _ = tone;
-    }
-
-    /// The Tendero's stall: his words, the tabs, the rows, the gold, the keys.
-    pub(super) fn stall_panel(&self, run: &Dungeon, v: &mut Vec<Vertex>) {
-        let amber = [1.0, 0.72, 0.3, 1.0];
-        let [x, y, w, h] = stall::PANEL;
-        rect(v, [0.0, 0.0, 1920.0, 1080.0], [0.0, 0.0, 0.0, 0.45]);
-        glass::plate(v, [x, y, w, h], amber, 1.0);
-        self.kicker(v, "MINERO VENDEDOR", x + 40.0, y - 12.0, amber);
-        self.mid(v, "Tendero de la Bocamina", x + 44.0, y + 52.0, 34.0, IVORY);
-        let close = stall::close_rect();
-        glass::chip(v, close, amber, 0.18);
-        self.centered(
-            v,
-            "×",
-            close[0] + close[2] * 0.5,
-            close[1] + close[3] * 0.5,
-            28.0,
-            IVORY,
-        );
-        // what he said
-        let age = run.elapsed - run.stall.said_at;
-        let shown = ((age * 60.0) as usize).min(run.stall.said.chars().count());
-        let said: String = run.stall.said.chars().take(shown).collect();
-        self.mid_fit(
-            v,
-            &format!("«{said}»"),
-            x + 44.0,
-            y + 110.0,
-            21.0,
-            w - 90.0,
-            glass::mix(IVORY, amber, 0.25),
-        );
-        self.mid(
-            v,
-            "En la villa pagan algo más por lo que sube del pozo; aquí, el 80 %.",
-            x + 44.0,
-            y + 150.0,
-            16.0,
-            glass::alpha(IVORY, 0.6),
-        );
-        // tabs
-        for (i, label) in ["Comprar", "Vender"].into_iter().enumerate() {
-            let r = stall::tab_rect(i as u8);
-            let on = run.stall.tab == i as u8;
-            glass::chip(v, r, amber, if on { 0.55 } else { 0.12 });
-            self.centered(
-                v,
-                label,
-                r[0] + r[2] * 0.5,
-                r[1] + r[3] * 0.5,
-                20.0,
-                if on { INK } else { IVORY },
-            );
-        }
-        // rows
-        let rows = run.stall_rows();
-        let count = rows.len();
-        for (i, row) in rows.iter().enumerate() {
-            let Some(r) = stall::row_rect(i, run.stall.selection, count) else {
-                continue;
-            };
-            let chosen = run.stall.selection == i;
-            let hover = run.stall.hover == Some(i);
-            let c = [row.color[0], row.color[1], row.color[2], 1.0];
-            glass::chip(
-                v,
-                r,
-                if chosen {
-                    amber
-                } else {
-                    glass::alpha(IVORY, 0.4)
-                },
-                if chosen {
-                    0.3
-                } else if hover {
-                    0.16
-                } else {
-                    0.07
-                },
-            );
-            diamond(v, [r[0] + 22.0, r[1] + r[3] * 0.5], 7.0, c);
-            let ink = if row.can || row.deal == stall::Deal::Nothing {
-                IVORY
-            } else {
-                glass::alpha(IVORY, 0.55)
-            };
-            self.mid(v, &row.title, r[0] + 44.0, r[1] + 17.0, 20.0, ink);
-            self.mid_fit(
-                v,
-                &row.detail,
-                r[0] + 44.0,
-                r[1] + 37.0,
-                14.0,
-                r[2] - 260.0,
-                glass::alpha(ink, 0.7),
-            );
-            self.right(
-                v,
-                &row.price,
-                r[0] + r[2] - 20.0,
-                r[1] + r[3] * 0.5,
-                20.0,
-                if row.can {
-                    [1.0, 0.84, 0.4, 1.0]
-                } else {
-                    glass::alpha(IVORY, 0.55)
-                },
-            );
-        }
-        // gold and keys
-        let fy = y + h - 44.0;
-        self.mid(
-            v,
-            &format!(
-                "Oro: {}  (de la expedición {} · en casa {})",
-                run.gold + run.purse,
-                run.gold,
-                run.purse
-            ),
-            x + 44.0,
-            fy,
-            19.0,
-            [1.0, 0.84, 0.4, 1.0],
-        );
-        self.right(
-            v,
-            "W/S elegir · A/D pestaña · F comprar o vender · Esc salir",
-            x + w - 40.0,
-            fy,
-            15.0,
-            glass::alpha(IVORY, 0.7),
-        );
     }
 }

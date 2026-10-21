@@ -87,6 +87,48 @@ impl App {
         self.backpack = pack;
     }
 
+    /// At the Tendero's stall: the shop's window at his counter, over the mine (frozen while it
+    /// is up). What she brought out of the shaft goes on the counter to sell, and the
+    /// expedition's gold into the palace's treasury (he notes it down: safe from the mine).
+    pub(super) fn open_bocamina(&mut self) {
+        self.open_shop();
+        shop::set_counter(shop::Counter::Bocamina);
+        let goods: Vec<String> = self
+            .dungeon
+            .materials
+            .keys()
+            .filter(|id| dungeon::pozo::value(id).is_some())
+            .cloned()
+            .collect();
+        for id in goods {
+            if let Some(n) = self.dungeon.materials.remove(&id) {
+                *self.inventory.entry(id).or_default() += n;
+            }
+        }
+        let trip = std::mem::take(&mut self.dungeon.gold);
+        self.gold = self.gold.saturating_add(trip);
+        let mut said = self.dungeon.stall.said.clone();
+        if trip > 0 {
+            said.push_str(&format!(
+                " Y esas {trip} monedas se las apunto al tesoro de palacio: aquí no se pierden."
+            ));
+        }
+        self.shop_said = Some((said, self.elapsed + 0.35));
+        self.release_dungeon_mouse();
+    }
+
+    /// Away from his counter: the stall closes, her pick and bag are the best she owns now, what
+    /// she did not sell goes back in the bag, and the mouse looks about again.
+    pub(super) fn leave_bocamina(&mut self) {
+        self.dungeon.close_stall();
+        if self.dungeon_mode {
+            self.carry_mining_things();
+            if self.window.as_ref().is_some_and(|w| w.has_focus()) {
+                self.dungeon_mouse_captured = self.capture_dungeon_mouse();
+            }
+        }
+    }
+
     /// What the Tendero sold her goes into her things, and the gold from home he took leaves it.
     fn settle_mining_things(&mut self) {
         let spent = std::mem::take(&mut self.dungeon.purse_spent);
@@ -208,19 +250,14 @@ impl App {
             sprint: self.sprint,
             jump: std::mem::take(&mut self.dungeon.jump_requested),
         };
+        // The Tendero's stall: the shop's window at his counter.
+        if self.dungeon.stall.open && !self.shop_open {
+            self.open_bocamina();
+        }
         // what she has at home, for the Tendero's stall
         self.dungeon.purse = self.gold;
-        let stall_was_open = self.dungeon.stall.open;
         self.dungeon.update(input, dt);
         self.settle_mining_things();
-        if self.dungeon.stall.open != stall_was_open {
-            self.clear_input();
-            if self.dungeon.stall.open {
-                self.release_dungeon_mouse();
-            } else {
-                self.dungeon_mouse_captured = self.capture_dungeon_mouse();
-            }
-        }
         // The dungeon's sounds, heard from the Queen's eyes.
         let sounds = self.dungeon.take_sounds();
         self.poll_audio_boot();
@@ -276,6 +313,66 @@ impl RenderState {
                 camera,
             );
         }
+        // The Tendero's counter: the shop's window over the mine.
+        if frame.shop_open {
+            self.draw_counter(frame);
+        }
+    }
+
+    fn draw_counter(&mut self, frame: &Frame) {
+        let Frame {
+            player,
+            yaw,
+            map_open,
+            wardrobe_open,
+            wardrobe_selection,
+            outfit,
+            shop_open,
+            shop_tab,
+            shop_category,
+            shop_selection,
+            shop_quantity,
+            gold,
+            inventory,
+            shop_stock,
+            shop_notice,
+            shop_pointer,
+            shop_preview_rotation,
+            venue,
+            elapsed,
+            ..
+        } = *frame;
+        self.map_overlay.draw(
+            &self.device,
+            &self.queue,
+            &self.target_view,
+            (WINDOW_WIDTH, WINDOW_HEIGHT),
+            player,
+            yaw,
+            false,
+            false,
+            map_open,
+            wardrobe_open,
+            wardrobe_selection,
+            outfit,
+            shop_open,
+            shop_tab,
+            shop_category,
+            shop_selection,
+            shop_quantity,
+            gold,
+            inventory,
+            shop_stock,
+            shop_notice,
+            shop_pointer,
+            elapsed,
+            shop_preview_rotation,
+            &[],
+            Some(venue),
+            None,
+            None,
+            false,
+        );
     }
 }
 

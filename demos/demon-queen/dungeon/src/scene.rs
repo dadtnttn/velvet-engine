@@ -1620,21 +1620,26 @@ impl Scene {
             }
             if !self.tendero_tried {
                 self.tendero_tried = true;
-                self.tendero = tendero::Tendero::load(renderer, device);
+                self.tendero = tendero::Tendero::load(renderer, device, queue);
             }
             for npc in &mine.npcs {
-                match (&self.tendero, npc.id.as_str()) {
-                    (Some(model), "tendero") => model.draw(
-                        &mut draws,
-                        &mut lights,
-                        npc.position,
-                        npc.face,
-                        run.controller.position,
-                        run.stall.open,
-                        run.elapsed,
-                    ),
-                    _ => self.draw_stick_figure(&mut draws, &mut lights, npc, run),
+                if npc.id == "tendero" {
+                    if let Some(model) = self.tendero.as_mut() {
+                        model.draw(
+                            renderer,
+                            queue,
+                            &mut draws,
+                            &mut lights,
+                            npc.position,
+                            npc.face,
+                            run.controller.position,
+                            run.stall.open,
+                            run.elapsed,
+                        );
+                        continue;
+                    }
                 }
+                self.draw_stick_figure(&mut draws, &mut lights, npc, run);
             }
             // the winch over the miner's shaft, by his stall
             if let Some(shaft) = run.shaft {
