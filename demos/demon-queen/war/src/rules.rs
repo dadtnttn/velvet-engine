@@ -159,6 +159,9 @@ pub struct Campaign {
     /// What of the story has reached the campaign already (each applied once).
     #[serde(default)]
     pub story_marks: Vec<String>,
+    /// The Alliance holds back until this turn (its Council debating a message of the Queen's).
+    #[serde(default)]
+    pub truce_until: u32,
     /// Who held each region when the story last looked (empty: it has not looked yet); what
     /// changed since is news for it.
     #[serde(default)]
@@ -248,6 +251,7 @@ impl Campaign {
             varrak_awake: false,
             story_marks: Vec::new(),
             story_owners: Vec::new(),
+            truce_until: 0,
             rng: None,
         };
         if varrak_awake {
@@ -1406,11 +1410,30 @@ impl Campaign {
 
     fn score_stay(&self, id: &str) -> f32 {
         let a = self.army(id).unwrap();
-        if a.faction == Faction::Alianza && self.turn < 3 {
+        if a.faction == Faction::Alianza && self.turn < self.truce_until {
+            // a truce: nothing is worth crossing for
+            90.0
+        } else if a.faction == Faction::Alianza && self.turn < 3 {
             25.0
         } else {
             0.0
         }
+    }
+
+    /// A people won over without a battle (the Queen went up to talk to them): their land is
+    /// hers and lit, and their armies there march with her.
+    pub fn win_over(&mut self, prov: &str) -> bool {
+        let was = self.owner(prov);
+        if was == Faction::Reina {
+            return false;
+        }
+        self.armies
+            .retain(|a| !(a.at == prov && a.garrison && a.faction == was));
+        for a in self.armies.iter_mut().filter(|a| a.at == prov && a.faction == was) {
+            a.faction = Faction::Reina;
+        }
+        self.set_owner(prov, Faction::Reina, true);
+        true
     }
 
     /// Runs the AI queue until it needs the player (a battle against the Queen) or ends. Returns
@@ -1893,6 +1916,39 @@ mod tests {
         // without the spark nobody rises
         s.set_owner("villa", Faction::Reina, false);
         assert!(s.defenders("villa").is_empty());
+    }
+
+    #[test]
+    fn a_truce_keeps_the_alliance_home_and_the_nest_can_be_won_over() {
+        // the Alliance's armies stay put while its Council debates
+        let mut s = Campaign::new(42, true);
+        s.turn = 5;
+        s.truce_until = 8;
+        let before: Vec<(String, String)> = s
+            .armies
+            .iter()
+            .filter(|a| a.faction == Faction::Alianza)
+            .map(|a| (a.id.clone(), a.at.clone()))
+            .collect();
+        s.end_player_turn();
+        while s.run_queue().1.is_some() {}
+        for (id, at) in before {
+            if let Some(a) = s.army(&id) {
+                assert_eq!(a.at, at, "{id} held back");
+            }
+        }
+        // the Nest's clans come down with her, their land lit
+        let mut s = Campaign::new(42, true);
+        assert_eq!(s.owner("nido"), Faction::Rebeldes);
+        assert!(s.win_over("nido"));
+        assert_eq!(s.owner("nido"), Faction::Reina);
+        assert!(s.prov("nido").lit);
+        assert!(s
+            .armies
+            .iter()
+            .filter(|a| a.at == "nido" && !a.garrison)
+            .all(|a| a.faction == Faction::Reina));
+        assert!(!s.win_over("nido"), "only once");
     }
 
     #[test]

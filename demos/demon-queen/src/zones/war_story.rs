@@ -387,6 +387,39 @@ impl App {
                 wr::rules::LogKind::Good,
             );
         }
+        // what the second act's choices change in the campaign (each once)
+        let story = &self.story;
+        if story.get("merin_mensajera") > 0 && s.story_mark("merin_tregua") {
+            s.truce_until = s.turn + 3;
+            s.note(
+                "El Consejo de la Alianza lee el mensaje que trajo Merin y lo debate: tres turnos sin cruzar el río.",
+                wr::rules::LogKind::Lore,
+            );
+        }
+        if story.get("merin_celda") > 0 && s.story_mark("merin_rabia") {
+            s.purse_mut(Faction::Alianza).gold += 40;
+            s.note(
+                "La Alianza sabe que su exploradora está en una celda de la Reina: más oro para la guerra.",
+                wr::rules::LogKind::Bad,
+            );
+        }
+        if story.get("zillah_perdonada") > 0 && s.story_mark("zillah_despensa") {
+            s.purse_mut(Faction::Reina).food += 8;
+            s.note(
+                "Zillah reordena la despensa con las cuentas de la regencia: +8 comida.",
+                wr::rules::LogKind::Good,
+            );
+        }
+        if story.get("nido_subir") > 0 && s.story_mark("nido_subio") && s.win_over("nido") {
+            s.note(
+                "La Reina subió sola al Nido. La miraron a la cara, y los clanes bajan con ella.",
+                wr::rules::LogKind::Spark,
+            );
+        }
+        // her army beside the Nest while it is the rebels': they ask for her, alone
+        let nest_calls = s.owner("nido") == Faction::Rebeldes
+            && s.queen_army()
+                .is_some_and(|q| wr::data::adjacent(&q.at).contains(&"nido"));
         let suit = self.story.seen("guerra.consejo_traje");
         let wins = self.story.get("guerra_victorias");
         let mut beats = Vec::new();
@@ -398,6 +431,9 @@ impl App {
         }
         if suit && turn >= 8 {
             beats.push("guerra.noche_mesa");
+        }
+        if nest_calls {
+            beats.push("guerra.nido_llamada");
         }
         for id in beats {
             self.queue_war_scene(id);
@@ -648,6 +684,7 @@ mod tests {
             "precio_chispa",
             "guardia",
             "noche_mesa",
+            "nido_llamada",
         ] {
             assert!(
                 lib.find(&format!("guerra.{id}"), None).is_some(),

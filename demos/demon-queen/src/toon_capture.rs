@@ -2572,7 +2572,14 @@ pub(super) fn capture(out: &Path) -> Result<()> {
                 app.render_frame();
             }
         };
-        for (k, v) in [("varrak_despierto", 1), ("consejo_1_hecho", 1), ("pista_merin", 1)] {
+        for (k, v) in [
+            ("varrak_despierto", 1),
+            ("consejo_1_hecho", 1),
+            ("pista_merin", 1),
+            ("rebeldes_hablar", 1),
+            ("pista_collar", 1),
+            ("gorou_cabeza_alta", 1),
+        ] {
             app.story.values.insert(k.into(), v);
         }
         app.gold = 420;
@@ -2608,6 +2615,7 @@ pub(super) fn capture(out: &Path) -> Result<()> {
             "precio_chispa",
             "guardia",
             "noche_mesa",
+            "nido_llamada",
         ] {
             if only.as_deref().is_some_and(|o| !o.split(',').any(|v| v == id)) {
                 continue;
