@@ -13,6 +13,8 @@ mod architecture;
 mod art;
 #[path = "assets.rs"]
 pub mod assets;
+#[path = "authored.rs"]
+pub mod authored;
 #[path = "combat.rs"]
 pub mod combat;
 #[path = "combat_fx.rs"]
@@ -33,6 +35,8 @@ pub mod hud;
 pub mod i18n;
 #[path = "incidents.rs"]
 mod incidents;
+#[path = "mine_art.rs"]
+mod mine_art;
 #[path = "prompt_icons.rs"]
 pub mod prompt_icons;
 #[path = "replay.rs"]
@@ -502,6 +506,8 @@ const MAX_SUMMONS: usize = 5;
 
 pub struct Dungeon {
     pub map: Blueprint,
+    /// The hand-made mine's art, names, chests and gates, when this run is it (see authored.rs).
+    pub authored: Option<std::sync::Arc<authored::Authored>>,
     /// Solid art per room (props, beacons, banners); derived from the map,
     /// shared by rendering and player collision, never saved.
     pub decor: Vec<decor::RoomDecor>,
@@ -608,6 +614,9 @@ impl Dungeon {
             .expect("bundled dungeon rules failed validation")
     }
     pub fn try_generate(seed: u64, config: Config) -> Result<Self, String> {
+        if seed == authored::MINE_SEED {
+            return Self::mine();
+        }
         let catalog = Catalog::bundled();
         let map = generate(seed, &config, &catalog, &Difficulty::default())?;
         let mut controller = Controller::new(map.spawn());
@@ -615,6 +624,49 @@ impl Dungeon {
             let d = s.position - map.spawn();
             controller.yaw = (-d.x).atan2(-d.z);
         }
+        let slime = slime::Slime::new(&map);
+        let decor: Vec<decor::RoomDecor> = map
+            .rooms
+            .iter()
+            .map(|room| decor::room(&map, room))
+            .collect();
+        let groves = slime::groves(&map, &decor);
+        Ok(Self::assemble(
+            map, catalog, controller, decor, slime, groves, None,
+        ))
+    }
+
+    /// The hand-made mine (Mina 2.0), from `data/mina/mina.json`.
+    pub fn mine() -> Result<Self, String> {
+        let (map, mine, groves) = authored::load()?;
+        let mut controller = Controller::new(mine.spawn);
+        controller.yaw = mine.spawn_yaw;
+        let decor = vec![decor::RoomDecor::default(); map.rooms.len()];
+        let mut run = Self::assemble(
+            map,
+            Catalog::bundled(),
+            controller,
+            decor,
+            None,
+            groves,
+            Some(std::sync::Arc::new(mine)),
+        );
+        run.checkpoint = run.controller.position;
+        run.notice =
+            "Alinea las tres runas, vence al Custodio y abre la garganta del Corazón.".into();
+        Ok(run)
+    }
+
+    /// A run on a map: its actors from the map's spawns, a fresh Queen at its way in.
+    fn assemble(
+        map: Blueprint,
+        catalog: Catalog,
+        controller: Controller,
+        decor: Vec<decor::RoomDecor>,
+        slime: Option<slime::Slime>,
+        groves: Vec<slime::Slime>,
+        authored: Option<std::sync::Arc<authored::Authored>>,
+    ) -> Self {
         let actors: Vec<Actor> = map
             .spawns
             .iter()
@@ -648,16 +700,9 @@ impl Dungeon {
             })
             .collect();
         let actors_len = actors.len();
-        let slime = slime::Slime::new(&map);
         let checkpoint = map.spawn();
-        let decor = map
-            .rooms
-            .iter()
-            .map(|room| decor::room(&map, room))
-            .collect();
-        let decor: Vec<decor::RoomDecor> = decor;
-        let groves = slime::groves(&map, &decor);
-        Ok(Self {
+        Self {
+            authored,
             decor,
             fx: Vec::new(),
             groves,
@@ -721,7 +766,7 @@ impl Dungeon {
             pending_exit: false,
             jump_requested: false,
             auto_walk: false,
-        })
+        }
     }
     pub fn seed(&self) -> u64 {
         self.map.seed
@@ -779,7 +824,13 @@ impl Dungeon {
         self.map.spawn()
     }
     pub fn spawn_yaw(&self) -> f32 {
-        let d = self.map.rooms[0].sockets[0].position - self.map.spawn();
+        if let Some(mine) = &self.authored {
+            return mine.spawn_yaw;
+        }
+        let Some(socket) = self.map.rooms[0].sockets.first() else {
+            return 0.0;
+        };
+        let d = socket.position - self.map.spawn();
         (-d.x).atan2(-d.z)
     }
     pub fn bounds(&self) -> (f32, f32, f32, f32) {
@@ -1220,6 +1271,18 @@ impl Dungeon {
                     self.controller.position.x = before.x;
                     self.controller.position.z = before.z;
                 }
+            }
+        }
+        if let Some(mine) = &self.authored {
+            if !(self.seal && self.crest)
+                && mine
+                    .gates
+                    .iter()
+                    .any(|g| g.holds(self.controller.position, PLAYER_RADIUS))
+            {
+                self.controller.position = before;
+                self.controller.velocity.x = 0.0;
+                self.controller.velocity.z = 0.0;
             }
         }
         for c in &self.map.connections {
@@ -2559,6 +2622,24 @@ impl Dungeon {
     /// What F does here: its icon, verb and what it acts on.
     pub fn interaction(&self) -> Option<prompt_icons::Prompt> {
         use prompt_icons::{Icon, Prompt};
+        if let Some(mine) = &self.authored {
+            if !(self.seal && self.crest)
+                && mine
+                    .gates
+                    .iter()
+                    .any(|g| g.holds(self.controller.position, PLAYER_RADIUS + 1.6))
+            {
+                return Some(
+                    Prompt::new(Icon::Lock, "Umbral sellado")
+                        .detail(match (self.seal, self.crest) {
+                            (false, false) => "Exige el sello y la llave del Custodio",
+                            (true, false) => "Falta la llave del Custodio",
+                            _ => "Falta despertar el sello",
+                        })
+                        .locked(),
+                );
+            }
+        }
         for c in &self.map.connections {
             if c.kind == ConnectionKind::Secret
                 && !self.opened.contains(&c.id)
@@ -2651,6 +2732,14 @@ impl Dungeon {
             }
             SpawnKind::Chest => {
                 let herbs = chest_herb_count(self.seed(), s.id);
+                let loot = self
+                    .authored
+                    .as_ref()
+                    .and_then(|mine| mine.loot.get(&s.id).cloned());
+                if let Some(loot) = loot {
+                    self.open_authored_chest(i, loot);
+                    return;
+                }
                 let chest = &mut self.actors[i];
                 if chest.chest_open_progress >= 1.0 {
                     chest.used = true;
@@ -2730,6 +2819,66 @@ impl Dungeon {
             _ => {}
         }
     }
+    /// A chest of the hand-made mine: open it, then take what it holds.
+    fn open_authored_chest(&mut self, i: usize, loot: authored::Loot) {
+        let chest = &mut self.actors[i];
+        if chest.chest_opening && chest.chest_open_progress < 1.0 {
+            return;
+        }
+        if chest.chest_open_progress < 1.0 {
+            chest.chest_opening = true;
+            let at = chest.position;
+            self.sound(sound::Sfx::ChestCreak, Some(at), 0.9);
+            self.message(if loot.relic || loot.gold >= 60 {
+                "La tapa cede despacio: el oro brilla dentro."
+            } else {
+                "El cofre cede con un crujido; algo brilla dentro."
+            });
+            return;
+        }
+        chest.used = true;
+        let at = chest.position;
+        self.sound(sound::Sfx::Coins, Some(at), 0.9);
+        self.gold += loot.gold;
+        self.potions += loot.potions;
+        self.unbanked_potions += loot.potions;
+        self.herbs += loot.herbs;
+        self.unbanked_herbs += loot.herbs;
+        let mut parts = Vec::new();
+        if loot.potions > 0 {
+            parts.push(if loot.potions == 1 {
+                "+1 tónico".to_string()
+            } else {
+                format!("+{} tónicos", loot.potions)
+            });
+        }
+        if loot.herbs > 0 {
+            parts.push(format!("+{} hierbas", loot.herbs));
+        }
+        parts.push(format!("+{} oro", loot.gold));
+        let drops: Vec<(&str, u32)> = loot
+            .materials
+            .iter()
+            .map(|(id, n)| (id.as_str(), *n))
+            .collect();
+        let gathered = self.gather(&drops);
+        if !gathered.is_empty() {
+            parts.push(gathered);
+        }
+        let list = parts.join(", ");
+        if loot.relic && !self.relic_sword {
+            self.sound(sound::Sfx::Relic, None, 0.9);
+            self.relic_sword = true;
+            self.unbanked_relic_sword = true;
+            self.armed = true;
+            self.sword_goo = None;
+            self.message(format!(
+                "¡Una espada de piedra entre el oro! La empuñas. {list}."
+            ));
+        } else {
+            self.message(format!("Dentro: {list}."));
+        }
+    }
     pub fn regenerate(&mut self, text: &str) -> Result<(), String> {
         let seed = if let Some(hex) = text.trim().strip_prefix("0x") {
             u64::from_str_radix(hex, 16)
@@ -2807,7 +2956,7 @@ impl Dungeon {
                 self.auto_walk = false;
             }
             F3 => self.debug = !self.debug,
-            F2 => {
+            F2 if self.authored.is_none() => {
                 self.seed_input = Some(String::new());
                 self.auto_walk = false;
             }

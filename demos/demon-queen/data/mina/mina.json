@@ -1,0 +1,3788 @@
+{
+ "version": 1,
+ "files": {
+  "rock": "mina/mine_rock.gltf",
+  "props": "mina/mine_props.gltf",
+  "floors": "mina/mine_floors.bin"
+ },
+ "spawn": {
+  "p": [
+   0.0,
+   0.0,
+   15.0
+  ],
+  "yaw": 0.0
+ },
+ "rooms": [
+  {
+   "id": "bocamina",
+   "name": "Bocamina",
+   "role": "entrance",
+   "biome": 0,
+   "center": [
+    0.0,
+    0.0,
+    15.0
+   ],
+   "box": [
+    0.0,
+    0.408,
+    23.0
+   ],
+   "half": [
+    43.38,
+    23.38
+   ],
+   "height": 6.0,
+   "area": 4272.4
+  },
+  {
+   "id": "galeria_norte",
+   "name": "Galería del Norte",
+   "role": "normal",
+   "biome": 0,
+   "center": [
+    0.375,
+    -1.511,
+    -22.875
+   ],
+   "box": [
+    0.5,
+    13.163,
+    -23.0
+   ],
+   "half": [
+    4.88,
+    23.38
+   ],
+   "height": 6.0,
+   "area": 276.9
+  },
+  {
+   "id": "sala_carga",
+   "name": "Sala de Carga",
+   "role": "encounter",
+   "biome": 0,
+   "center": [
+    1.375,
+    -2.975,
+    -51.375
+   ],
+   "box": [
+    1.375,
+    -2.99,
+    -51.5
+   ],
+   "half": [
+    14.0,
+    11.88
+   ],
+   "height": 6.0,
+   "area": 359.4
+  },
+  {
+   "id": "galeria_oeste",
+   "name": "Galería del Oeste",
+   "role": "normal",
+   "biome": 0,
+   "center": [
+    -15.625,
+    -3.036,
+    -54.625
+   ],
+   "box": [
+    -15.5,
+    -3.013,
+    -54.625
+   ],
+   "half": [
+    7.88,
+    4.0
+   ],
+   "height": 6.0,
+   "area": 42.6
+  },
+  {
+   "id": "derrumbe",
+   "name": "El Derrumbe",
+   "role": "encounter",
+   "biome": 0,
+   "center": [
+    -25.375,
+    -2.484,
+    -57.375
+   ],
+   "box": [
+    -25.125,
+    -2.356,
+    -57.375
+   ],
+   "half": [
+    3.5,
+    2.0
+   ],
+   "height": 6.0,
+   "area": 13.4
+  },
+  {
+   "id": "galeria_este",
+   "name": "Galería del Este",
+   "role": "normal",
+   "biome": 0,
+   "center": [
+    17.375,
+    -3.001,
+    -49.875
+   ],
+   "box": [
+    17.5,
+    -2.987,
+    -50.0
+   ],
+   "half": [
+    9.88,
+    3.38
+   ],
+   "height": 6.0,
+   "area": 69.6
+  },
+  {
+   "id": "torno",
+   "name": "Cuarto del Torno",
+   "role": "encounter",
+   "biome": 0,
+   "center": [
+    28.875,
+    -1.6,
+    -49.625
+   ],
+   "box": [
+    28.875,
+    -2.988,
+    -49.625
+   ],
+   "half": [
+    4.0,
+    4.0
+   ],
+   "height": 6.0,
+   "area": 26.3
+  },
+  {
+   "id": "plano",
+   "name": "Plano Inclinado",
+   "role": "normal",
+   "biome": 0,
+   "center": [
+    40.875,
+    -7.788,
+    -49.875
+   ],
+   "box": [
+    41.0,
+    -6.63,
+    -50.0
+   ],
+   "half": [
+    11.38,
+    2.38
+   ],
+   "height": 6.0,
+   "area": 69.8
+  },
+  {
+   "id": "gruta",
+   "name": "Gruta de Cristal",
+   "role": "encounter",
+   "biome": 1,
+   "center": [
+    52.375,
+    -13.985,
+    -66.125
+   ],
+   "box": [
+    52.5,
+    -13.981,
+    -66.125
+   ],
+   "half": [
+    7.62,
+    19.5
+   ],
+   "height": 6.0,
+   "area": 294.8
+  },
+  {
+   "id": "abismo",
+   "name": "El Abismo",
+   "role": "normal",
+   "biome": 1,
+   "center": [
+    52.125,
+    -14.319,
+    -72.875
+   ],
+   "box": [
+    52.25,
+    -13.992,
+    -73.0
+   ],
+   "half": [
+    4.88,
+    3.38
+   ],
+   "height": 6.0,
+   "area": 14.2
+  },
+  {
+   "id": "brecha",
+   "name": "La Brecha",
+   "role": "normal",
+   "biome": 1,
+   "center": [
+    52.875,
+    -14.193,
+    -86.875
+   ],
+   "box": [
+    53.0,
+    -14.161,
+    -87.0
+   ],
+   "half": [
+    2.38,
+    4.38
+   ],
+   "height": 6.0,
+   "area": 17.9
+  },
+  {
+   "id": "sello",
+   "name": "Cámara del Sello",
+   "role": "miniboss",
+   "biome": 2,
+   "center": [
+    52.875,
+    -14.4,
+    -99.875
+   ],
+   "box": [
+    53.0,
+    -14.4,
+    -100.0
+   ],
+   "half": [
+    8.12,
+    9.38
+   ],
+   "height": 6.0,
+   "area": 284.9
+  },
+  {
+   "id": "guardia",
+   "name": "Cuerpo de Guardia",
+   "role": "encounter",
+   "biome": 0,
+   "center": [
+    -5.625,
+    -0.85,
+    -25.375
+   ],
+   "box": [
+    -5.5,
+    -1.698,
+    -25.5
+   ],
+   "half": [
+    6.88,
+    4.88
+   ],
+   "height": 6.0,
+   "area": 58.2
+  },
+  {
+   "id": "galeria_biblio",
+   "name": "Paso de la Biblioteca",
+   "role": "normal",
+   "biome": 0,
+   "center": [
+    4.375,
+    -3.201,
+    -66.375
+   ],
+   "box": [
+    4.5,
+    -3.169,
+    -66.5
+   ],
+   "half": [
+    2.88,
+    5.88
+   ],
+   "height": 6.0,
+   "area": 28.1
+  },
+  {
+   "id": "biblioteca",
+   "name": "Biblioteca Hundida",
+   "role": "event",
+   "biome": 0,
+   "center": [
+    3.375,
+    -3.6,
+    -82.375
+   ],
+   "box": [
+    3.5,
+    -3.6,
+    -82.375
+   ],
+   "half": [
+    9.62,
+    10.75
+   ],
+   "height": 6.0,
+   "area": 340.8
+  },
+  {
+   "id": "galeria_cripta",
+   "name": "Paso de la Cripta",
+   "role": "normal",
+   "biome": 0,
+   "center": [
+    -15.375,
+    -3.242,
+    -64.375
+   ],
+   "box": [
+    -15.25,
+    -3.254,
+    -64.5
+   ],
+   "half": [
+    4.62,
+    7.88
+   ],
+   "height": 6.0,
+   "area": 34.3
+  },
+  {
+   "id": "cripta",
+   "name": "La Cripta",
+   "role": "encounter",
+   "biome": 0,
+   "center": [
+    -22.875,
+    -3.7,
+    -79.875
+   ],
+   "box": [
+    -22.75,
+    -3.7,
+    -80.0
+   ],
+   "half": [
+    7.88,
+    8.38
+   ],
+   "height": 6.0,
+   "area": 216.2
+  },
+  {
+   "id": "santuario",
+   "name": "Santuario del Reposo",
+   "role": "rest",
+   "biome": 0,
+   "center": [
+    -22.875,
+    -2.7,
+    -90.875
+   ],
+   "box": [
+    -22.875,
+    -3.7,
+    -91.0
+   ],
+   "half": [
+    3.25,
+    3.38
+   ],
+   "height": 6.0,
+   "area": 32.6
+  },
+  {
+   "id": "galeria_forja",
+   "name": "Paso de la Forja",
+   "role": "normal",
+   "biome": 2,
+   "center": [
+    27.375,
+    -2.987,
+    -59.375
+   ],
+   "box": [
+    27.5,
+    -2.989,
+    -59.5
+   ],
+   "half": [
+    3.88,
+    7.88
+   ],
+   "height": 6.0,
+   "area": 39.2
+  },
+  {
+   "id": "forja",
+   "name": "Forja en Ruinas",
+   "role": "encounter",
+   "biome": 2,
+   "center": [
+    22.875,
+    -2.991,
+    -70.125
+   ],
+   "box": [
+    23.0,
+    -2.989,
+    -70.125
+   ],
+   "half": [
+    7.62,
+    6.25
+   ],
+   "height": 6.0,
+   "area": 120.8
+  },
+  {
+   "id": "grieta",
+   "name": "La Grieta",
+   "role": "normal",
+   "biome": 0,
+   "center": [
+    -24.125,
+    -3.254,
+    -48.125
+   ],
+   "box": [
+    -24.625,
+    -3.245,
+    -48.75
+   ],
+   "half": [
+    6.75,
+    6.62
+   ],
+   "height": 6.0,
+   "area": 18.0
+  },
+  {
+   "id": "arcana",
+   "name": "Bóveda Arcana",
+   "role": "secret",
+   "biome": 2,
+   "center": [
+    -28.625,
+    -3.5,
+    -37.125
+   ],
+   "box": [
+    -28.5,
+    -3.5,
+    -36.625
+   ],
+   "half": [
+    6.62,
+    6.75
+   ],
+   "height": 6.0,
+   "area": 101.9
+  },
+  {
+   "id": "raices",
+   "name": "Raíces Anegadas",
+   "role": "normal",
+   "biome": 1,
+   "center": [
+    32.875,
+    -14.176,
+    -69.625
+   ],
+   "box": [
+    33.0,
+    -14.187,
+    -69.75
+   ],
+   "half": [
+    16.38,
+    6.62
+   ],
+   "height": 6.0,
+   "area": 200.8
+  },
+  {
+   "id": "limos",
+   "name": "Nido de Limos",
+   "role": "encounter",
+   "biome": 1,
+   "center": [
+    15.625,
+    -13.395,
+    -74.875
+   ],
+   "box": [
+    15.75,
+    -14.288,
+    -74.875
+   ],
+   "half": [
+    6.62,
+    5.5
+   ],
+   "height": 6.0,
+   "area": 92.9
+  },
+  {
+   "id": "hongos",
+   "name": "Gruta de Hongos",
+   "role": "normal",
+   "biome": 1,
+   "center": [
+    25.625,
+    -14.093,
+    -79.875
+   ],
+   "box": [
+    25.625,
+    -14.091,
+    -79.875
+   ],
+   "half": [
+    5.5,
+    4.25
+   ],
+   "height": 6.0,
+   "area": 58.4
+  },
+  {
+   "id": "galeria_tesoro",
+   "name": "Paso del Tesoro",
+   "role": "normal",
+   "biome": 1,
+   "center": [
+    62.375,
+    -13.974,
+    -80.875
+   ],
+   "box": [
+    62.5,
+    -13.989,
+    -81.0
+   ],
+   "half": [
+    5.88,
+    3.38
+   ],
+   "height": 6.0,
+   "area": 26.1
+  },
+  {
+   "id": "tesoro",
+   "name": "Cámara del Tesoro",
+   "role": "treasure",
+   "biome": 1,
+   "center": [
+    74.375,
+    -14.0,
+    -80.875
+   ],
+   "box": [
+    74.375,
+    -14.0,
+    -81.0
+   ],
+   "half": [
+    6.75,
+    7.38
+   ],
+   "height": 6.0,
+   "area": 181.6
+  },
+  {
+   "id": "umbral_corazon",
+   "name": "Garganta del Corazón",
+   "role": "normal",
+   "biome": 2,
+   "center": [
+    53.125,
+    -15.364,
+    -114.875
+   ],
+   "box": [
+    53.25,
+    -15.382,
+    -115.0
+   ],
+   "half": [
+    3.12,
+    6.38
+   ],
+   "height": 6.0,
+   "area": 37.3
+  },
+  {
+   "id": "corazon",
+   "name": "Corazón de la Caverna",
+   "role": "boss",
+   "biome": 2,
+   "center": [
+    52.375,
+    -13.0,
+    -128.875
+   ],
+   "box": [
+    52.375,
+    -15.989,
+    -128.875
+   ],
+   "half": [
+    14.5,
+    11.75
+   ],
+   "height": 6.0,
+   "area": 490.5
+  }
+ ],
+ "spawns": [
+  {
+   "kind": "entrance",
+   "room": 0,
+   "p": [
+    0.125,
+    -0.353,
+    17.375
+   ],
+   "face": [
+    -0.053,
+    -0.999
+   ],
+   "moved": 0.0,
+   "definition": "entrance"
+  },
+  {
+   "kind": "enemy",
+   "room": 1,
+   "p": [
+    1.375,
+    -1.195,
+    -19.125
+   ],
+   "face": [
+    -0.258,
+    -0.966
+   ],
+   "moved": 0.0,
+   "definition": "lurker",
+   "health": 40.3,
+   "damage": 8.0,
+   "speed": 1.35
+  },
+  {
+   "kind": "enemy",
+   "room": 1,
+   "p": [
+    0.625,
+    -2.62,
+    -35.125
+   ],
+   "face": [
+    -0.02,
+    1.0
+   ],
+   "moved": 0.0,
+   "definition": "bone_scout",
+   "health": 37.3,
+   "damage": 7.0,
+   "speed": 1.3
+  },
+  {
+   "kind": "enemy",
+   "room": 12,
+   "p": [
+    -6.375,
+    -1.72,
+    -26.125
+   ],
+   "face": [
+    0.707,
+    0.707
+   ],
+   "moved": 1.12,
+   "definition": "bone_guard",
+   "health": 70.0,
+   "damage": 13.0,
+   "speed": 1.0
+  },
+  {
+   "kind": "enemy",
+   "room": 12,
+   "p": [
+    -7.625,
+    -1.702,
+    -26.375
+   ],
+   "face": [
+    0.894,
+    0.447
+   ],
+   "moved": 0.56,
+   "definition": "lurker",
+   "health": 40.5,
+   "damage": 8.0,
+   "speed": 1.35
+  },
+  {
+   "kind": "chest",
+   "room": 12,
+   "p": [
+    -9.375,
+    -1.713,
+    -25.625
+   ],
+   "face": [
+    0.998,
+    0.067
+   ],
+   "moved": 0.0,
+   "definition": "comun",
+   "tier": "comun",
+   "loot": {
+    "gold": 17,
+    "potions": 0,
+    "herbs": 2,
+    "materials": {
+     "hueso_viejo": 1
+    },
+    "relic": false
+   },
+   "gold": 17
+  },
+  {
+   "kind": "chest",
+   "room": 1,
+   "p": [
+    -0.875,
+    -2.863,
+    -40.625
+   ],
+   "face": [
+    0.07,
+    0.998
+   ],
+   "moved": 0.0,
+   "definition": "comun",
+   "tier": "comun",
+   "loot": {
+    "gold": 9,
+    "potions": 0,
+    "herbs": 1,
+    "materials": {
+     "hueso_viejo": 2
+    },
+    "relic": false
+   },
+   "gold": 9
+  },
+  {
+   "kind": "enemy",
+   "room": 2,
+   "p": [
+    -4.125,
+    -2.987,
+    -49.625
+   ],
+   "face": [
+    0.953,
+    -0.303
+   ],
+   "moved": 0.25,
+   "definition": "lurker",
+   "health": 41.2,
+   "damage": 8.0,
+   "speed": 1.35
+  },
+  {
+   "kind": "enemy",
+   "room": 2,
+   "p": [
+    2.875,
+    -2.989,
+    -55.375
+   ],
+   "face": [
+    -0.351,
+    0.936
+   ],
+   "moved": 0.35,
+   "definition": "sentinel",
+   "health": 63.7,
+   "damage": 12.0,
+   "speed": 1.1
+  },
+  {
+   "kind": "enemy",
+   "room": 2,
+   "p": [
+    7.625,
+    -2.979,
+    -59.375
+   ],
+   "face": [
+    -0.616,
+    0.788
+   ],
+   "moved": 0.25,
+   "definition": "bone_scout",
+   "health": 37.5,
+   "damage": 7.0,
+   "speed": 1.3
+  },
+  {
+   "kind": "chest",
+   "room": 2,
+   "p": [
+    -8.625,
+    -2.989,
+    -61.625
+   ],
+   "face": [
+    0.698,
+    0.716
+   ],
+   "moved": 1.03,
+   "definition": "comun",
+   "tier": "comun",
+   "loot": {
+    "gold": 15,
+    "potions": 0,
+    "herbs": 1,
+    "materials": {
+     "hueso_viejo": 1
+    },
+    "relic": false
+   },
+   "gold": 15
+  },
+  {
+   "kind": "enemy",
+   "room": 3,
+   "p": [
+    -16.625,
+    -3.036,
+    -55.625
+   ],
+   "face": [
+    0.707,
+    0.707
+   ],
+   "moved": 0.25,
+   "definition": "lurker",
+   "health": 41.3,
+   "damage": 8.0,
+   "speed": 1.35
+  },
+  {
+   "kind": "enemy",
+   "room": 4,
+   "p": [
+    -26.875,
+    -1.952,
+    -57.875
+   ],
+   "face": [
+    0.949,
+    0.316
+   ],
+   "moved": 0.56,
+   "definition": "grave_mage",
+   "health": 44.4,
+   "damage": 9.0,
+   "speed": 1.08
+  },
+  {
+   "kind": "chest",
+   "room": 4,
+   "p": [
+    -27.125,
+    -1.97,
+    -57.375
+   ],
+   "face": [
+    1.0,
+    0.0
+   ],
+   "moved": 1.9,
+   "definition": "rico",
+   "tier": "rico",
+   "loot": {
+    "gold": 35,
+    "potions": 1,
+    "herbs": 2,
+    "materials": {
+     "hueso_viejo": 3
+    },
+    "relic": false
+   },
+   "gold": 35
+  },
+  {
+   "kind": "enemy",
+   "room": 20,
+   "p": [
+    -26.125,
+    -3.35,
+    -45.625
+   ],
+   "face": [
+    0.625,
+    -0.781
+   ],
+   "moved": 1.77,
+   "definition": "lurker",
+   "health": 41.4,
+   "damage": 8.0,
+   "speed": 1.35
+  },
+  {
+   "kind": "chest",
+   "room": 20,
+   "p": [
+    -27.625,
+    -3.388,
+    -44.625
+   ],
+   "face": [
+    0.707,
+    -0.707
+   ],
+   "moved": 0.0,
+   "definition": "comun",
+   "tier": "comun",
+   "loot": {
+    "gold": 8,
+    "potions": 0,
+    "herbs": 2,
+    "materials": {
+     "hueso_viejo": 2
+    },
+    "relic": false
+   },
+   "gold": 8
+  },
+  {
+   "kind": "elite",
+   "room": 21,
+   "p": [
+    -25.625,
+    -3.5,
+    -33.375
+   ],
+   "face": [
+    -0.625,
+    -0.781
+   ],
+   "moved": 0.35,
+   "definition": "bone_guard",
+   "health": 114.8,
+   "damage": 16.4,
+   "speed": 1.0
+  },
+  {
+   "kind": "enemy",
+   "room": 21,
+   "p": [
+    -30.625,
+    -3.5,
+    -33.625
+   ],
+   "face": [
+    0.496,
+    -0.868
+   ],
+   "moved": 0.56,
+   "definition": "grave_mage",
+   "health": 45.3,
+   "damage": 9.0,
+   "speed": 1.08
+  },
+  {
+   "kind": "seal",
+   "room": 21,
+   "p": [
+    -25.125,
+    -3.5,
+    -38.625
+   ],
+   "face": [
+    -0.919,
+    0.394
+   ],
+   "moved": 0.0,
+   "definition": "sigil_1"
+  },
+  {
+   "kind": "chest",
+   "room": 21,
+   "p": [
+    -31.625,
+    -3.5,
+    -38.375
+   ],
+   "face": [
+    0.923,
+    0.385
+   ],
+   "moved": 0.0,
+   "definition": "rico",
+   "tier": "rico",
+   "loot": {
+    "gold": 39,
+    "potions": 1,
+    "herbs": 1,
+    "materials": {
+     "hueso_viejo": 3,
+     "ceniza_arcana": 1
+    },
+    "relic": false
+   },
+   "gold": 39
+  },
+  {
+   "kind": "enemy",
+   "room": 15,
+   "p": [
+    -14.875,
+    -3.227,
+    -64.125
+   ],
+   "face": [
+    -0.894,
+    -0.447
+   ],
+   "moved": 0.0,
+   "definition": "bone_scout",
+   "health": 37.6,
+   "damage": 7.0,
+   "speed": 1.3
+  },
+  {
+   "kind": "enemy",
+   "room": 16,
+   "p": [
+    -21.375,
+    -3.7,
+    -75.625
+   ],
+   "face": [
+    -0.333,
+    -0.943
+   ],
+   "moved": 1.0,
+   "definition": "lurker",
+   "health": 41.6,
+   "damage": 8.0,
+   "speed": 1.35
+  },
+  {
+   "kind": "enemy",
+   "room": 16,
+   "p": [
+    -26.375,
+    -3.7,
+    -79.625
+   ],
+   "face": [
+    0.997,
+    -0.071
+   ],
+   "moved": 0.5,
+   "definition": "lurker",
+   "health": 41.6,
+   "damage": 8.0,
+   "speed": 1.35
+  },
+  {
+   "kind": "enemy",
+   "room": 16,
+   "p": [
+    -19.375,
+    -3.7,
+    -83.125
+   ],
+   "face": [
+    -0.733,
+    0.68
+   ],
+   "moved": 0.0,
+   "definition": "bone_guard",
+   "health": 71.9,
+   "damage": 13.0,
+   "speed": 1.0
+  },
+  {
+   "kind": "seal",
+   "room": 16,
+   "p": [
+    -16.875,
+    -3.7,
+    -86.125
+   ],
+   "face": [
+    -0.693,
+    0.721
+   ],
+   "moved": 0.0,
+   "definition": "sigil_0"
+  },
+  {
+   "kind": "chest",
+   "room": 16,
+   "p": [
+    -29.125,
+    -3.7,
+    -86.125
+   ],
+   "face": [
+    0.707,
+    0.707
+   ],
+   "moved": 0.0,
+   "definition": "rico",
+   "tier": "rico",
+   "loot": {
+    "gold": 39,
+    "potions": 1,
+    "herbs": 3,
+    "materials": {
+     "hueso_viejo": 1
+    },
+    "relic": false
+   },
+   "gold": 39
+  },
+  {
+   "kind": "rest",
+   "room": 17,
+   "p": [
+    -22.625,
+    -2.7,
+    -91.125
+   ],
+   "face": [
+    -0.707,
+    0.707
+   ],
+   "moved": 0.0,
+   "definition": "rest"
+  },
+  {
+   "kind": "enemy",
+   "room": 13,
+   "p": [
+    4.375,
+    -3.182,
+    -66.125
+   ],
+   "face": [
+    0.0,
+    -1.0
+   ],
+   "moved": 0.0,
+   "definition": "lurker",
+   "health": 41.3,
+   "damage": 8.0,
+   "speed": 1.35
+  },
+  {
+   "kind": "enemy",
+   "room": 14,
+   "p": [
+    3.625,
+    -3.6,
+    -84.125
+   ],
+   "face": [
+    -0.141,
+    0.99
+   ],
+   "moved": 0.0,
+   "definition": "grave_mage",
+   "health": 45.4,
+   "damage": 9.0,
+   "speed": 1.08
+  },
+  {
+   "kind": "enemy",
+   "room": 14,
+   "p": [
+    9.125,
+    -3.6,
+    -88.625
+   ],
+   "face": [
+    -0.677,
+    0.736
+   ],
+   "moved": 0.0,
+   "definition": "bone_scout",
+   "health": 37.8,
+   "damage": 7.0,
+   "speed": 1.3
+  },
+  {
+   "kind": "memory",
+   "room": 14,
+   "p": [
+    3.625,
+    -3.6,
+    -79.125
+   ],
+   "face": [
+    -0.077,
+    -0.997
+   ],
+   "moved": 0.0,
+   "definition": "memory"
+  },
+  {
+   "kind": "chest",
+   "room": 14,
+   "p": [
+    -4.125,
+    -3.6,
+    -91.375
+   ],
+   "face": [
+    0.64,
+    0.768
+   ],
+   "moved": 0.35,
+   "definition": "rico",
+   "tier": "rico",
+   "loot": {
+    "gold": 38,
+    "potions": 1,
+    "herbs": 1,
+    "materials": {
+     "hueso_viejo": 2,
+     "ceniza_arcana": 1
+    },
+    "relic": false
+   },
+   "gold": 38
+  },
+  {
+   "kind": "enemy",
+   "room": 5,
+   "p": [
+    17.125,
+    -3.0,
+    -50.125
+   ],
+   "face": [
+    0.707,
+    0.707
+   ],
+   "moved": 0.0,
+   "definition": "lurker",
+   "health": 41.3,
+   "damage": 8.0,
+   "speed": 1.35
+  },
+  {
+   "kind": "enemy",
+   "room": 6,
+   "p": [
+    29.125,
+    -2.991,
+    -48.625
+   ],
+   "face": [
+    -0.243,
+    -0.97
+   ],
+   "moved": 0.5,
+   "definition": "sentinel",
+   "health": 63.7,
+   "damage": 12.0,
+   "speed": 1.1
+  },
+  {
+   "kind": "chest",
+   "room": 6,
+   "p": [
+    31.875,
+    -2.999,
+    -52.375
+   ],
+   "face": [
+    -0.737,
+    0.676
+   ],
+   "moved": 0.25,
+   "definition": "comun",
+   "tier": "comun",
+   "loot": {
+    "gold": 9,
+    "potions": 0,
+    "herbs": 2,
+    "materials": {
+     "hueso_viejo": 2
+    },
+    "relic": false
+   },
+   "gold": 9
+  },
+  {
+   "kind": "enemy",
+   "room": 18,
+   "p": [
+    28.875,
+    -2.993,
+    -58.625
+   ],
+   "face": [
+    -0.894,
+    -0.447
+   ],
+   "moved": 0.0,
+   "definition": "bone_scout",
+   "health": 37.5,
+   "damage": 7.0,
+   "speed": 1.3
+  },
+  {
+   "kind": "enemy",
+   "room": 19,
+   "p": [
+    22.125,
+    -2.986,
+    -69.125
+   ],
+   "face": [
+    0.6,
+    -0.8
+   ],
+   "moved": 0.0,
+   "definition": "bone_guard",
+   "health": 71.2,
+   "damage": 13.0,
+   "speed": 1.0
+  },
+  {
+   "kind": "enemy",
+   "room": 19,
+   "p": [
+    19.125,
+    -2.997,
+    -67.125
+   ],
+   "face": [
+    0.781,
+    -0.625
+   ],
+   "moved": 0.0,
+   "definition": "lurker",
+   "health": 41.2,
+   "damage": 8.0,
+   "speed": 1.35
+  },
+  {
+   "kind": "seal",
+   "room": 19,
+   "p": [
+    26.125,
+    -2.998,
+    -74.125
+   ],
+   "face": [
+    -0.631,
+    0.776
+   ],
+   "moved": 0.0,
+   "definition": "sigil_2"
+  },
+  {
+   "kind": "chest",
+   "room": 19,
+   "p": [
+    17.625,
+    -2.99,
+    -72.625
+   ],
+   "face": [
+    0.903,
+    0.43
+   ],
+   "moved": 0.0,
+   "definition": "comun",
+   "tier": "comun",
+   "loot": {
+    "gold": 14,
+    "potions": 0,
+    "herbs": 1,
+    "materials": {
+     "hueso_viejo": 2
+    },
+    "relic": false
+   },
+   "gold": 14
+  },
+  {
+   "kind": "enemy",
+   "room": 8,
+   "p": [
+    54.625,
+    -13.396,
+    -49.125
+   ],
+   "face": [
+    -0.131,
+    -0.991
+   ],
+   "moved": 0.0,
+   "definition": "bone_scout",
+   "health": 42.7,
+   "damage": 7.0,
+   "speed": 1.3
+  },
+  {
+   "kind": "chest",
+   "room": 8,
+   "p": [
+    55.625,
+    -13.381,
+    -48.625
+   ],
+   "face": [
+    -0.183,
+    -0.983
+   ],
+   "moved": 0.0,
+   "definition": "comun",
+   "tier": "comun",
+   "loot": {
+    "gold": 12,
+    "potions": 0,
+    "herbs": 2,
+    "materials": {
+     "hueso_viejo": 2
+    },
+    "relic": false
+   },
+   "gold": 12
+  },
+  {
+   "kind": "enemy",
+   "room": 8,
+   "p": [
+    54.625,
+    -13.586,
+    -57.125
+   ],
+   "face": [
+    -0.243,
+    -0.97
+   ],
+   "moved": 0.0,
+   "definition": "sentinel",
+   "health": 72.7,
+   "damage": 12.0,
+   "speed": 1.1
+  },
+  {
+   "kind": "enemy",
+   "room": 8,
+   "p": [
+    49.625,
+    -13.988,
+    -66.625
+   ],
+   "face": [
+    0.984,
+    0.179
+   ],
+   "moved": 1.12,
+   "definition": "lurker",
+   "health": 47.3,
+   "damage": 8.0,
+   "speed": 1.35
+  },
+  {
+   "kind": "chest",
+   "room": 8,
+   "p": [
+    57.375,
+    -13.986,
+    -63.375
+   ],
+   "face": [
+    -0.876,
+    -0.482
+   ],
+   "moved": 0.0,
+   "definition": "comun",
+   "tier": "comun",
+   "loot": {
+    "gold": 13,
+    "potions": 0,
+    "herbs": 2,
+    "materials": {
+     "hueso_viejo": 2
+    },
+    "relic": false
+   },
+   "gold": 13
+  },
+  {
+   "kind": "enemy",
+   "room": 8,
+   "p": [
+    53.125,
+    -14.002,
+    -80.125
+   ],
+   "face": [
+    -0.053,
+    0.999
+   ],
+   "moved": 0.0,
+   "definition": "bone_guard",
+   "health": 81.7,
+   "damage": 13.0,
+   "speed": 1.0
+  },
+  {
+   "kind": "slime",
+   "room": 22,
+   "p": [
+    36.125,
+    -14.15,
+    -70.625
+   ],
+   "face": [
+    -0.956,
+    0.294
+   ],
+   "moved": 0.0,
+   "definition": "green"
+  },
+  {
+   "kind": "slime",
+   "room": 22,
+   "p": [
+    27.125,
+    -14.179,
+    -66.625
+   ],
+   "face": [
+    0.887,
+    -0.463
+   ],
+   "moved": 0.0,
+   "definition": "green"
+  },
+  {
+   "kind": "chest",
+   "room": 22,
+   "p": [
+    30.625,
+    -14.2,
+    -66.875
+   ],
+   "face": [
+    0.633,
+    -0.774
+   ],
+   "moved": 0.0,
+   "definition": "comun",
+   "tier": "comun",
+   "loot": {
+    "gold": 16,
+    "potions": 0,
+    "herbs": 1,
+    "materials": {
+     "hueso_viejo": 2
+    },
+    "relic": false
+   },
+   "gold": 16
+  },
+  {
+   "kind": "slime",
+   "room": 23,
+   "p": [
+    16.625,
+    -14.278,
+    -73.125
+   ],
+   "face": [
+    -0.496,
+    -0.868
+   ],
+   "moved": 0.0,
+   "definition": "blue"
+  },
+  {
+   "kind": "slime",
+   "room": 23,
+   "p": [
+    13.125,
+    -14.292,
+    -78.125
+   ],
+   "face": [
+    0.61,
+    0.793
+   ],
+   "moved": 0.5,
+   "definition": "blue"
+  },
+  {
+   "kind": "slime",
+   "room": 23,
+   "p": [
+    18.875,
+    -13.567,
+    -76.625
+   ],
+   "face": [
+    -0.88,
+    0.474
+   ],
+   "moved": 0.56,
+   "definition": "green"
+  },
+  {
+   "kind": "chest",
+   "room": 23,
+   "p": [
+    11.625,
+    -14.275,
+    -76.625
+   ],
+   "face": [
+    0.916,
+    0.401
+   ],
+   "moved": 0.0,
+   "definition": "rico",
+   "tier": "rico",
+   "loot": {
+    "gold": 36,
+    "potions": 1,
+    "herbs": 1,
+    "materials": {
+     "hueso_viejo": 3,
+     "ceniza_arcana": 1
+    },
+    "relic": false
+   },
+   "gold": 36
+  },
+  {
+   "kind": "slime",
+   "room": 24,
+   "p": [
+    23.375,
+    -14.09,
+    -82.125
+   ],
+   "face": [
+    0.707,
+    0.707
+   ],
+   "moved": 0.9,
+   "definition": "blue"
+  },
+  {
+   "kind": "chest",
+   "room": 24,
+   "p": [
+    28.375,
+    -14.072,
+    -81.625
+   ],
+   "face": [
+    -0.844,
+    0.537
+   ],
+   "moved": 0.0,
+   "definition": "comun",
+   "tier": "comun",
+   "loot": {
+    "gold": 8,
+    "potions": 0,
+    "herbs": 1,
+    "materials": {
+     "hueso_viejo": 1
+    },
+    "relic": false
+   },
+   "gold": 8
+  },
+  {
+   "kind": "enemy",
+   "room": 25,
+   "p": [
+    63.625,
+    -13.992,
+    -81.125
+   ],
+   "face": [
+    -0.981,
+    0.196
+   ],
+   "moved": 0.0,
+   "definition": "lurker",
+   "health": 47.3,
+   "damage": 8.0,
+   "speed": 1.35
+  },
+  {
+   "kind": "elite",
+   "room": 26,
+   "p": [
+    73.625,
+    -14.0,
+    -81.125
+   ],
+   "face": [
+    0.949,
+    0.316
+   ],
+   "moved": 0.0,
+   "definition": "bone_guard",
+   "health": 130.7,
+   "damage": 16.4,
+   "speed": 1.0
+  },
+  {
+   "kind": "chest",
+   "room": 26,
+   "p": [
+    78.625,
+    -14.0,
+    -86.125
+   ],
+   "face": [
+    -0.629,
+    0.777
+   ],
+   "moved": 0.0,
+   "definition": "tesoro",
+   "tier": "tesoro",
+   "loot": {
+    "gold": 91,
+    "potions": 2,
+    "herbs": 3,
+    "materials": {
+     "ceniza_arcana": 2
+    },
+    "relic": true
+   },
+   "gold": 91
+  },
+  {
+   "kind": "chest",
+   "room": 26,
+   "p": [
+    70.125,
+    -13.4,
+    -75.625
+   ],
+   "face": [
+    0.629,
+    -0.777
+   ],
+   "moved": 0.0,
+   "definition": "rico",
+   "tier": "rico",
+   "loot": {
+    "gold": 23,
+    "potions": 1,
+    "herbs": 2,
+    "materials": {
+     "hueso_viejo": 3,
+     "ceniza_arcana": 1
+    },
+    "relic": false
+   },
+   "gold": 23
+  },
+  {
+   "kind": "chest",
+   "room": 26,
+   "p": [
+    79.125,
+    -14.0,
+    -75.875
+   ],
+   "face": [
+    -0.689,
+    -0.725
+   ],
+   "moved": 0.0,
+   "definition": "rico",
+   "tier": "rico",
+   "loot": {
+    "gold": 22,
+    "potions": 1,
+    "herbs": 2,
+    "materials": {
+     "hueso_viejo": 2,
+     "ceniza_arcana": 1
+    },
+    "relic": false
+   },
+   "gold": 22
+  },
+  {
+   "kind": "enemy",
+   "room": 10,
+   "p": [
+    53.625,
+    -14.191,
+    -87.125
+   ],
+   "face": [
+    -0.949,
+    0.316
+   ],
+   "moved": 0.0,
+   "definition": "lurker",
+   "health": 47.4,
+   "damage": 8.0,
+   "speed": 1.35
+  },
+  {
+   "kind": "miniboss",
+   "room": 11,
+   "p": [
+    53.125,
+    -14.4,
+    -100.125
+   ],
+   "face": [
+    -0.707,
+    0.707
+   ],
+   "moved": 0.0,
+   "definition": "sentinel",
+   "health": 183.6,
+   "damage": 19.0,
+   "speed": 1.1
+  },
+  {
+   "kind": "chest",
+   "room": 11,
+   "p": [
+    58.625,
+    -14.4,
+    -104.125
+   ],
+   "face": [
+    -0.804,
+    0.594
+   ],
+   "moved": 0.0,
+   "definition": "rico",
+   "tier": "rico",
+   "loot": {
+    "gold": 33,
+    "potions": 1,
+    "herbs": 2,
+    "materials": {
+     "hueso_viejo": 2,
+     "ceniza_arcana": 1
+    },
+    "relic": false
+   },
+   "gold": 33
+  },
+  {
+   "kind": "boss",
+   "room": 28,
+   "p": [
+    53.125,
+    -15.976,
+    -124.125
+   ],
+   "face": [
+    -0.156,
+    -0.988
+   ],
+   "moved": 0.0,
+   "definition": "bone_guard",
+   "health": 351.0,
+   "damage": 26.6,
+   "speed": 1.0
+  },
+  {
+   "kind": "exit",
+   "room": 27,
+   "p": [
+    53.375,
+    -15.661,
+    -116.625
+   ],
+   "face": [
+    -0.141,
+    0.99
+   ],
+   "moved": 0.25,
+   "definition": "exit"
+  },
+  {
+   "kind": "chest",
+   "room": 28,
+   "p": [
+    63.625,
+    -15.98,
+    -131.125
+   ],
+   "face": [
+    -0.981,
+    0.196
+   ],
+   "moved": 0.0,
+   "definition": "tesoro",
+   "tier": "tesoro",
+   "loot": {
+    "gold": 100,
+    "potions": 2,
+    "herbs": 4,
+    "materials": {
+     "ceniza_arcana": 2
+    },
+    "relic": false
+   },
+   "gold": 100
+  }
+ ],
+ "gates": [
+  {
+   "id": "umbral",
+   "p": [
+    53.0,
+    -14.4,
+    -109.2
+   ],
+   "half": [
+    1.9,
+    0.6
+   ],
+   "height": 3.6
+  }
+ ],
+ "lights": [
+  {
+   "p": [
+    0.0,
+    1.6,
+    -51.0
+   ],
+   "kind": "fill",
+   "color": "#c98a55",
+   "intensity": 9.0,
+   "distance": 22.0
+  },
+  {
+   "p": [
+    5.0,
+    1.8,
+    -57.5
+   ],
+   "kind": "fill",
+   "color": "#c08050",
+   "intensity": 6.0,
+   "distance": 16.0
+  },
+  {
+   "p": [
+    29.0,
+    -0.6,
+    -50.0
+   ],
+   "kind": "fill",
+   "color": "#b88050",
+   "intensity": 4.0,
+   "distance": 10.0
+  },
+  {
+   "p": [
+    53.5,
+    -11.2,
+    -57.0
+   ],
+   "kind": "fill",
+   "color": "#7a55c8",
+   "intensity": 4.5,
+   "distance": 14.0
+  },
+  {
+   "p": [
+    50.0,
+    -10.5,
+    -64.6
+   ],
+   "kind": "fill",
+   "color": "#6a4cc0",
+   "intensity": 6.5,
+   "distance": 18.0
+  },
+  {
+   "p": [
+    52.0,
+    -11.0,
+    -72.8
+   ],
+   "kind": "fill",
+   "color": "#5a40a0",
+   "intensity": 3.5,
+   "distance": 12.0
+  },
+  {
+   "p": [
+    53.0,
+    -11.2,
+    -80.2
+   ],
+   "kind": "fill",
+   "color": "#7050c0",
+   "intensity": 4.5,
+   "distance": 14.0
+  },
+  {
+   "p": [
+    53.0,
+    -10.0,
+    -99.0
+   ],
+   "kind": "fill",
+   "color": "#a02030",
+   "intensity": 6.0,
+   "distance": 20.0
+  },
+  {
+   "p": [
+    -0.464,
+    2.108,
+    -2.591
+   ],
+   "kind": "lantern",
+   "color": "#ffaa5a",
+   "intensity": 9.424999999999999,
+   "distance": 12.5
+  },
+  {
+   "p": [
+    -0.526,
+    1.829,
+    -9.206
+   ],
+   "kind": "lantern",
+   "color": "#ffaa5a",
+   "intensity": 9.424999999999999,
+   "distance": 12.5
+  },
+  {
+   "p": [
+    0.001,
+    1.377,
+    -15.833
+   ],
+   "kind": "lantern",
+   "color": "#ffaa5a",
+   "intensity": 9.424999999999999,
+   "distance": 12.5
+  },
+  {
+   "p": [
+    0.977,
+    0.798,
+    -22.348
+   ],
+   "kind": "lantern",
+   "color": "#ffaa5a",
+   "intensity": 9.424999999999999,
+   "distance": 12.5
+  },
+  {
+   "p": [
+    1.028,
+    0.208,
+    -28.847
+   ],
+   "kind": "lantern",
+   "color": "#ffaa5a",
+   "intensity": 9.424999999999999,
+   "distance": 12.5
+  },
+  {
+   "p": [
+    0.234,
+    -0.388,
+    -35.395
+   ],
+   "kind": "lantern",
+   "color": "#ffaa5a",
+   "intensity": 9.424999999999999,
+   "distance": 12.5
+  },
+  {
+   "p": [
+    -13.592,
+    -0.928,
+    -54.083
+   ],
+   "kind": "lantern",
+   "color": "#ffaa5a",
+   "intensity": 9.424999999999999,
+   "distance": 12.5
+  },
+  {
+   "p": [
+    -19.887,
+    -0.97,
+    -55.988
+   ],
+   "kind": "lantern",
+   "color": "#ffaa5a",
+   "intensity": 9.424999999999999,
+   "distance": 12.5
+  },
+  {
+   "p": [
+    13.91,
+    -0.74,
+    -50.964
+   ],
+   "kind": "lantern",
+   "color": "#ffaa5a",
+   "intensity": 9.424999999999999,
+   "distance": 12.5
+  },
+  {
+   "p": [
+    20.436,
+    -0.74,
+    -50.483
+   ],
+   "kind": "lantern",
+   "color": "#ffaa5a",
+   "intensity": 9.424999999999999,
+   "distance": 12.5
+  },
+  {
+   "p": [
+    35.955,
+    -2.567,
+    -50.42
+   ],
+   "kind": "lantern",
+   "color": "#ffaa5a",
+   "intensity": 9.424999999999999,
+   "distance": 12.5
+  },
+  {
+   "p": [
+    39.955,
+    -5.039,
+    -50.42
+   ],
+   "kind": "lantern",
+   "color": "#ffaa5a",
+   "intensity": 9.424999999999999,
+   "distance": 12.5
+  },
+  {
+   "p": [
+    43.955,
+    -7.512,
+    -50.42
+   ],
+   "kind": "lantern",
+   "color": "#ffaa5a",
+   "intensity": 9.424999999999999,
+   "distance": 12.5
+  },
+  {
+   "p": [
+    1.98,
+    2.01,
+    -53.0
+   ],
+   "kind": "lantern",
+   "color": "#ffaa5a",
+   "intensity": 8.7,
+   "distance": 12.5
+  },
+  {
+   "p": [
+    1.49,
+    2.01,
+    -53.849
+   ],
+   "kind": "lantern",
+   "color": "#ffaa5a",
+   "intensity": 8.7,
+   "distance": 12.5
+  },
+  {
+   "p": [
+    0.51,
+    2.01,
+    -53.849
+   ],
+   "kind": "lantern",
+   "color": "#ffaa5a",
+   "intensity": 8.7,
+   "distance": 12.5
+  },
+  {
+   "p": [
+    0.02,
+    2.01,
+    -53.0
+   ],
+   "kind": "lantern",
+   "color": "#ffaa5a",
+   "intensity": 8.7,
+   "distance": 12.5
+  },
+  {
+   "p": [
+    0.51,
+    2.01,
+    -52.151
+   ],
+   "kind": "lantern",
+   "color": "#ffaa5a",
+   "intensity": 8.7,
+   "distance": 12.5
+  },
+  {
+   "p": [
+    1.49,
+    2.01,
+    -52.151
+   ],
+   "kind": "lantern",
+   "color": "#ffaa5a",
+   "intensity": 8.7,
+   "distance": 12.5
+  },
+  {
+   "p": [
+    -8.1,
+    -1.26,
+    -47.0
+   ],
+   "kind": "lantern",
+   "color": "#ffaa5a",
+   "intensity": 7.975,
+   "distance": 12.5
+  },
+  {
+   "p": [
+    8.4,
+    -1.26,
+    -46.6
+   ],
+   "kind": "lantern",
+   "color": "#ffaa5a",
+   "intensity": 7.975,
+   "distance": 12.5
+  },
+  {
+   "p": [
+    -3.6,
+    -1.26,
+    -56.4
+   ],
+   "kind": "lantern",
+   "color": "#ffaa5a",
+   "intensity": 7.975,
+   "distance": 12.5
+  },
+  {
+   "p": [
+    10.9,
+    -1.26,
+    -54.6
+   ],
+   "kind": "lantern",
+   "color": "#ffaa5a",
+   "intensity": 7.975,
+   "distance": 12.5
+  },
+  {
+   "p": [
+    -10.8,
+    -1.26,
+    -52.6
+   ],
+   "kind": "lantern",
+   "color": "#ffaa5a",
+   "intensity": 7.975,
+   "distance": 12.5
+  },
+  {
+   "p": [
+    2.8,
+    -1.26,
+    -46.0
+   ],
+   "kind": "lantern",
+   "color": "#ffaa5a",
+   "intensity": 7.975,
+   "distance": 12.5
+  },
+  {
+   "p": [
+    9.6,
+    -2.1,
+    -47.4
+   ],
+   "kind": "ember",
+   "color": "#ff5a1e",
+   "intensity": 7.5,
+   "distance": 7.0
+  },
+  {
+   "p": [
+    -6.6,
+    -2.4,
+    -57.6
+   ],
+   "kind": "fire",
+   "color": "#ff8a3a",
+   "intensity": 10.0,
+   "distance": 11.0
+  },
+  {
+   "p": [
+    -21.987,
+    -3.227,
+    -57.888
+   ],
+   "kind": "lantern",
+   "color": "#ffaa5a",
+   "intensity": 3.19,
+   "distance": 12.5
+  },
+  {
+   "p": [
+    27.0,
+    -1.06,
+    -52.6
+   ],
+   "kind": "lantern",
+   "color": "#ffaa5a",
+   "intensity": 8.7,
+   "distance": 12.5
+  },
+  {
+   "p": [
+    58.763,
+    -13.315,
+    -58.185
+   ],
+   "kind": "crystal",
+   "color": "#9a52ff",
+   "intensity": 10.321518419595893,
+   "distance": 10.0
+  },
+  {
+   "p": [
+    57.856,
+    -10.273,
+    -65.789
+   ],
+   "kind": "crystal",
+   "color": "#9a52ff",
+   "intensity": 8.496551034565494,
+   "distance": 10.0
+  },
+  {
+   "p": [
+    40.472,
+    -13.505,
+    -71.856
+   ],
+   "kind": "crystal",
+   "color": "#9a52ff",
+   "intensity": 5.589763425004436,
+   "distance": 10.0
+  },
+  {
+   "p": [
+    49.284,
+    -9.827,
+    -55.734
+   ],
+   "kind": "crystal",
+   "color": "#9a52ff",
+   "intensity": 7.823381194145991,
+   "distance": 10.0
+  },
+  {
+   "p": [
+    50.362,
+    -13.237,
+    -48.129
+   ],
+   "kind": "crystal",
+   "color": "#9a52ff",
+   "intensity": 5.557173577581159,
+   "distance": 10.0
+  },
+  {
+   "p": [
+    57.111,
+    -11.806,
+    -54.018
+   ],
+   "kind": "crystal",
+   "color": "#9a52ff",
+   "intensity": 9.359925403004324,
+   "distance": 10.0
+  },
+  {
+   "p": [
+    57.524,
+    -12.681,
+    -67.04
+   ],
+   "kind": "crystal",
+   "color": "#9a52ff",
+   "intensity": 7.990169579018395,
+   "distance": 10.0
+  },
+  {
+   "p": [
+    51.876,
+    -9.05,
+    -68.715
+   ],
+   "kind": "crystal",
+   "color": "#9a52ff",
+   "intensity": 10.905368931083856,
+   "distance": 10.0
+  },
+  {
+   "p": [
+    47.926,
+    -12.04,
+    -74.404
+   ],
+   "kind": "crystal",
+   "color": "#9a52ff",
+   "intensity": 7.722149385309102,
+   "distance": 10.0
+  },
+  {
+   "p": [
+    44.115,
+    -11.071,
+    -67.114
+   ],
+   "kind": "crystal",
+   "color": "#9a52ff",
+   "intensity": 9.513142916535715,
+   "distance": 10.0
+  },
+  {
+   "p": [
+    56.945,
+    -12.059,
+    -53.53
+   ],
+   "kind": "crystal",
+   "color": "#9a52ff",
+   "intensity": 8.750255536600557,
+   "distance": 10.0
+  },
+  {
+   "p": [
+    56.661,
+    -7.836,
+    -63.229
+   ],
+   "kind": "crystal",
+   "color": "#9a52ff",
+   "intensity": 10.79180239201001,
+   "distance": 10.0
+  },
+  {
+   "p": [
+    48.822,
+    -6.761,
+    -61.133
+   ],
+   "kind": "crystal",
+   "color": "#9a52ff",
+   "intensity": 9.5288436580346,
+   "distance": 10.0
+  },
+  {
+   "p": [
+    56.014,
+    -10.075,
+    -83.337
+   ],
+   "kind": "crystal",
+   "color": "#9a52ff",
+   "intensity": 6.682106708513722,
+   "distance": 10.0
+  },
+  {
+   "p": [
+    53.667,
+    -12.819,
+    -86.817
+   ],
+   "kind": "crystal",
+   "color": "#9a52ff",
+   "intensity": 10.744831448553311,
+   "distance": 10.0
+  },
+  {
+   "p": [
+    48.282,
+    -11.917,
+    -82.412
+   ],
+   "kind": "crystal",
+   "color": "#9a52ff",
+   "intensity": 9.707222074224216,
+   "distance": 10.0
+  },
+  {
+   "p": [
+    48.931,
+    -12.4,
+    -77.653
+   ],
+   "kind": "crystal",
+   "color": "#9a52ff",
+   "intensity": 8.421192982988087,
+   "distance": 10.0
+  },
+  {
+   "p": [
+    53.714,
+    -9.401,
+    -76.83
+   ],
+   "kind": "crystal",
+   "color": "#9a52ff",
+   "intensity": 6.530492867521758,
+   "distance": 10.0
+  },
+  {
+   "p": [
+    56.928,
+    -12.523,
+    -77.718
+   ],
+   "kind": "crystal",
+   "color": "#9a52ff",
+   "intensity": 10.329156585470374,
+   "distance": 10.0
+  },
+  {
+   "p": [
+    58.009,
+    -13.724,
+    -67.215
+   ],
+   "kind": "crystal",
+   "color": "#9a52ff",
+   "intensity": 6.188943076261402,
+   "distance": 10.0
+  },
+  {
+   "p": [
+    51.558,
+    -11.71,
+    -47.991
+   ],
+   "kind": "crystal",
+   "color": "#9a52ff",
+   "intensity": 8.07582783479037,
+   "distance": 10.0
+  },
+  {
+   "p": [
+    49.515,
+    -13.945,
+    -64.969
+   ],
+   "kind": "fungus",
+   "color": "#4ff0c8",
+   "intensity": 0.9,
+   "distance": 4.0
+  },
+  {
+   "p": [
+    42.358,
+    -13.5,
+    -67.333
+   ],
+   "kind": "fungus",
+   "color": "#4ff0c8",
+   "intensity": 0.9,
+   "distance": 4.0
+  },
+  {
+   "p": [
+    42.358,
+    -13.5,
+    -60.667
+   ],
+   "kind": "fungus",
+   "color": "#4ff0c8",
+   "intensity": 0.9,
+   "distance": 4.0
+  },
+  {
+   "p": [
+    49.515,
+    -14.533,
+    -63.031
+   ],
+   "kind": "fungus",
+   "color": "#4ff0c8",
+   "intensity": 0.9,
+   "distance": 4.0
+  },
+  {
+   "p": [
+    48.6,
+    -13.092,
+    -58.6
+   ],
+   "kind": "fungus",
+   "color": "#4ff0c8",
+   "intensity": 0.9,
+   "distance": 4.0
+  },
+  {
+   "p": [
+    55.6,
+    -13.487,
+    -61.8
+   ],
+   "kind": "fungus",
+   "color": "#4ff0c8",
+   "intensity": 0.9,
+   "distance": 4.0
+  },
+  {
+   "p": [
+    57.0,
+    -13.491,
+    -77.4
+   ],
+   "kind": "fungus",
+   "color": "#4ff0c8",
+   "intensity": 0.9,
+   "distance": 4.0
+  },
+  {
+   "p": [
+    49.4,
+    -13.473,
+    -82.0
+   ],
+   "kind": "fungus",
+   "color": "#4ff0c8",
+   "intensity": 0.9,
+   "distance": 4.0
+  },
+  {
+   "p": [
+    45.043,
+    -11.76,
+    -71.363
+   ],
+   "kind": "lantern",
+   "color": "#ffaa5a",
+   "intensity": 7.25,
+   "distance": 12.5
+  },
+  {
+   "p": [
+    46.783,
+    -12.06,
+    -57.588
+   ],
+   "kind": "lantern",
+   "color": "#ffaa5a",
+   "intensity": 7.25,
+   "distance": 12.5
+  },
+  {
+   "p": [
+    58.539,
+    -12.26,
+    -66.62
+   ],
+   "kind": "lantern",
+   "color": "#ffaa5a",
+   "intensity": 7.25,
+   "distance": 12.5
+  },
+  {
+   "p": [
+    46.965,
+    -12.36,
+    -78.003
+   ],
+   "kind": "lantern",
+   "color": "#ffaa5a",
+   "intensity": 7.25,
+   "distance": 12.5
+  },
+  {
+   "p": [
+    59.065,
+    -12.36,
+    -77.993
+   ],
+   "kind": "lantern",
+   "color": "#ffaa5a",
+   "intensity": 7.25,
+   "distance": 12.5
+  },
+  {
+   "p": [
+    54.05,
+    -14.372,
+    -88.102
+   ],
+   "kind": "lantern",
+   "color": "#ffaa5a",
+   "intensity": 5.075,
+   "distance": 12.5
+  },
+  {
+   "p": [
+    -6.21,
+    -1.02,
+    -24.957
+   ],
+   "kind": "lantern",
+   "color": "#ffaa5a",
+   "intensity": 6.5249999999999995,
+   "distance": 12.5
+  },
+  {
+   "p": [
+    -6.4,
+    1.08,
+    -25.6
+   ],
+   "kind": "fill",
+   "color": "#b0804c",
+   "intensity": 2.5,
+   "distance": 8.0
+  },
+  {
+   "p": [
+    21.05,
+    -1.9,
+    -75.185
+   ],
+   "kind": "ember",
+   "color": "#ff5a18",
+   "intensity": 16.0,
+   "distance": 12.0
+  },
+  {
+   "p": [
+    20.742,
+    -2.1,
+    -74.34
+   ],
+   "kind": "ember",
+   "color": "#ff3a10",
+   "intensity": 6.0,
+   "distance": 5.0
+  },
+  {
+   "p": [
+    27.0,
+    -2.1,
+    -72.6
+   ],
+   "kind": "ember",
+   "color": "#ff5a1e",
+   "intensity": 7.5,
+   "distance": 7.0
+  },
+  {
+   "p": [
+    23.0,
+    1.0,
+    -70.0
+   ],
+   "kind": "fill",
+   "color": "#c06030",
+   "intensity": 10.0,
+   "distance": 15.0
+  },
+  {
+   "p": [
+    20.4,
+    -1.0,
+    -71.6
+   ],
+   "kind": "ember",
+   "color": "#ff6a28",
+   "intensity": 8.0,
+   "distance": 9.0
+  },
+  {
+   "p": [
+    34.202,
+    -13.668,
+    -68.863
+   ],
+   "kind": "fungus",
+   "color": "#4ff0c8",
+   "intensity": 0.9,
+   "distance": 4.0
+  },
+  {
+   "p": [
+    13.784,
+    -13.794,
+    -79.931
+   ],
+   "kind": "fungus",
+   "color": "#4ff0c8",
+   "intensity": 0.9,
+   "distance": 4.0
+  },
+  {
+   "p": [
+    28.129,
+    -13.599,
+    -83.418
+   ],
+   "kind": "fungus",
+   "color": "#4ff0c8",
+   "intensity": 0.9,
+   "distance": 4.0
+  },
+  {
+   "p": [
+    15.5,
+    -13.095,
+    -75.5
+   ],
+   "kind": "slime",
+   "color": "#3a8cff",
+   "intensity": 1.4,
+   "distance": 4.5
+  },
+  {
+   "p": [
+    12.9,
+    -13.46,
+    -76.8
+   ],
+   "kind": "slime",
+   "color": "#3a8cff",
+   "intensity": 1.1,
+   "distance": 4.5
+  },
+  {
+   "p": [
+    17.7,
+    -13.63,
+    -73.8
+   ],
+   "kind": "slime",
+   "color": "#56ff4a",
+   "intensity": 0.9500000000000001,
+   "distance": 4.5
+  },
+  {
+   "p": [
+    14.1,
+    -13.755,
+    -72.8
+   ],
+   "kind": "slime",
+   "color": "#3a8cff",
+   "intensity": 0.8500000000000001,
+   "distance": 4.5
+  },
+  {
+   "p": [
+    18.9,
+    -13.327,
+    -76.6
+   ],
+   "kind": "slime",
+   "color": "#56ff4a",
+   "intensity": 1.2000000000000002,
+   "distance": 4.5
+  },
+  {
+   "p": [
+    11.9,
+    -13.872,
+    -74.4
+   ],
+   "kind": "slime",
+   "color": "#56ff4a",
+   "intensity": 0.75,
+   "distance": 4.5
+  },
+  {
+   "p": [
+    16.7,
+    -13.935,
+    -77.8
+   ],
+   "kind": "slime",
+   "color": "#3a8cff",
+   "intensity": 0.7,
+   "distance": 4.5
+  },
+  {
+   "p": [
+    22.0,
+    -13.464,
+    -66.0
+   ],
+   "kind": "slime",
+   "color": "#56ff4a",
+   "intensity": 1.0,
+   "distance": 4.5
+  },
+  {
+   "p": [
+    28.8,
+    -13.656,
+    -72.6
+   ],
+   "kind": "slime",
+   "color": "#56ff4a",
+   "intensity": 0.8500000000000001,
+   "distance": 4.5
+  },
+  {
+   "p": [
+    19.5,
+    -13.589,
+    -69.0
+   ],
+   "kind": "slime",
+   "color": "#3a8cff",
+   "intensity": 0.9,
+   "distance": 4.5
+  },
+  {
+   "p": [
+    31.0,
+    -13.762,
+    -67.4
+   ],
+   "kind": "slime",
+   "color": "#3a8cff",
+   "intensity": 0.75,
+   "distance": 4.5
+  },
+  {
+   "p": [
+    24.5,
+    -10.7,
+    -70.0
+   ],
+   "kind": "fill",
+   "color": "#3a8a70",
+   "intensity": 4.5,
+   "distance": 14.0
+  },
+  {
+   "p": [
+    15.5,
+    -11.3,
+    -75.0
+   ],
+   "kind": "fill",
+   "color": "#2a5ad0",
+   "intensity": 4.0,
+   "distance": 12.0
+  },
+  {
+   "p": [
+    27.861,
+    -13.022,
+    -79.699
+   ],
+   "kind": "fungus",
+   "color": "#3ff0c8",
+   "intensity": 0.85,
+   "distance": 5.0
+  },
+  {
+   "p": [
+    26.501,
+    -13.513,
+    -81.991
+   ],
+   "kind": "fungus",
+   "color": "#b060ff",
+   "intensity": 0.85,
+   "distance": 5.0
+  },
+  {
+   "p": [
+    25.724,
+    -12.941,
+    -81.43
+   ],
+   "kind": "fungus",
+   "color": "#3ff0c8",
+   "intensity": 0.85,
+   "distance": 5.0
+  },
+  {
+   "p": [
+    24.193,
+    -13.381,
+    -81.409
+   ],
+   "kind": "fungus",
+   "color": "#3ff0c8",
+   "intensity": 0.85,
+   "distance": 5.0
+  },
+  {
+   "p": [
+    22.399,
+    -13.298,
+    -81.248
+   ],
+   "kind": "fungus",
+   "color": "#3ff0c8",
+   "intensity": 0.85,
+   "distance": 5.0
+  },
+  {
+   "p": [
+    22.308,
+    -13.486,
+    -78.636
+   ],
+   "kind": "fungus",
+   "color": "#b060ff",
+   "intensity": 0.85,
+   "distance": 5.0
+  },
+  {
+   "p": [
+    23.97,
+    -13.625,
+    -77.338
+   ],
+   "kind": "fungus",
+   "color": "#3ff0c8",
+   "intensity": 0.85,
+   "distance": 5.0
+  },
+  {
+   "p": [
+    25.8,
+    -13.382,
+    -77.778
+   ],
+   "kind": "fungus",
+   "color": "#3ff0c8",
+   "intensity": 0.85,
+   "distance": 5.0
+  },
+  {
+   "p": [
+    27.119,
+    -13.287,
+    -77.822
+   ],
+   "kind": "fungus",
+   "color": "#3ff0c8",
+   "intensity": 0.85,
+   "distance": 5.0
+  },
+  {
+   "p": [
+    25.5,
+    -11.5,
+    -80.0
+   ],
+   "kind": "fill",
+   "color": "#3ac0b0",
+   "intensity": 4.0,
+   "distance": 10.0
+  },
+  {
+   "p": [
+    53.0,
+    -9.2,
+    -129.0
+   ],
+   "kind": "heart",
+   "color": "#ff1a2a",
+   "intensity": 40.0,
+   "distance": 24.0
+  },
+  {
+   "p": [
+    53.0,
+    -10.2,
+    -123.56
+   ],
+   "kind": "heart",
+   "color": "#ff2030",
+   "intensity": 12.0,
+   "distance": 12.0
+  },
+  {
+   "p": [
+    53.0,
+    -10.0,
+    -125.0
+   ],
+   "kind": "fill",
+   "color": "#a01828",
+   "intensity": 8.0,
+   "distance": 26.0
+  },
+  {
+   "p": [
+    53.0,
+    -12.0,
+    -135.0
+   ],
+   "kind": "fill",
+   "color": "#701020",
+   "intensity": 4.0,
+   "distance": 16.0
+  },
+  {
+   "p": [
+    -1.85,
+    2.41,
+    1.17
+   ],
+   "kind": "lantern",
+   "color": "#ffaa5a",
+   "intensity": 10.15,
+   "distance": 12.5
+  },
+  {
+   "p": [
+    1.85,
+    2.41,
+    1.17
+   ],
+   "kind": "lantern",
+   "color": "#ffaa5a",
+   "intensity": 10.15,
+   "distance": 12.5
+  },
+  {
+   "p": [
+    8.5,
+    1.579,
+    9.8
+   ],
+   "kind": "lantern",
+   "color": "#ffaa5a",
+   "intensity": 7.25,
+   "distance": 12.5
+  },
+  {
+   "p": [
+    2.15,
+    1.845,
+    11.0
+   ],
+   "kind": "lantern",
+   "color": "#ffaa5a",
+   "intensity": 8.7,
+   "distance": 12.5
+  },
+  {
+   "p": [
+    58.0,
+    -10.84,
+    -106.6
+   ],
+   "kind": "rune",
+   "color": "#ff2a3c",
+   "intensity": 14.0,
+   "distance": 14.0
+  },
+  {
+   "p": [
+    48.1,
+    -12.14,
+    -105.0
+   ],
+   "kind": "ember",
+   "color": "#ff3b2e",
+   "intensity": 7.0,
+   "distance": 9.0
+  },
+  {
+   "p": [
+    57.9,
+    -12.14,
+    -105.0
+   ],
+   "kind": "ember",
+   "color": "#ff3b2e",
+   "intensity": 7.0,
+   "distance": 9.0
+  },
+  {
+   "p": [
+    50.8,
+    -14.55,
+    -101.9
+   ],
+   "kind": "lantern",
+   "color": "#ffaa5a",
+   "intensity": 1.74,
+   "distance": 12.5
+  },
+  {
+   "p": [
+    -1.0,
+    -2.24,
+    -77.7
+   ],
+   "kind": "candle",
+   "color": "#ffad55",
+   "intensity": 1.6,
+   "distance": 6.0
+  },
+  {
+   "p": [
+    -1.0,
+    -2.24,
+    -84.7
+   ],
+   "kind": "candle",
+   "color": "#ffad55",
+   "intensity": 1.6,
+   "distance": 6.0
+  },
+  {
+   "p": [
+    8.4,
+    -2.24,
+    -77.7
+   ],
+   "kind": "candle",
+   "color": "#ffad55",
+   "intensity": 1.6,
+   "distance": 6.0
+  },
+  {
+   "p": [
+    8.4,
+    -2.24,
+    -84.7
+   ],
+   "kind": "candle",
+   "color": "#ffad55",
+   "intensity": 1.6,
+   "distance": 6.0
+  },
+  {
+   "p": [
+    3.5,
+    -1.4,
+    -89.1
+   ],
+   "kind": "arcane",
+   "color": "#3fffd8",
+   "intensity": 4.0,
+   "distance": 8.0
+  },
+  {
+   "p": [
+    1.3,
+    -1.54,
+    -88.6
+   ],
+   "kind": "candle",
+   "color": "#ffad55",
+   "intensity": 1.6,
+   "distance": 6.0
+  },
+  {
+   "p": [
+    5.7,
+    -1.54,
+    -88.6
+   ],
+   "kind": "candle",
+   "color": "#ffad55",
+   "intensity": 1.6,
+   "distance": 6.0
+  },
+  {
+   "p": [
+    3.5,
+    2.4,
+    -80.5
+   ],
+   "kind": "candle",
+   "color": "#ffb060",
+   "intensity": 6.0,
+   "distance": 11.0
+  },
+  {
+   "p": [
+    3.5,
+    2.4,
+    -88.0
+   ],
+   "kind": "candle",
+   "color": "#ffb060",
+   "intensity": 6.0,
+   "distance": 11.0
+  },
+  {
+   "p": [
+    10.6,
+    -1.6,
+    -90.6
+   ],
+   "kind": "fill",
+   "color": "#4a8a88",
+   "intensity": 2.0,
+   "distance": 8.0
+  },
+  {
+   "p": [
+    3.5,
+    0.4,
+    -82.0
+   ],
+   "kind": "fill",
+   "color": "#c8905a",
+   "intensity": 5.0,
+   "distance": 16.0
+  },
+  {
+   "p": [
+    -26.35,
+    -3.2,
+    -86.9
+   ],
+   "kind": "candle",
+   "color": "#ffad55",
+   "intensity": 1.6,
+   "distance": 6.0
+  },
+  {
+   "p": [
+    -19.15,
+    -3.2,
+    -86.9
+   ],
+   "kind": "candle",
+   "color": "#ffad55",
+   "intensity": 1.6,
+   "distance": 6.0
+  },
+  {
+   "p": [
+    -27.0,
+    -3.2,
+    -74.4
+   ],
+   "kind": "candle",
+   "color": "#ffad55",
+   "intensity": 1.6,
+   "distance": 6.0
+  },
+  {
+   "p": [
+    -17.5,
+    -3.2,
+    -86.4
+   ],
+   "kind": "candle",
+   "color": "#ffad55",
+   "intensity": 1.6,
+   "distance": 6.0
+  },
+  {
+   "p": [
+    -27.0,
+    -3.2,
+    -86.0
+   ],
+   "kind": "candle",
+   "color": "#ffad55",
+   "intensity": 1.6,
+   "distance": 6.0
+  },
+  {
+   "p": [
+    -18.0,
+    -3.2,
+    -74.6
+   ],
+   "kind": "candle",
+   "color": "#ffad55",
+   "intensity": 1.6,
+   "distance": 6.0
+  },
+  {
+   "p": [
+    -22.75,
+    0.1,
+    -80.0
+   ],
+   "kind": "fill",
+   "color": "#8a7a68",
+   "intensity": 3.5,
+   "distance": 14.0
+  },
+  {
+   "p": [
+    -22.75,
+    -2.1,
+    -91.0
+   ],
+   "kind": "holy",
+   "color": "#8fd8ff",
+   "intensity": 6.0,
+   "distance": 10.0
+  },
+  {
+   "p": [
+    -25.3,
+    -3.2,
+    -93.8
+   ],
+   "kind": "candle",
+   "color": "#ffad55",
+   "intensity": 1.6,
+   "distance": 6.0
+  },
+  {
+   "p": [
+    -20.2,
+    -3.2,
+    -93.8
+   ],
+   "kind": "candle",
+   "color": "#ffad55",
+   "intensity": 1.6,
+   "distance": 6.0
+  },
+  {
+   "p": [
+    -25.4,
+    -3.2,
+    -89.0
+   ],
+   "kind": "candle",
+   "color": "#ffad55",
+   "intensity": 1.6,
+   "distance": 6.0
+  },
+  {
+   "p": [
+    -20.1,
+    -3.2,
+    -89.0
+   ],
+   "kind": "candle",
+   "color": "#ffad55",
+   "intensity": 1.6,
+   "distance": 6.0
+  },
+  {
+   "p": [
+    79.7,
+    -11.6,
+    -78.0
+   ],
+   "kind": "gold",
+   "color": "#ffcf6a",
+   "intensity": 1.6,
+   "distance": 4.0
+  },
+  {
+   "p": [
+    79.7,
+    -11.6,
+    -79.5
+   ],
+   "kind": "gold",
+   "color": "#ffcf6a",
+   "intensity": 1.6,
+   "distance": 4.0
+  },
+  {
+   "p": [
+    79.7,
+    -11.3,
+    -81.0
+   ],
+   "kind": "gold",
+   "color": "#ffcf6a",
+   "intensity": 1.6,
+   "distance": 4.0
+  },
+  {
+   "p": [
+    79.7,
+    -11.6,
+    -82.5
+   ],
+   "kind": "gold",
+   "color": "#ffcf6a",
+   "intensity": 1.6,
+   "distance": 4.0
+  },
+  {
+   "p": [
+    79.7,
+    -11.6,
+    -84.0
+   ],
+   "kind": "gold",
+   "color": "#ffcf6a",
+   "intensity": 1.6,
+   "distance": 4.0
+  },
+  {
+   "p": [
+    69.6,
+    -11.66,
+    -73.73
+   ],
+   "kind": "lantern",
+   "color": "#ffaa5a",
+   "intensity": 4.64,
+   "distance": 12.5
+  },
+  {
+   "p": [
+    69.6,
+    -11.66,
+    -88.27
+   ],
+   "kind": "lantern",
+   "color": "#ffaa5a",
+   "intensity": 4.64,
+   "distance": 12.5
+  },
+  {
+   "p": [
+    73.6,
+    -11.66,
+    -73.73
+   ],
+   "kind": "lantern",
+   "color": "#ffaa5a",
+   "intensity": 4.64,
+   "distance": 12.5
+  },
+  {
+   "p": [
+    73.6,
+    -11.66,
+    -88.27
+   ],
+   "kind": "lantern",
+   "color": "#ffaa5a",
+   "intensity": 4.64,
+   "distance": 12.5
+  },
+  {
+   "p": [
+    77.6,
+    -11.66,
+    -73.73
+   ],
+   "kind": "lantern",
+   "color": "#ffaa5a",
+   "intensity": 4.64,
+   "distance": 12.5
+  },
+  {
+   "p": [
+    77.6,
+    -11.66,
+    -88.27
+   ],
+   "kind": "lantern",
+   "color": "#ffaa5a",
+   "intensity": 4.64,
+   "distance": 12.5
+  },
+  {
+   "p": [
+    74.3,
+    -10.4,
+    -81.0
+   ],
+   "kind": "fill",
+   "color": "#d8a050",
+   "intensity": 6.0,
+   "distance": 16.0
+  },
+  {
+   "p": [
+    -28.5,
+    -1.6,
+    -36.5
+   ],
+   "kind": "arcane",
+   "color": "#a060ff",
+   "intensity": 9.0,
+   "distance": 12.0
+  },
+  {
+   "p": [
+    -26.3,
+    -1.9,
+    -34.3
+   ],
+   "kind": "arcane",
+   "color": "#3fffd8",
+   "intensity": 4.0,
+   "distance": 8.0
+  },
+  {
+   "p": [
+    -31.064,
+    -3.0,
+    -40.941
+   ],
+   "kind": "candle",
+   "color": "#ffad55",
+   "intensity": 1.6,
+   "distance": 6.0
+  },
+  {
+   "p": [
+    -25.936,
+    -3.0,
+    -32.059
+   ],
+   "kind": "candle",
+   "color": "#ffad55",
+   "intensity": 1.6,
+   "distance": 6.0
+  }
+ ],
+ "waters": [
+  {
+   "rect": [
+    -5.9,
+    -92.9,
+    12.9,
+    -72.1
+   ],
+   "level": -3.36,
+   "color": "#06110f",
+   "glow": null
+  },
+  {
+   "c": [
+    24.0,
+    -69.0
+   ],
+   "rx": 6.2,
+   "ry": 4.6,
+   "level": -14.02,
+   "color": "#071810",
+   "glow": null
+  },
+  {
+   "c": [
+    30.0,
+    -73.6
+   ],
+   "rx": 2.6,
+   "ry": 2.0,
+   "level": -14.02,
+   "color": "#071810",
+   "glow": null
+  },
+  {
+   "c": [
+    14.6,
+    -75.6
+   ],
+   "rx": 4.4,
+   "ry": 3.6,
+   "level": -14.12,
+   "color": "#06121e",
+   "glow": "#0f3a90"
+  },
+  {
+   "c": [
+    53.0,
+    -129.0
+   ],
+   "rx": 5.6,
+   "ry": 4.6,
+   "level": -15.86,
+   "color": "#1a0204",
+   "glow": "#ff1830"
+  }
+ ],
+ "lake": {
+  "c": [
+   45.0,
+   -64.0
+  ],
+  "rx": 4.4,
+  "ry": 3.8,
+  "level": -14.35
+ },
+ "npcs": [
+  {
+   "id": "tendero",
+   "kicker": "MINERO VENDEDOR",
+   "name": "Tendero de la Bocamina",
+   "p": [
+    7.875,
+    -0.141,
+    8.875
+   ],
+   "face": [
+    0.0,
+    1.0
+   ]
+  }
+ ]
+}

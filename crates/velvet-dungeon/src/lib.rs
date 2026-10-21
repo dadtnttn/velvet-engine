@@ -3,12 +3,14 @@
 //! regions -> contextual gameplay -> physical validation. No GPU/IO in generate.
 pub mod controller;
 pub mod diagnostics;
+pub mod floors;
 pub mod gameplay;
 mod generator;
 pub mod navigation;
 pub mod rng;
 pub mod validation;
 
+pub use floors::{FloorGrid, FloorSpan};
 pub use generator::generate;
 use serde::{Deserialize, Serialize};
 use velvet_math::Vec3;
@@ -441,6 +443,10 @@ pub struct Blueprint {
     pub entrance: usize,
     pub exit: usize,
     pub stats: Stats,
+    /// A hand-made level's floors (see [`floors`]): when present they alone say where one can stand
+    /// and which room a spot belongs to; rooms and connections only name and group the places.
+    #[serde(skip)]
+    pub floors: Option<std::sync::Arc<FloorGrid>>,
 }
 impl Blueprint {
     pub fn structural_hash(&self) -> u64 {
@@ -472,6 +478,11 @@ impl Blueprint {
         })
     }
     pub fn room_at(&self, p: Vec3) -> Option<usize> {
+        if let Some(grid) = &self.floors {
+            return grid
+                .room_at(p.x, p.y, p.z)
+                .filter(|&r| r < self.rooms.len());
+        }
         self.rooms
             .iter()
             .find(|r| {
@@ -505,6 +516,9 @@ impl Blueprint {
     /// Floor under feet with body clearance. Highest compatible layer wins,
     /// not the highest XZ floor: stacked rooms must not teleport the player.
     pub fn surface(&self, x: f32, z: f32, feet: f32, body: f32) -> Option<f32> {
+        if let Some(grid) = &self.floors {
+            return grid.surface(x, z, feet, body);
+        }
         let mut best: Option<f32> = None;
         let mut consider = |floor: f32, ceiling: f32| {
             if floor <= feet + STEP_HEIGHT + 0.015
@@ -531,7 +545,16 @@ impl Blueprint {
         }
         best
     }
+    /// The highest ledge one walks up here without jumping.
+    pub fn step_height(&self) -> f32 {
+        self.floors.as_ref().map_or(STEP_HEIGHT, |grid| grid.step)
+    }
     pub fn capsule_floor(&self, p: Vec3, radius: f32) -> Option<f32> {
+        // Over hand-made floors the walls already stand back by the bake's margin.
+        let radius = match &self.floors {
+            Some(grid) => (radius - grid.margin).max(0.06),
+            None => radius,
+        };
         for o in &self.obstacles {
             let dx = (p.x - o.center.x).abs() - o.half[0];
             let dz = (p.z - o.center.z).abs() - o.half[1];

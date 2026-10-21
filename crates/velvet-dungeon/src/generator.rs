@@ -611,6 +611,7 @@ pub fn generate(
         entrance: 0,
         exit: n - 1,
         stats,
+        floors: None,
     };
     blueprint.spawns = gameplay::place(&blueprint, catalog, difficulty);
     let issues = validation::validate(&blueprint);

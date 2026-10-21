@@ -8,6 +8,33 @@
       "open_angle": -1.9
     }
   },
+  "cofre_comun": {
+    "path": "cofres/cofre_comun.glb",
+    "hinge": {
+      "part": 1,
+      "pivot": [0.0, 0.435, -0.29],
+      "axis": "x",
+      "open_angle": -1.8
+    }
+  },
+  "cofre_rico": {
+    "path": "cofres/cofre_rico.glb",
+    "hinge": {
+      "part": 1,
+      "pivot": [0.0, 0.435, -0.29],
+      "axis": "x",
+      "open_angle": -1.8
+    }
+  },
+  "cofre_tesoro": {
+    "path": "cofres/cofre_tesoro.glb",
+    "hinge": {
+      "part": 1,
+      "pivot": [0.0, 0.435, -0.29],
+      "axis": "x",
+      "open_angle": -1.8
+    }
+  },
   "torch": "kaykit_dungeon/torch_mounted.gltf",
   "coin": "kaykit_dungeon/coin.gltf",
   "coin_stack_small": "kaykit_dungeon/coin_stack_small.gltf",

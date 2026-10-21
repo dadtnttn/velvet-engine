@@ -181,7 +181,17 @@ pub(super) fn starting_point(
         .unwrap_or_default()
         .as_nanos()
         .hash(&mut seed_hasher);
-    let mut dungeon = dungeon::Dungeon::generate(seed.unwrap_or_else(|| seed_hasher.finish()));
+    // The mine is the hand-made one (Mina 2.0) when its data is there; a seed asked for, or a build
+    // without it, gets a generated cave.
+    let mut dungeon = match seed {
+        None if dungeon::authored::available() => {
+            dungeon::Dungeon::mine().unwrap_or_else(|error| {
+                eprintln!("[mina] {error}: a generated cave instead");
+                dungeon::Dungeon::generate(seed_hasher.finish())
+            })
+        }
+        _ => dungeon::Dungeon::generate(seed.unwrap_or_else(|| seed_hasher.finish())),
+    };
     let mut dungeon_resume = false;
     let (spawn_x, spawn_z) = exploration3d_state::default_spawn(spawn_id);
     let mut player = Vec3::new(spawn_x, 0.0, spawn_z);
@@ -225,7 +235,15 @@ pub(super) fn starting_point(
             shop_stock = saved.shop_stock.clone();
         }
         if saved.world == world_id && saved.spawn == spawn_id {
-            if let Some(snapshot) = &saved.dungeon {
+            // A generated cave saved before the hand-made mine came gives way to it, unless she
+            // was saved down there.
+            let outdated = saved.dungeon.as_ref().is_some_and(|snapshot| {
+                snapshot.seed != dungeon::authored::MINE_SEED
+                    && !saved.dungeon_active
+                    && seed.is_none()
+                    && dungeon::authored::available()
+            });
+            if let Some(snapshot) = saved.dungeon.as_ref().filter(|_| !outdated) {
                 match dungeon::Dungeon::restore(snapshot) {
                     Ok(restored) => {
                         dungeon = restored;

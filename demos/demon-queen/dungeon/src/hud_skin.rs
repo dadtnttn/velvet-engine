@@ -339,8 +339,21 @@ impl Hud {
         let biome = &run.catalog.biomes[room.biome];
         glass::pane(v, [36.0, 36.0, 600.0, 116.0], 26.0, tone, 1.0);
         self.compass(v, [100.0, 94.0], run.controller.yaw, tone);
-        self.kicker(v, "LAS CAVERNAS DEL SELLO", 154.0, 30.0, tone.accent);
-        let room_label = if run
+        let mine = run.authored.as_ref();
+        self.kicker(
+            v,
+            if mine.is_some() {
+                "LA MINA"
+            } else {
+                "LAS CAVERNAS DEL SELLO"
+            },
+            154.0,
+            30.0,
+            tone.accent,
+        );
+        let room_label = if let Some(name) = mine.and_then(|m| m.names.get(room.id)) {
+            name.as_str()
+        } else if run
             .map
             .spawns
             .iter()
@@ -601,7 +614,7 @@ impl Hud {
     }
 
     /// Bottom right: the keys, kept quiet.
-    fn controls_card(&self, tone: &Tone, v: &mut Vec<Vertex>) {
+    fn controls_card(&self, run: &Dungeon, tone: &Tone, v: &mut Vec<Vertex>) {
         let r = [1236.0, 916.0, 648.0, 128.0];
         glass::pane(v, r, 24.0, tone, 0.8);
         let rows: [&[(&[&str], &str)]; 3] = [
@@ -622,6 +635,14 @@ impl Hud {
                 (&["G"], "Volver"),
             ],
         ];
+        // A hand-made mine has no seed to change.
+        let seedless: [(&[&str], &str); 3] =
+            [(&["M"], "Mapa"), (&["F3"], "Atlas"), (&["G"], "Volver")];
+        let rows: [&[(&[&str], &str)]; 3] = if run.authored.is_some() {
+            [rows[0], rows[1], &seedless]
+        } else {
+            rows
+        };
         for (i, row) in rows.into_iter().enumerate() {
             let y = 928.0 + i as f32 * 36.0;
             let mut x = 1262.0;
@@ -721,7 +742,7 @@ impl Hud {
         self.location_plate(run, &tone, v);
         self.objective_card(run, &tone, v);
         self.vitality_card(run, &tone, v);
-        self.controls_card(&tone, v);
+        self.controls_card(run, &tone, v);
         // Small quiet aiming diamond leaves most of the scene unobstructed.
         let hit_marker = run.sword_hit_flash > 0.0;
         diamond(

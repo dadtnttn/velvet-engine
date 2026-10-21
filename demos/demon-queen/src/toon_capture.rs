@@ -7026,6 +7026,82 @@ pub(super) fn capture(out: &Path) -> Result<()> {
         app.baths = None;
         return Ok(());
     }
+    if std::env::args().any(|a| a == "--mina2") {
+        // La Mina 2.0 in the game: the prototype's views (feet, yaw and pitch in degrees, three.js'
+        // frame), the Queen standing at each.
+        app.castle = None;
+        app.nature_mode = true;
+        app.village_entered = false;
+        app.inventory.insert("espada_de_madera".into(), 1);
+        app.dungeon = dungeon::Dungeon::mine().map_err(anyhow::Error::msg)?;
+        app.enter_dungeon_unchecked();
+        let views: &[(&str, [f32; 3], f32, f32)] = &[
+            ("fuera", [0.0, 0.0, 15.0], 0.0, 6.0),
+            ("boca", [0.6, 0.0, 3.5], 0.0, 2.0),
+            ("norte", [0.4, -0.4, -9.0], 0.0, -2.0),
+            ("carga", [-1.5, -3.0, -44.5], -8.0, 6.0),
+            ("biblioteca", [3.5, -3.6, -74.2], 0.0, 6.0),
+            ("cripta", [-18.4, -3.7, -73.8], 30.0, 4.0),
+            ("forja", [27.4, -3.0, -64.0], 35.0, 4.0),
+            ("gruta", [52.6, -13.5, -52.5], 0.0, 4.0),
+            ("puente", [52.0, -14.0, -67.5], 0.0, -4.0),
+            ("tesoro", [68.8, -14.0, -81.0], -90.0, 6.0),
+            ("sello", [53.0, -14.4, -93.5], 0.0, 10.0),
+            ("corazon", [53.2, -16.0, -118.8], 0.0, 12.0),
+        ];
+        let only = std::env::var("VELVET_MINA_VIEW").ok();
+        for (name, p, yaw, pitch) in views {
+            if only
+                .as_deref()
+                .is_some_and(|o| !o.split(',').any(|v| v == *name))
+            {
+                continue;
+            }
+            let at = Vec3::new(p[0], p[1] + 0.3, p[2]);
+            let floor = app.dungeon.map.capsule_floor(at, 0.28).unwrap_or(p[1]);
+            app.dungeon.controller.position = Vec3::new(p[0], floor, p[2]);
+            app.dungeon.controller.yaw = yaw.to_radians();
+            app.dungeon.controller.pitch = pitch.to_radians();
+            app.dungeon.notice_until = 0.0;
+            app.player = app.dungeon.controller.position;
+            save(&mut app, out, &format!("mina-{name}"))?;
+        }
+        // The chests 2.0: each kind, the treasure's open with its loot showing.
+        for (tier, open) in [("comun", false), ("rico", false), ("tesoro", true)] {
+            let Some(index) = app.dungeon.actors.iter().position(|a| {
+                let s = &app.dungeon.map.spawns[a.spawn];
+                s.kind == velvet_dungeon::gameplay::SpawnKind::Chest && s.definition == tier
+            }) else {
+                continue;
+            };
+            let chest = app.dungeon.actors[index].position;
+            let face = app
+                .dungeon
+                .authored
+                .as_ref()
+                .and_then(|m| m.face(app.dungeon.actors[index].spawn))
+                .unwrap_or(Vec3::Z);
+            if open {
+                app.dungeon.actors[index].chest_open_progress = 1.0;
+            }
+            let eye = chest + face * 2.1;
+            let floor = app
+                .dungeon
+                .map
+                .capsule_floor(eye + Vec3::Y * 0.3, 0.28)
+                .unwrap_or(chest.y);
+            app.dungeon.controller.position = Vec3::new(eye.x, floor, eye.z);
+            app.dungeon.controller.yaw = (face.x).atan2(face.z);
+            app.dungeon.controller.pitch = -0.32;
+            app.player = app.dungeon.controller.position;
+            save(&mut app, out, &format!("mina-cofre-{tier}"))?;
+        }
+        app.dungeon.map_open = true;
+        save(&mut app, out, "mina-mapa")?;
+        app.dungeon.map_open = false;
+        app.leave_dungeon();
+        return Ok(());
+    }
     if std::env::args().any(|a| a == "--mine-hud") {
         // The mine's own screen: the play chrome at the mouth (its F prompt), a notice with low
         // health and full pockets, a champion's bar, the map and the seed dialog.

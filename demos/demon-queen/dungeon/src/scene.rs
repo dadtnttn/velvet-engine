@@ -789,6 +789,9 @@ pub struct Scene {
     heart_clock: f32,
     water_pool: Vec<MeshHandle>,
     finish: super::finish::Finish,
+    /// The hand-made mine's meshes, while its run is the one drawn, and its standing water.
+    mine_art: Option<super::mine_art::MineArt>,
+    mine_waters: Vec<super::water::WaterGpu>,
     pub stats: RenderStats,
     pub hud: Hud,
 }
@@ -922,6 +925,8 @@ impl Scene {
             heart_clock: 0.0,
             water_pool: Vec::new(),
             finish: super::finish::Finish::new(device, format),
+            mine_art: None,
+            mine_waters: Vec::new(),
             stats: Default::default(),
             hud: Hud::new(device, queue, format)?,
         })
@@ -1098,10 +1103,71 @@ impl Scene {
                 .extend(water.into_values().flatten().map(|gpu| gpu.handle));
             self.theme_water.clear();
             self.signature = Some(signature);
-            self.streamer = Some(super::streaming::Streamer::new(&run.map, &run.catalog));
+            // The hand-made mine has its art modelled: nothing to build room by room.
+            self.streamer = run
+                .authored
+                .is_none()
+                .then(|| super::streaming::Streamer::new(&run.map, &run.catalog));
+        }
+        let authored = run.authored.clone();
+        if let Some(mine) = &authored {
+            if self
+                .mine_art
+                .as_ref()
+                .is_none_or(|art| art.key != mine.rock)
+            {
+                self.mine_art = match super::mine_art::MineArt::load(mine, renderer, device, queue)
+                {
+                    Ok(art) => Some(art),
+                    Err(error) => {
+                        eprintln!("[mina] its art did not load: {error}");
+                        None
+                    }
+                };
+                let old = std::mem::take(&mut self.mine_waters);
+                self.water_pool.extend(old.into_iter().map(|w| w.handle));
+                for pool in &mine.pools {
+                    let surface = super::water::Surface {
+                        center: pool.center,
+                        outline: pool.outline.clone(),
+                        color: pool.color,
+                        reflect: pool.reflect,
+                        depth: 0.6,
+                        halo: 1.1,
+                        drip: None,
+                    };
+                    let mesh = super::water::mesh(&surface);
+                    let handle = match self.water_pool.pop() {
+                        Some(reuse) => renderer
+                            .replace_mesh(device, reuse, &mesh)
+                            .ok()
+                            .map(|_| reuse),
+                        None => renderer.upload_mesh(device, &mesh).ok(),
+                    };
+                    if let Some(handle) = handle {
+                        self.mine_waters.push(super::water::WaterGpu {
+                            handle,
+                            base: mesh.vertices,
+                            surface,
+                            triangles: mesh.indices.len() / 3,
+                        });
+                    }
+                }
+            }
         }
         // Reuse invalidated slots on reseed instead of appending GPU buffers.
-        let rooms = self.visible(run, camera);
+        // In the hand-made mine every room may hold what is seen (its foes, chests and runes);
+        // the generated rooms' art (chunks, water, motes, torches) is only for generated runs.
+        let rooms: BTreeSet<usize> = if authored.is_some() {
+            (0..run.map.rooms.len()).collect()
+        } else {
+            self.visible(run, camera)
+        };
+        let art_rooms: BTreeSet<usize> = if authored.is_some() {
+            BTreeSet::new()
+        } else {
+            rooms.clone()
+        };
         self.stats.visible_rooms = rooms.len();
         // Gallery GLTFs are optional and numerous: bring in one new model per
         // frame from the current portal set, instead of blocking scene start.
@@ -1118,7 +1184,7 @@ impl Scene {
         }
         self.assets
             .load_next_visible(needed_art, renderer, device, queue);
-        let mut keys = rooms.clone();
+        let mut keys = art_rooms.clone();
         for c in &run.map.connections {
             if rooms.contains(&c.a) || rooms.contains(&c.b) {
                 keys.insert(run.map.rooms.len() + c.id);
@@ -1173,7 +1239,7 @@ impl Scene {
                 }
             }
         }
-        for &id in &rooms {
+        for &id in &art_rooms {
             let themed = run.decor[id].theme.is_some();
             if !self.water_rooms.contains_key(&id)
                 && (!themed || self.theme_water.contains_key(&id))
@@ -1247,8 +1313,8 @@ impl Scene {
                 }
             }
         }
-        let mut ambient = Vec::with_capacity(rooms.len() * 30);
-        for &id in &rooms {
+        let mut ambient = Vec::with_capacity(art_rooms.len() * 30);
+        for &id in &art_rooms {
             let plan = self.ambient_cache.entry(id).or_insert_with(|| {
                 super::ambient::for_room(
                     &run.map,
@@ -1285,7 +1351,7 @@ impl Scene {
         let mut lights = Vec::new();
         let mut fixtures = Vec::new();
         let room_entries = room_entry_portals(&run.map);
-        for &id in &rooms {
+        for &id in &art_rooms {
             let r = &run.map.rooms[id];
             let mood = self.room_mood(run, id);
             for s in &r.sockets {
@@ -1470,6 +1536,43 @@ impl Scene {
                     {
                         self.stats.triangles += tris;
                     }
+                }
+            }
+        }
+        for water in &self.mine_waters {
+            if (water.surface.center - camera.position).length() > 60.0 {
+                continue;
+            }
+            let vertices = super::water::animated_vertices(
+                &water.base,
+                &water.surface,
+                run.elapsed,
+                camera.position,
+            );
+            if renderer
+                .update_mesh_vertices(queue, water.handle, &vertices)
+                .is_ok()
+            {
+                draws.push(MeshDraw3D {
+                    mesh: water.handle,
+                    transform: Mat4::IDENTITY,
+                    material: Material3D {
+                        base_color: [1.0, 1.0, 1.0, 0.92],
+                        texture: None,
+                        occlusion_window: [0.38, 0.0, 0.0, 0.0],
+                    },
+                    texture: None,
+                });
+                self.stats.triangles += water.triangles;
+            }
+        }
+        if let (Some(mine), Some(art)) = (&authored, &self.mine_art) {
+            let aspect = size.0 as f32 / size.1.max(1) as f32;
+            self.stats.triangles += art.draw(camera, aspect, &mut draws);
+            super::mine_art::lamps(mine, camera.position, run.elapsed, &mut lights);
+            if !(run.seal && run.crest) {
+                for gate in &mine.gates {
+                    self.draw_mine_gate(&mut draws, &mut lights, gate, run.elapsed);
                 }
             }
         }
@@ -1795,17 +1898,46 @@ impl Scene {
                 };
                 match s.kind {
                     Chest => {
-                        let chest_yaw = room_entries
-                            .get(s.room)
-                            .and_then(|entry| *entry)
-                            .map(|entry| chest_facing_yaw(a.position, entry))
+                        let chest_yaw = run
+                            .authored
+                            .as_ref()
+                            .and_then(|mine| mine.face(s.id))
+                            .map(|face| face.x.atan2(face.z))
+                            .or_else(|| {
+                                room_entries
+                                    .get(s.room)
+                                    .and_then(|entry| *entry)
+                                    .map(|entry| chest_facing_yaw(a.position, entry))
+                            })
                             .unwrap_or_else(|| {
                                 super::enemies::facing_yaw(run.controller.position - a.position)
                             });
                         let distance = (a.position - camera.position).length();
+                        // The hand-made mine's chests come in three kinds (the chest 2.0): a
+                        // plain one, a rich one and the treasure's, bigger.
+                        let tier = run.authored.as_ref().and(match s.definition.as_str() {
+                            "comun" => Some(("cofre_comun", 1.0)),
+                            "rico" => Some(("cofre_rico", 1.1)),
+                            "tesoro" => Some(("cofre_tesoro", 1.32)),
+                            _ => None,
+                        });
+                        let (model, tier_size) = tier.unwrap_or(("chest", 1.0));
+                        // Opening, it lets out a warm light that stays while the loot lies there.
+                        if tier.is_some() && a.chest_open_progress > 0.0 && !a.used {
+                            let warm = a.chest_open_progress.min(1.0);
+                            let shimmer = 0.9 + 0.1 * (run.elapsed * 5.0 + a.spawn as f32).sin();
+                            lights.push(PointLight3D::new(
+                                a.position + Vec3::Y * 0.55,
+                                [1.0, 0.72, 0.3],
+                                5.5 * warm * shimmer * tier_size,
+                                3.4,
+                            ));
+                        }
                         // The vault's chest is the room's centrepiece: larger,
                         // with its revealed loot scaled to match.
-                        let k = if run.decor[s.room].vault.is_some()
+                        let k = if tier.is_some() {
+                            tier_size
+                        } else if run.decor[s.room].vault.is_some()
                             || run.decor[s.room]
                                 .theme
                                 .as_ref()
@@ -1816,7 +1948,7 @@ impl Scene {
                             1.0
                         };
                         if let Some(tris) = self.assets.draw_hinged(
-                            "chest",
+                            model,
                             &mut draws,
                             a.position,
                             0.62 * k,
@@ -1923,7 +2055,17 @@ impl Scene {
                     }
                     _ => {
                         let props = self.landmarks[run.map.rooms[s.room].biome];
-                        let approach = run.map.rooms[s.room].sockets[0].position - a.position;
+                        let approach = run
+                            .authored
+                            .as_ref()
+                            .and_then(|mine| mine.face(s.id))
+                            .or_else(|| {
+                                run.map.rooms[s.room]
+                                    .sockets
+                                    .first()
+                                    .map(|socket| socket.position - a.position)
+                            })
+                            .unwrap_or(Vec3::Z);
                         let yaw = approach.x.atan2(approach.z);
                         let seal_index = (s.kind == Seal).then(|| {
                             s.definition
@@ -2246,6 +2388,21 @@ impl Scene {
         for (i, red) in [0.32f32, 0.02, 0.03].into_iter().enumerate() {
             mood.fog[i] += (red - mood.fog[i]) * rain * 0.6;
         }
+        // Out of the hand-made mine's mouth (it opens south, towards +z) it is night: a moonlit
+        // sky and fill instead of the cave's dark.
+        let outside = if authored.is_some() {
+            let t = ((camera.position.z + 2.0) / 6.0).clamp(0.0, 1.0);
+            t * t * (3.0 - 2.0 * t)
+        } else {
+            0.0
+        };
+        for (i, (sky, fill)) in [(0.045f32, 0.30f32), (0.05, 0.33), (0.11, 0.5)]
+            .into_iter()
+            .enumerate()
+        {
+            mood.fog[i] += (sky - mood.fog[i]) * outside;
+            mood.ambient[i] += (fill - mood.ambient[i]) * outside;
+        }
         environment.clear_color = [mood.fog[0], mood.fog[1], mood.fog[2], 1.0];
         environment.celestial = Celestial3D::default();
         // Darker, tinted indirect light: torches, braziers and glows carve
@@ -2253,9 +2410,9 @@ impl Scene {
         environment.lighting = Lighting3D {
             direction_to_light: Vec3::new(-0.4, 0.7, 0.25).normalize_or_zero(),
             key_color: [
-                mood.ambient[0] * 0.25,
-                mood.ambient[1] * 0.25,
-                mood.ambient[2] * 0.25,
+                mood.ambient[0] * (0.25 + 1.1 * outside),
+                mood.ambient[1] * (0.25 + 1.1 * outside),
+                mood.ambient[2] * (0.25 + 1.1 * outside),
             ],
             ambient_color: mood.ambient,
             bounce_color: [
@@ -2267,8 +2424,8 @@ impl Scene {
         };
         environment.atmosphere = Atmosphere3D {
             fog_color: mood.fog,
-            fog_start: 12.0,
-            fog_end: 62.0,
+            fog_start: 12.0 + 18.0 * outside,
+            fog_end: 62.0 + 60.0 * outside,
             fog_density: 0.011,
             height_falloff: 0.0,
         };
@@ -2437,6 +2594,9 @@ impl Scene {
         visible: &BTreeSet<usize>,
     ) {
         use super::streaming::{horizon, Built, Job};
+        if run.authored.is_some() {
+            return;
+        }
         let region = run.map.region_at(run.controller.position);
         let slots = &self.slots;
         let vaults = &self.vault_meshes;
@@ -3486,6 +3646,59 @@ impl Scene {
         }
     }
 
+    /// A gate of the hand-made mine while it is shut: a wall of rune light across the way.
+    fn draw_mine_gate(
+        &self,
+        draws: &mut Vec<MeshDraw3D>,
+        lights: &mut Vec<PointLight3D>,
+        gate: &super::authored::Gate,
+        elapsed: f32,
+    ) {
+        let pulse = 0.75 + 0.25 * (elapsed * 2.3).sin();
+        let across_x = gate.half[0] >= gate.half[1];
+        let width = gate.half[0].max(gate.half[1]) * 2.0;
+        let yaw = if across_x {
+            0.0
+        } else {
+            std::f32::consts::FRAC_PI_2
+        };
+        // the veil, and its bars of runes
+        self.draw(
+            draws,
+            self.cube,
+            gate.center + Vec3::Y * (gate.height * 0.5),
+            Vec3::new(width, gate.height, 0.04),
+            yaw,
+            [0.75, 0.12, 0.16],
+        );
+        if let Some(draw) = draws.last_mut() {
+            draw.material = draw.material.with_emission(1.6 * pulse);
+            draw.material.base_color[3] = 0.55;
+        }
+        for k in 0..5 {
+            let t = (k as f32 + 0.5) / 5.0 - 0.5;
+            let along = if across_x { Vec3::X } else { Vec3::Z };
+            self.draw(
+                draws,
+                self.crystal,
+                gate.center
+                    + along * (t * width)
+                    + Vec3::Y * (1.1 + 0.25 * (elapsed * 1.7 + k as f32).sin()),
+                Vec3::new(0.09, 0.26, 0.09),
+                elapsed * 0.8 + k as f32,
+                [1.0, 0.35, 0.3],
+            );
+            if let Some(draw) = draws.last_mut() {
+                draw.material = draw.material.with_emission(4.0 * pulse);
+            }
+        }
+        lights.push(PointLight3D::new(
+            gate.center + Vec3::Y * 1.4,
+            [1.0, 0.22, 0.2],
+            9.0 * pulse,
+            7.5,
+        ));
+    }
     fn draw(
         &self,
         draws: &mut Vec<MeshDraw3D>,

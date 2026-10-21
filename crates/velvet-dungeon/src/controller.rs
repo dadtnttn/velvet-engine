@@ -67,7 +67,7 @@ impl Controller {
                     p.z += self.velocity.z * h;
                 }
                 if let Some(floor) = map.capsule_floor(p, PLAYER_RADIUS) {
-                    if floor <= self.position.y + STEP_HEIGHT + 0.015 {
+                    if floor <= self.position.y + map.step_height() + 0.015 {
                         self.position = p;
                         if self.grounded && floor >= p.y - 0.35 {
                             self.position.y = floor;
