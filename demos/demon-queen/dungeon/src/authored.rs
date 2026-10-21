@@ -1275,4 +1275,69 @@ mod tests {
             "melee foes with something between them and her ({tried})"
         );
     }
+
+    /// No foe walks on the spot: with the Queen in its own room some way off, each comes to her
+    /// round chests and stones and whatever stands between, and when something does hold it up it
+    /// stands ready rather than walking without moving.
+    #[test]
+    fn no_foe_walks_on_the_spot() {
+        use crate::{combat::Gait, Dungeon};
+        use velvet_dungeon::{controller::Input, horizontal};
+        if !available() {
+            return;
+        }
+        let base = Dungeon::mine().unwrap();
+        let mut checked = 0;
+        for (index, actor) in base.actors.iter().enumerate() {
+            let spawn = &base.map.spawns[actor.spawn];
+            if !matches!(
+                spawn.kind,
+                SpawnKind::Enemy | SpawnKind::Elite | SpawnKind::Miniboss | SpawnKind::Boss
+            ) {
+                continue;
+            }
+            let home = actor.position;
+            let spot = (0..48).find_map(|k| {
+                let a = k as f32 * std::f32::consts::TAU / 16.0;
+                let r = 8.0 + (k / 16) as f32 * 1.5;
+                let at = home + Vec3::new(a.cos() * r, 0.0, a.sin() * r);
+                let y = base.map.capsule_floor(at + Vec3::Y * 0.4, 0.28)?;
+                let at = Vec3::new(at.x, y, at.z);
+                ((y - home.y).abs() < 1.0
+                    && base.map.room_at(at) == Some(spawn.room)
+                    && !base.map.walk_path(home, at, 0.4, 24.0).is_empty())
+                .then_some(at)
+            });
+            let Some(spot) = spot else {
+                continue;
+            };
+            checked += 1;
+            let mut run = Dungeon::mine().unwrap();
+            run.controller.position = spot;
+            let mut on_the_spot = 0;
+            let mut last = run.actors[index].position;
+            for _ in 0..(8 * 60) {
+                run.update(Input::default(), 1.0 / 60.0);
+                run.health = 100.0;
+                let a = &run.actors[index];
+                if matches!(a.gait, Gait::Walk | Gait::Run)
+                    && a.attack.is_none()
+                    && horizontal(a.position - last).length() < 0.004
+                {
+                    on_the_spot += 1;
+                }
+                last = a.position;
+            }
+            assert!(
+                on_the_spot < 30,
+                "{} {index} walks on the spot {:.1} s",
+                spawn.definition,
+                on_the_spot as f32 / 60.0
+            );
+        }
+        assert!(
+            checked >= 10,
+            "foes with the Queen in their room ({checked})"
+        );
+    }
 }

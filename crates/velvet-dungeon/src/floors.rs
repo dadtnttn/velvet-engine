@@ -244,6 +244,19 @@ impl FloorGrid {
     /// straight runs pulled tight), the last point being `goal` itself, or nothing when no walk is
     /// found (the goal out of reach, or on no floor near it).
     pub fn path(&self, start: Vec3, goal: Vec3, radius: f32, reach: f32) -> Vec<Vec3> {
+        self.path_avoiding(start, goal, radius, reach, &|_| false)
+    }
+
+    /// As [`path`](Self::path), keeping clear of spots `blocked` says a body stood on would hit
+    /// (things the grid does not hold: a chest, a stone set down on the floor).
+    pub fn path_avoiding(
+        &self,
+        start: Vec3,
+        goal: Vec3,
+        radius: f32,
+        reach: f32,
+        blocked: &dyn Fn(Vec3) -> bool,
+    ) -> Vec<Vec3> {
         let Some(from) = self.node_near(start, radius) else {
             return Vec::new();
         };
@@ -307,7 +320,9 @@ impl FloorGrid {
                 let Some(next_span) = self.next_span(next, floor, ceiling) else {
                     continue;
                 };
-                if !self.fits(next_span, radius, &mut fits) {
+                if !self.fits(next_span, radius, &mut fits)
+                    || next_span != to.0 && blocked(self.span_point(next_span))
+                {
                     continue;
                 }
                 let rise = (self.spans[next_span].floor - floor).abs();
@@ -340,7 +355,9 @@ impl FloorGrid {
         let mut k = 0;
         while k + 1 < points.len() {
             let mut far = k + 1;
-            while far + 1 < points.len() && self.clear_walk(anchor, points[far + 1], radius) {
+            while far + 1 < points.len()
+                && self.clear_walk_avoiding(anchor, points[far + 1], radius, blocked)
+            {
                 far += 1;
             }
             anchor = points[far];
@@ -348,7 +365,9 @@ impl FloorGrid {
             k = far;
         }
         if let Some(last) = out.last_mut() {
-            if (last.y - goal.y).abs() <= self.step && self.clear_walk(*last, goal, radius) {
+            if (last.y - goal.y).abs() <= self.step
+                && self.clear_walk_avoiding(*last, goal, radius, blocked)
+            {
                 *last = goal;
             }
         }
@@ -455,6 +474,17 @@ impl FloorGrid {
     /// Whether a body walks straight from `a` to `b`: floor all along within a step from one spot
     /// to the next, and room either side for its `radius`.
     pub fn clear_walk(&self, a: Vec3, b: Vec3, radius: f32) -> bool {
+        self.clear_walk_avoiding(a, b, radius, &|_| false)
+    }
+
+    /// As [`clear_walk`](Self::clear_walk), every spot of the way also clear of what `blocked` says.
+    pub fn clear_walk_avoiding(
+        &self,
+        a: Vec3,
+        b: Vec3,
+        radius: f32,
+        blocked: &dyn Fn(Vec3) -> bool,
+    ) -> bool {
         let flat = Vec3::new(b.x - a.x, 0.0, b.z - a.z);
         let length = flat.length();
         let side = if length > 1.0e-4 {
@@ -468,7 +498,9 @@ impl FloorGrid {
             (1..=steps).all(|i| {
                 let p = a + (b - a) * (i as f32 / steps as f32) + offset;
                 match self.surface(p.x, p.z, feet, crate::PLAYER_HEIGHT) {
-                    Some(y) if (y - feet).abs() <= self.step => {
+                    Some(y)
+                        if (y - feet).abs() <= self.step && !blocked(Vec3::new(p.x, y, p.z)) =>
+                    {
                         feet = y;
                         true
                     }

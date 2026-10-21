@@ -2439,9 +2439,12 @@ impl Dungeon {
                         // over a hand-made level the floor map knows every barrel and cart: a
                         // walk round them (straight at her when none is found)
                         actor.path = match &self.map.floors {
-                            Some(grid) => {
-                                grid.path(actor.position, path_target, 0.4, FOE_PATH_REACH)
-                            }
+                            Some(_) => self.map.walk_path(
+                                actor.position,
+                                path_target,
+                                0.4,
+                                FOE_PATH_REACH.max(distance + 6.0),
+                            ),
                             None => navigation::room_path(
                                 &self.map,
                                 spawn.room,
@@ -2516,13 +2519,20 @@ impl Dungeon {
                         p = actor.position + outward * (dt * pace).max(0.05);
                     }
                     let start = actor.position;
-                    if let Some(p) = foe_step(&self.map, p) {
+                    // against something: it slides along it rather than stopping dead
+                    let d = p - start;
+                    if let Some(p) = foe_step(&self.map, p)
+                        .or_else(|| foe_step(&self.map, start + Vec3::new(d.x, 0.0, 0.0)))
+                        .or_else(|| foe_step(&self.map, start + Vec3::new(0.0, 0.0, d.z)))
+                    {
                         actor.position = p;
                     }
                     // Walking into a wall or a corner: find another way, step
                     // aside, and a shooter stands and fights from here.
                     if horizontal(actor.position - start).length() < dt * pace * 0.25 {
                         actor.stuck += dt;
+                        // held up, it stands ready instead of walking on the spot
+                        actor.gait = combat::Gait::Guard;
                     } else {
                         actor.stuck = 0.0;
                     }

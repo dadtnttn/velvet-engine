@@ -549,6 +549,34 @@ impl Blueprint {
     pub fn step_height(&self) -> f32 {
         self.floors.as_ref().map_or(STEP_HEIGHT, |grid| grid.step)
     }
+    /// Whether a body `radius` wide standing with its feet at `p` hits one of the loose obstacles
+    /// (the same test [`capsule_floor`](Self::capsule_floor) makes).
+    pub fn hits_obstacle(&self, p: Vec3, radius: f32) -> bool {
+        let radius = match &self.floors {
+            Some(grid) => (radius - grid.margin).max(0.06),
+            None => radius,
+        };
+        self.obstacles.iter().any(|o| {
+            let dx = (p.x - o.center.x).abs() - o.half[0];
+            let dz = (p.z - o.center.z).abs() - o.half[1];
+            dx.max(0.0).powi(2) + dz.max(0.0).powi(2) < radius * radius
+                && p.y < o.center.y + o.height
+                && p.y + PLAYER_HEIGHT > o.center.y
+        })
+    }
+
+    /// A walk over a hand-made level's floors (see [`FloorGrid::path`]) clear of the loose
+    /// obstacles too; empty without floors or when there is none.
+    pub fn walk_path(&self, start: Vec3, goal: Vec3, radius: f32, reach: f32) -> Vec<Vec3> {
+        let Some(grid) = &self.floors else {
+            return Vec::new();
+        };
+        // a little wider than the body, so the walk passes them, not grazes them
+        grid.path_avoiding(start, goal, radius, reach, &|p| {
+            self.hits_obstacle(p, radius + 0.15)
+        })
+    }
+
     pub fn capsule_floor(&self, p: Vec3, radius: f32) -> Option<f32> {
         // Over hand-made floors the walls already stand back by the bake's margin.
         let radius = match &self.floors {
