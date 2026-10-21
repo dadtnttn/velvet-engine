@@ -6524,6 +6524,11 @@ pub(super) fn capture(out: &Path) -> Result<()> {
             app.open_dates();
             wait(&mut app, 1.2);
             save(&mut app, out, "court-57-dates-nemi-done")?;
+            // Nemi lit: her sprite cut out at the left
+            app.court_key(KeyCode::KeyD);
+            app.court_key(KeyCode::KeyD);
+            wait(&mut app, 0.8);
+            save(&mut app, out, "court-58-dates-nemi-lit")?;
             app.close_court();
             eprintln!("[court-qa] citas: cita_nemi {}", app.story.get("cita_nemi"));
             app.environment_cycle.set_phase(0.35);
