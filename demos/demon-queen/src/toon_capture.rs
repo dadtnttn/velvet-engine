@@ -7064,6 +7064,11 @@ pub(super) fn capture(out: &Path) -> Result<()> {
             ("hueco_corazon", [47.1, -16.0, -121.1], 150.8, -11.9),
             ("hueco_hongos", [22.1, -14.1, -78.1], 140.2, 48.1),
             ("hueco_limos", [11.1, -14.4, -71.1], 127.8, 35.5),
+            // the way into the library, from the loading hall to its door
+            ("biblio_1", [4.0, -3.0, -56.0], 0.0, 0.0),
+            ("biblio_2", [4.6, -3.0, -61.0], 0.0, 0.0),
+            ("biblio_3", [4.3, -3.15, -66.0], 0.0, 0.0),
+            ("biblio_4", [3.6, -3.45, -70.5], 0.0, 0.0),
         ];
         // VELVET_MINA_OPEN: the seal turned and the key in hand (the Heart's throat open)
         let open = std::env::var("VELVET_MINA_OPEN").is_ok();
