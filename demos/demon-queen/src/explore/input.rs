@@ -614,6 +614,9 @@ impl ApplicationHandler for App {
                     }
                     if self.shop_open {
                         match code {
+                            KeyCode::KeyT if shop::counter() == shop::Counter::Bocamina => {
+                                self.sell_all_at_counter()
+                            }
                             KeyCode::KeyH => self.start_haggle(),
                             KeyCode::ArrowUp | KeyCode::KeyW => self.move_shop_selection(-1),
                             KeyCode::ArrowDown | KeyCode::KeyS => self.move_shop_selection(1),

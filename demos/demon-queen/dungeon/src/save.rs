@@ -36,6 +36,9 @@ pub struct Snapshot {
     pub torch: bool,
     #[serde(default)]
     pub materials: std::collections::BTreeMap<String, u32>,
+    /// The miner's shaft as she left it (or as it is, saved down there).
+    #[serde(default)]
+    pub pozo: Option<super::pozo::Memory>,
     #[serde(default)]
     pub relic_sword: bool,
     #[serde(default)]
@@ -73,6 +76,11 @@ impl Dungeon {
             visited: self.visited.clone(),
             torch: self.torch,
             materials: self.materials.clone(),
+            pozo: self
+                .pozo
+                .as_ref()
+                .map(|p| p.memory())
+                .or_else(|| self.pozo_memory.clone()),
             relic_sword: self.relic_sword,
             unbanked_relic_sword: self.unbanked_relic_sword,
         }
@@ -181,6 +189,7 @@ impl Dungeon {
         }
         run.opened = saved.opened.clone();
         run.visited = saved.visited.clone();
+        run.pozo_memory = saved.pozo.clone();
         run.torch = saved.torch;
         run.relic_sword = saved.relic_sword;
         run.materials = saved

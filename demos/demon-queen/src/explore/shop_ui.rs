@@ -371,6 +371,10 @@ impl App {
     }
 
     pub(super) fn select_shop_category(&mut self, category: shop::Category) {
+        // (the mine's counter shows all it has)
+        if shop::counter() == shop::Counter::Bocamina {
+            return;
+        }
         if self.shop_category != category {
             ui_sfx::play(UiSfx::Page);
         }
@@ -526,8 +530,42 @@ impl App {
             map_overlay::ShopHit::PageNext => self.change_shop_page(1),
             map_overlay::ShopHit::QuantityPlus => self.adjust_shop_quantity(1),
             map_overlay::ShopHit::Action => self.commit_shop_transaction(),
+            map_overlay::ShopHit::SellAll => self.sell_all_at_counter(),
             map_overlay::ShopHit::Close => self.close_shop(),
         }
+    }
+
+    /// At the mine's counter: everything from the shaft she carries, on his scales at once.
+    pub(super) fn sell_all_at_counter(&mut self) {
+        let goods: Vec<(String, u32, u32)> = shop::catalog()
+            .products
+            .iter()
+            .filter(|p| dungeon::pozo::value(&p.id).is_some())
+            .filter_map(|p| {
+                let n = self.inventory.get(&p.id).copied().unwrap_or(0);
+                (n > 0).then(|| (p.id.clone(), n, shop::sell_price(p)))
+            })
+            .collect();
+        if goods.is_empty() {
+            self.shop_notice = Some("No traes nada del pozo.".to_owned());
+            ui_sfx::play(UiSfx::Error);
+            return;
+        }
+        let total: u32 = goods.iter().map(|(_, n, unit)| n * unit).sum();
+        let pieces: u32 = goods.iter().map(|(_, n, _)| n).sum();
+        for (id, ..) in &goods {
+            self.inventory.remove(id);
+        }
+        self.gold = self.gold.saturating_add(total);
+        self.shop_selection = 0;
+        self.shop_quantity = 1;
+        self.shop_notice = Some(format!("Vendiste {pieces} piezas por {total} oro."));
+        self.shop_said = Some((
+            "—¡Buena jornada, Majestad! Lo peso, lo pago y a la vagoneta.".to_owned(),
+            self.elapsed,
+        ));
+        self.ui_sound(dungeon::sound::Sfx::Coins, 0.9);
+        self.persist_3d_state(true);
     }
 
     pub(super) fn commit_shop_transaction(&mut self) {

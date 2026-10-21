@@ -951,7 +951,6 @@ impl App {
                 .map(|(text, at)| (text.clone(), ms(*at))),
             merchant: merchant_art().map(|crop| merchant_face(face, crop)),
             merchant_from: merchant_art().map(|crop| merchant_face(before, crop)),
-            bocamina: shop::counter() == shop::Counter::Bocamina,
             merchant_ms: ms(changed),
             haggle,
             fuse,

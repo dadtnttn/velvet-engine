@@ -38,8 +38,6 @@ pub struct ShopView {
     pub fuse: Option<FuseView>,
     /// Products he will not haggle over again today (catalog indices).
     pub refused: Vec<usize>,
-    /// The Tendero's counter at the mine's mouth: no altar, no haggle.
-    pub bocamina: bool,
 }
 
 /// A haggle on show.
@@ -294,28 +292,30 @@ pub(crate) struct Pick {
     /// «Otro trato» is on show, and among how many favours.
     pub favor: bool,
     pub favor_choices: u8,
+    /// Her things on show (the sell tab).
+    pub selling: bool,
 }
 
-fn mid(r: Rect) -> [f32; 2] {
+pub(super) fn mid(r: Rect) -> [f32; 2] {
     [r.x + r.w * 0.5, r.y + r.h * 0.5]
 }
 
 /// The point (x, y) lies on `r` turned by `angle` about its centre.
-fn inside_turned(r: Rect, angle: f32, x: f32, y: f32) -> bool {
+pub(super) fn inside_turned(r: Rect, angle: f32, x: f32, y: f32) -> bool {
     let c = mid(r);
     let (sn, cs) = (-angle).sin_cos();
     let (dx, dy) = (x - c[0], y - c[1]);
     r.contains(c[0] + dx * cs - dy * sn, c[1] + dx * sn + dy * cs)
 }
 
-fn item_icon(icons: &IconAtlas, v: &mut Vec<MapVertex>, id: &str, r: Rect, alpha: f32) {
+pub(super) fn item_icon(icons: &IconAtlas, v: &mut Vec<MapVertex>, id: &str, r: Rect, alpha: f32) {
     if let Some(entry) = icons.get_sized(id, r.w as u32, r.h as u32) {
         push_icon_rect(v, r, entry, [1.0, 1.0, 1.0, alpha]);
     }
 }
 
 /// The largest size up to `size` at which `s` fits `w` (down to 60 %).
-fn fit(font: &FontAtlas, face: Face, s: &str, size: f32, w: f32) -> f32 {
+pub(super) fn fit(font: &FontAtlas, face: Face, s: &str, size: f32, w: f32) -> f32 {
     let width = text_width(font, face, s, size);
     if width <= w {
         size
@@ -372,16 +372,11 @@ pub(super) fn draw(
         merchant_from,
         open,
         f.time,
-        if view.bocamina {
-            "La Bocamina · paga un poco menos"
-        } else {
-            "Tienda de la villa · se aceptan regateos"
-        },
+        "Tienda de la villa · se aceptan regateos",
     );
     let title = match view.page {
         1 => "¡A regatear!",
         2 => "El altar de fusión",
-        _ if view.bocamina => "La Bocamina",
         _ => "Tienda de la villa",
     };
     heading(font, v, 620.0, 28.0, title, open.min(age + 0.3));
@@ -450,14 +445,7 @@ pub(super) fn draw(
             ("Esc", "salir"),
         ],
     };
-    // (the Tendero at the mine's mouth does not haggle)
-    let mine: Vec<(&str, &str)>;
-    let keys = if shop::counter() == shop::Counter::Bocamina && view.page == 0 {
-        mine = keys.iter().copied().filter(|(k, _)| *k != "H").collect();
-        &mine[..]
-    } else {
-        keys
-    };
+
     hints(font, v, keys);
 }
 
@@ -750,7 +738,7 @@ fn heading(font: &FontAtlas, v: &mut Vec<MapVertex>, x: f32, y: f32, words: &str
 }
 
 /// A gold coin.
-fn coin(v: &mut Vec<MapVertex>, c: [f32; 2], r: f32, alpha: f32) {
+pub(super) fn coin(v: &mut Vec<MapVertex>, c: [f32; 2], r: f32, alpha: f32) {
     panel(
         v,
         Rect::new(c[0] - r, c[1] - r, r * 2.0, r * 2.0),
@@ -887,13 +875,7 @@ fn tabs(font: &FontAtlas, v: &mut Vec<MapVertex>, f: &ShopFrame, page: u8, age: 
         page == 2,
     ];
     let hits = [ShopHit::TabBuy, ShopHit::TabSell, ShopHit::TabFuse];
-    // (the mine's counter has no altar)
-    let shown = if shop::counter() == shop::Counter::Bocamina {
-        2
-    } else {
-        3
-    };
-    for (i, label) in ["Comprar", "Vender", "Fusión"].iter().enumerate().take(shown) {
+    for (i, label) in ["Comprar", "Vender", "Fusión"].iter().enumerate() {
         let a = entrance(age, 0.04 * i as f32, 0.24);
         faded(v, a, |v| {
             shifted(v, [0.0, (1.0 - a) * -30.0], |v| {
@@ -1608,9 +1590,6 @@ fn card(
             format!("Te faltan {} de oro.", total - f.gold)
         } else if f.tab == Tab::Buy {
             format!("Él te la compraría por {} oro.", shop::sell_price(p))
-        } else if shop::counter() == shop::Counter::Bocamina {
-            // what the villa would pay, so she knows what he keeps
-            format!("En la villa te darían {} oro.", p.sell_price)
         } else {
             format!("En la tienda cuesta {} oro.", shop::buy_price(p))
         }
@@ -1645,9 +1624,6 @@ fn card(
         28.0,
         f.time,
     );
-    if view.bocamina {
-        return;
-    }
     let refused = view.refused.contains(&index);
     plate(
         font,

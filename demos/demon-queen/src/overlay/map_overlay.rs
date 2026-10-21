@@ -69,6 +69,7 @@ pub(crate) fn scene_picture_rect(width: f32, height: f32) -> [f32; 4] {
 mod stage_overlay;
 mod ui_paint;
 pub(crate) use stage_overlay::{StageActor, StageItem, StagePanel, StageView};
+mod bocamina_overlay;
 mod shop_overlay;
 pub(crate) use shop_overlay::{
     favor_hit as scene_favor_hit, FavorDeal, FavorTile, FuseShow, FuseView, HaggleView,
@@ -1280,6 +1281,8 @@ pub(crate) enum ShopHit {
     /// «Otro trato»'s arrows: the other favours she can offer.
     FavorPrev,
     FavorNext,
+    /// The Bocamina's scales: everything from the shaft at once.
+    SellAll,
 }
 
 fn shop_hit_signature(hit: Option<ShopHit>) -> u16 {
@@ -1294,6 +1297,7 @@ fn shop_hit_signature(hit: Option<ShopHit>) -> u16 {
         Some(ShopHit::Close) => 6,
         Some(ShopHit::Category(category)) => 10 + category as u16,
         Some(ShopHit::PagePrevious) => 20,
+        Some(ShopHit::SellAll) => 30,
         Some(ShopHit::PageNext) => 21,
         Some(ShopHit::TabFuse) => 22,
         Some(ShopHit::Haggle) => 23,
@@ -1309,6 +1313,9 @@ fn shop_hit_signature(hit: Option<ShopHit>) -> u16 {
 
 /// What lies under the pointer (the logical 1080p) on the shop's page on show.
 pub(crate) fn shop_hit_test(x: f32, y: f32, pick: &ShopPick) -> Option<ShopHit> {
+    if super::shop::counter() == super::shop::Counter::Bocamina {
+        return bocamina_overlay::Layout::hit(x, y, pick);
+    }
     shop_overlay::Layout::hit(x, y, pick)
 }
 
@@ -1331,6 +1338,7 @@ pub(crate) fn shop_pick(
         fuse_cursor,
         favor: false,
         favor_choices: 0,
+        selling: tab == super::shop::Tab::Sell,
     }
 }
 
@@ -2881,15 +2889,26 @@ impl MapOverlay {
                     preview_rotation: shop_preview_rotation,
                     liquid_motion,
                 };
-                shop_overlay::draw(
-                    font,
-                    icons,
-                    &mut vertices,
-                    &frame,
-                    self.shop.as_ref(),
-                    shop_face,
-                    shop_face_from,
-                );
+                if super::shop::counter() == super::shop::Counter::Bocamina {
+                    bocamina_overlay::draw(
+                        font,
+                        icons,
+                        &mut vertices,
+                        &frame,
+                        self.shop.as_ref(),
+                        shop_face,
+                    );
+                } else {
+                    shop_overlay::draw(
+                        font,
+                        icons,
+                        &mut vertices,
+                        &frame,
+                        self.shop.as_ref(),
+                        shop_face,
+                        shop_face_from,
+                    );
+                }
             } else if let Some(view) = &self.war {
                 war_overlay::draw(font, &mut vertices, width, height, view);
                 // A conversation over the war (its own scenes, `guerra.md`): the box on top, the

@@ -26,6 +26,26 @@ pub const REACH: f32 = 3.4;
 pub const ARRIVAL: [f32; 3] = [5.0, 0.0, -2.4];
 /// How long the winch takes to haul her up.
 pub const HAUL_SECONDS: f32 = 1.4;
+/// What she dug stays open this long in the mine away from the shaft (s); then the rock settles,
+/// the shaft closes and new rock fills it.
+pub const SETTLE_SECONDS: f32 = 30.0 * 60.0;
+
+/// The shaft as she left it: its rock (seed), what she dug out, her mark, and how long she has
+/// been away in the mine since.
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct Memory {
+    pub seed: u64,
+    pub mined: Vec<[i32; 3]>,
+    pub deepest: i32,
+    pub away: f32,
+}
+
+impl Memory {
+    /// Whether the rock has settled and closed what she dug.
+    pub fn settled(&self) -> bool {
+        self.away >= SETTLE_SECONDS
+    }
+}
 
 /// The rock at each depth.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -923,6 +943,28 @@ impl Pozo {
         self.mined.len()
     }
 
+    /// The shaft as she leaves it (what she dug, sorted so a save reads the same each time).
+    pub fn memory(&self) -> Memory {
+        let mut mined: Vec<[i32; 3]> = self.mined.iter().copied().collect();
+        mined.sort_unstable();
+        Memory {
+            seed: self.seed,
+            mined,
+            deepest: self.deepest,
+            away: 0.0,
+        }
+    }
+
+    /// Back down a shaft she left: its galleries as she dug them.
+    pub fn remembered(memory: &Memory, mine: &Blueprint, came_from: (Vec3, f32)) -> Self {
+        let mut pozo = Self::new(memory.seed, mine, came_from);
+        pozo.mined = memory.mined.iter().copied().collect();
+        pozo.deepest = memory.deepest;
+        pozo.version += 1;
+        pozo.rebuild_floors();
+        pozo
+    }
+
     /// Blocks dug out at once, with nothing taken from them (captures, tests).
     pub fn dig_out(&mut self, blocks: impl IntoIterator<Item = [i32; 3]>) {
         for b in blocks {
@@ -1019,6 +1061,26 @@ mod tests {
         // the ledge does not give
         assert!(!pozo.diggable([-1, 0, 3]));
         assert!(pozo.solid(-1, 5, 3));
+    }
+
+    #[test]
+    fn what_she_dug_stays_open_until_the_rock_settles() {
+        let map = mine_map();
+        let mut pozo = Pozo::new(5, &map, (Vec3::ZERO, 0.0));
+        let blocks: Vec<[i32; 3]> = (0..6).map(|k| [4, k, 4]).collect();
+        pozo.dig_out(blocks.clone());
+        let mut memory = pozo.memory();
+        let again = Pozo::remembered(&memory, &map, (Vec3::ZERO, 0.0));
+        assert_eq!(again.dug(), pozo.dug());
+        assert_eq!(again.deepest, pozo.deepest);
+        assert!(blocks.iter().all(|b| !again.solid(b[0], b[1], b[2])));
+        // and through a save
+        let text = serde_json::to_string(&memory).unwrap();
+        let read: Memory = serde_json::from_str(&text).unwrap();
+        assert_eq!(read.mined, memory.mined);
+        assert!(!memory.settled());
+        memory.away = SETTLE_SECONDS;
+        assert!(memory.settled());
     }
 
     #[test]

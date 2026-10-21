@@ -742,6 +742,8 @@ pub struct Dungeon {
     pub speech: Option<Speech>,
     /// The miner's shaft by the mouth, while she is down it.
     pub pozo: Option<Box<pozo::Pozo>>,
+    /// The shaft as she last left it (its galleries stay open a while).
+    pub pozo_memory: Option<pozo::Memory>,
     /// Where the shaft's winch stands in the mine (by the Tendero's stall).
     pub shaft: Option<Vec3>,
     /// Her pick and bag for the shaft (the best she owns; the game fills it from her things).
@@ -942,6 +944,7 @@ impl Dungeon {
             speech: None,
             voices: Default::default(),
             pozo: None,
+            pozo_memory: None,
             shaft: None,
             gear: Default::default(),
             purse: 0,
@@ -1226,8 +1229,27 @@ impl Dungeon {
     /// Down the shaft: the cage takes her to its ledge.
     pub fn enter_pozo(&mut self) {
         let came_from = (self.controller.position, self.controller.yaw);
-        let seed = self.map.seed ^ 0x504f_5a4f;
-        let pozo = pozo::Pozo::new(seed, &self.map, came_from);
+        let first = self.map.seed ^ 0x504f_5a4f;
+        let (pozo, word) = match self.pozo_memory.take() {
+            // what she dug is still open
+            Some(memory) if !memory.settled() => (
+                pozo::Pozo::remembered(&memory, &self.map, came_from),
+                format!(
+                    "El Pozo del Minero: tus galerías siguen abiertas (marca {} m).",
+                    (memory.deepest + 1).max(0)
+                ),
+            ),
+            // the rock settled: new rock, new veins
+            Some(memory) => (
+                pozo::Pozo::new(memory.seed.wrapping_add(0x9e37_79b9), &self.map, came_from),
+                "El pozo se ha asentado: roca nueva y vetas nuevas.".to_owned(),
+            ),
+            None => (
+                pozo::Pozo::new(first, &self.map, came_from),
+                "El Pozo del Minero: clic para picar (mantén pulsado), U para que el torno te suba."
+                    .to_owned(),
+            ),
+        };
         let (at, yaw) = pozo::Pozo::arrival();
         self.controller.position = at;
         self.controller.velocity = Vec3::ZERO;
@@ -1235,9 +1257,7 @@ impl Dungeon {
         self.controller.pitch = -0.25;
         self.pozo = Some(Box::new(pozo));
         self.auto_walk = false;
-        self.message(
-            "El Pozo del Minero: clic para picar (mantén pulsado), U para que el torno te suba.",
-        );
+        self.message(word);
         self.sound(sound::Sfx::ChestCreak, None, 0.6);
     }
 
@@ -1246,6 +1266,7 @@ impl Dungeon {
         let Some(pozo) = self.pozo.take() else {
             return;
         };
+        self.pozo_memory = Some(pozo.memory());
         let (at, yaw) = pozo.came_from;
         self.controller.position = at;
         self.controller.velocity = Vec3::ZERO;
@@ -2007,6 +2028,10 @@ impl Dungeon {
         let before = self.controller.position;
         self.controller.step(&self.map, input, dt);
         self.let_out_if_boxed(before, input, dt);
+        // away from the shaft, its rock slowly settles
+        if let Some(memory) = self.pozo_memory.as_mut() {
+            memory.away += dt;
+        }
         // Footsteps every stride on the ground; a jump and its landing.
         let grounded = self.controller.grounded;
         if grounded {
@@ -3524,10 +3549,17 @@ impl Dungeon {
             return Some(Prompt::new(Icon::Talk, "Hablar").detail(npc.name.clone()));
         }
         if self.at_shaft() {
-            return Some(
-                Prompt::new(Icon::Mine, "Bajar al Pozo del Minero")
-                    .detail("Pica hacia abajo: cuanto más hondo, más vale"),
-            );
+            let detail = match &self.pozo_memory {
+                Some(m) if !m.settled() => {
+                    let left = ((pozo::SETTLE_SECONDS - m.away) / 60.0).ceil() as i32;
+                    format!(
+                        "Tus galerías siguen abiertas: marca {} m · se asienta en {left} min",
+                        (m.deepest + 1).max(0)
+                    )
+                }
+                _ => "Pica hacia abajo: cuanto más hondo, más vale".to_owned(),
+            };
+            return Some(Prompt::new(Icon::Mine, "Bajar al Pozo del Minero").detail(detail));
         }
         if let Some(mine) = &self.authored {
             if !(self.seal && self.crest)
