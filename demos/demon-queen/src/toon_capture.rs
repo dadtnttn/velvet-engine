@@ -7049,7 +7049,26 @@ pub(super) fn capture(out: &Path) -> Result<()> {
             ("sello", [53.0, -14.4, -93.5], 0.0, 10.0),
             ("corazon", [53.2, -16.0, -118.8], 0.0, 12.0),
             ("tendero", [7.6, 0.0, 11.3], 0.0, -4.0),
+            ("umbral", [53.0, -14.4, -104.5], 0.0, 4.0),
+            ("umbral_izq", [50.0, -14.4, -105.5], -25.0, 4.0),
+            ("umbral_atras", [53.0, -14.8, -112.5], 180.0, 4.0),
+            // where the void finder (art/blender/voids.py) saw out of the mine
+            ("hueco_cripta", [-28.9, -3.7, -84.1], -62.3, 39.1),
+            ("hueco_tesoro", [77.1, -14.0, -84.1], -51.7, -18.6),
+            ("hueco_brecha", [57.1, -14.4, -92.1], 118.3, -15.6),
+            ("hueco_santuario", [-22.9, -3.7, -88.1], 25.6, -1.8),
+            ("hueco_arcana", [-29.9, -3.5, -32.1], -17.5, 58.9),
+            ("hueco_biblioteca", [3.1, -3.6, -80.1], 175.6, 6.8),
+            ("techo_tesoro", [72.0, -14.0, -76.0], 0.0, 50.0),
+            ("cupula_arcana", [-28.5, -3.5, -33.0], 0.0, 60.0),
+            ("hueco_corazon", [47.1, -16.0, -121.1], 150.8, -11.9),
+            ("hueco_hongos", [22.1, -14.1, -78.1], 140.2, 48.1),
+            ("hueco_limos", [11.1, -14.4, -71.1], 127.8, 35.5),
         ];
+        // VELVET_MINA_OPEN: the seal turned and the key in hand (the Heart's throat open)
+        let open = std::env::var("VELVET_MINA_OPEN").is_ok();
+        app.dungeon.seal = open;
+        app.dungeon.crest = open;
         let only = std::env::var("VELVET_MINA_VIEW").ok();
         for (name, p, yaw, pitch) in views {
             if only
