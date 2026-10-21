@@ -3310,7 +3310,7 @@ impl App {
 
     fn campaign_end_turn(&mut self) {
         // one turn a day: the war's gold is hers, and turns are not to be farmed for it
-        let done_today = self.story.get(super::war_story::TURN_TODAY) > 0;
+        let done_today = self.war_turn_done();
         let Some(w) = self.war.as_mut() else {
             return;
         };
@@ -3331,10 +3331,11 @@ impl App {
             return;
         }
         c.sel = None;
+        let ended = s.turn as i32;
         s.end_player_turn();
         self.story
             .values
-            .insert(super::war_story::TURN_TODAY.to_owned(), 1);
+            .insert(super::war_story::TURN_TODAY.to_owned(), ended);
         ui_sfx::play(ui_sfx::UiSfx::Page);
         c.toast = Some((
             "Fin del turno".into(),

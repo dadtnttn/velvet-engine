@@ -773,9 +773,14 @@ fn button(font: &FontAtlas, v: &mut Vec<MapVertex>, b: &WarButton, hover: bool, 
     }
     let [x, y, w, h] = b.rect;
     let lean = (h * 0.2).min(10.0);
-    let alpha = if b.enabled { 1.0 } else { 0.45 };
+    // an unavailable button keeps a dark solid plate (readable over the bright map and its fog):
+    // its label dims, the line saying why stays clear
+    let off = !b.enabled;
+    let alpha = if off { 0.55 } else { 1.0 };
+    let plate = if off { 0.92 } else { 1.0 };
     let lit = hover && b.enabled;
     let (top, bottom, edge) = match b.style {
+        _ if off => (INK3, INK_DARK, 0x5a4a6e),
         1 => (
             if lit { 0xffcf6a } else { AMBER },
             if lit { 0xd9952a } else { 0xb7822e },
@@ -792,17 +797,17 @@ fn button(font: &FontAtlas, v: &mut Vec<MapVertex>, b: &WarButton, hover: bool, 
     fill(
         v,
         slanted(x + 6.0, y + 7.0, w, h, lean),
-        rgba(0x000000, 0.45 * alpha),
+        rgba(0x000000, 0.45 * plate),
     );
     let q = slanted(x, y, w, h, lean);
-    push_triangle(v, [q[0], q[1], q[2]], rgba(top, alpha));
-    push_triangle(v, [q[0], q[2], q[3]], rgba(bottom, alpha));
-    push_outline_fringe(v, &q, rgba(bottom, alpha));
+    push_triangle(v, [q[0], q[1], q[2]], rgba(top, plate));
+    push_triangle(v, [q[0], q[2], q[3]], rgba(bottom, plate));
+    push_outline_fringe(v, &q, rgba(bottom, plate));
     rim(
         v,
         q,
         if lit { 2.4 } else { 1.4 },
-        rgba(edge, if lit { 1.0 } else { 0.8 } * alpha),
+        rgba(edge, if lit { 1.0 } else { 0.8 } * plate),
     );
     if lit {
         soft(
@@ -814,7 +819,8 @@ fn button(font: &FontAtlas, v: &mut Vec<MapVertex>, b: &WarButton, hover: bool, 
             true,
         );
     }
-    let ink = if b.style == 1 { INK_DARK } else { IVORY };
+    let amber = b.style == 1 && !off;
+    let ink = if amber { INK_DARK } else { IVORY };
     let mut tx = x + 16.0;
     if b.icon != Glyph::None {
         let gs = (h * 0.5).min(30.0);
@@ -829,7 +835,7 @@ fn button(font: &FontAtlas, v: &mut Vec<MapVertex>, b: &WarButton, hover: bool, 
             gc,
             gs,
             rgba(
-                if b.style == 1 {
+                if amber {
                     INK_DARK
                 } else if b.on {
                     AMBER_HI
@@ -923,7 +929,10 @@ fn button(font: &FontAtlas, v: &mut Vec<MapVertex>, b: &WarButton, hover: bool, 
                 tx,
                 ty + size * 1.3,
                 ds,
-                rgba(if b.style == 1 { 0x3a2410 } else { 0xc8b8d8 }, alpha),
+                rgba(
+                    if amber { 0x3a2410 } else { 0xc8b8d8 },
+                    if off { 0.95 } else { alpha },
+                ),
             );
         }
         if !b.key.is_empty() {

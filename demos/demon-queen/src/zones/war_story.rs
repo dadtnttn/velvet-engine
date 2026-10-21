@@ -25,11 +25,12 @@ use demon_queen_war as wr;
 use wr::data::{Faction, PROVINCES};
 use wr::powers::Power;
 
-/// The regions across the great river (the Alliance's land at the start): out of her armies'
-/// reach until the first act ends.
-/// The day's flag for the campaign's turn (one a day; cleared when she sleeps with the court's).
+/// The campaign turn she ended today (one a day; cleared when she sleeps with the court's). It
+/// holds back only the turn right after it, so a new campaign is not left waiting for the day.
 pub(crate) const TURN_TODAY: &str = "guerra_turno_hoy";
 
+/// The regions across the great river (the Alliance's land at the start): out of her armies'
+/// reach until the first act ends.
 pub(crate) const EAST: [&str; 10] = [
     "marca",
     "cabeza",
@@ -565,8 +566,18 @@ impl App {
             objective,
             relic,
             river_closed: !self.varrak_awake(),
-            turn_today: self.story.get(TURN_TODAY) > 0,
+            turn_today: self.war_turn_done(),
         }
+    }
+
+    /// Whether today's campaign turn is played (the one waiting now is the one after it).
+    pub(crate) fn war_turn_done(&self) -> bool {
+        let ended = self.story.get(TURN_TODAY);
+        ended > 0
+            && self
+                .war_campaign
+                .as_ref()
+                .is_some_and(|s| s.turn as i32 == ended + 1)
     }
 
     // ------------------------------------------------------------------ the war's scenes

@@ -2721,6 +2721,8 @@ pub(super) fn capture(out: &Path) -> Result<()> {
             ("consejo_1_hecho", 1),
             ("raciones_igual", 1),
             ("apagados_encierro", 1),
+            // a turn ended today in an earlier campaign: the new one still gets its first turn
+            ("guerra_turno_hoy", 1),
         ] {
             app.story.values.insert(k.into(), v);
         }
@@ -2830,6 +2832,16 @@ pub(super) fn capture(out: &Path) -> Result<()> {
         app.war_hit(map_overlay::WarHit::EndTurn);
         for _ in 0..40 {
             step(&mut app, 30);
+            // a battle the AI's move brings: resolved without her
+            if app
+                .war
+                .as_ref()
+                .and_then(|w| w.camp.as_ref())
+                .is_some_and(|c| matches!(c.modal, Some(zone_war::CampModal::Battle(_))))
+            {
+                app.war_hit(map_overlay::WarHit::Modal(1));
+                continue;
+            }
             if app
                 .war_campaign
                 .as_ref()
