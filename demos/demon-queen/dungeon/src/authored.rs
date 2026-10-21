@@ -1572,4 +1572,34 @@ mod tests {
         let run = Dungeon::mine().unwrap();
         assert!(walk_reach(&run.map, run.controller.position, 2.0) >= 2.0);
     }
+
+    /// The shaft's head-frame stands by the stall with all of it on clear floor at his level, is
+    /// solid (legs, winch, cart), and its open front can be walked up to.
+    #[test]
+    fn the_headframe_stands_clear_by_the_stall() {
+        use crate::{turn_y, Dungeon, HEADFRAME_FOOT};
+        use velvet_dungeon::PLAYER_RADIUS;
+        if !available() {
+            return;
+        }
+        let run = Dungeon::mine().unwrap();
+        let shaft = run.shaft.expect("a shaft by the stall");
+        let yaw = run.shaft_yaw;
+        let mut bare = run.map.clone();
+        bare.obstacles.clear();
+        for (x, z) in HEADFRAME_FOOT {
+            let p = shaft + turn_y(Vec3::new(x, 0.0, z), yaw);
+            let floor = bare.capsule_floor(p + Vec3::Y * 0.6, 0.3);
+            assert!(
+                floor.is_some_and(|y| (y - shaft.y).abs() < 0.45),
+                "clear at {x} {z}"
+            );
+        }
+        assert_eq!(run.map.obstacles.len(), 6, "legs, winch and cart");
+        let leg = shaft + turn_y(Vec3::new(1.3, 0.0, 1.3), yaw);
+        assert!(run.map.capsule_floor(leg, PLAYER_RADIUS).is_none(), "a leg is solid");
+        // in front of its open side she stands, near enough to go down
+        let front = shaft + turn_y(Vec3::new(0.0, 0.0, 2.1), yaw);
+        assert!(run.map.capsule_floor(front + Vec3::Y * 0.3, PLAYER_RADIUS).is_some());
+    }
 }

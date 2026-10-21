@@ -797,6 +797,8 @@ pub struct Scene {
     mine_art: Option<super::mine_art::MineArt>,
     /// The miner's shaft's meshes and textures, while she is down it.
     pozo_art: Option<pozo_scene::PozoArt>,
+    headframe: Option<pozo_scene::Headframe>,
+    headframe_tried: bool,
     /// The Tendero's model (tried once).
     tendero: Option<tendero::Tendero>,
     tendero_tried: bool,
@@ -936,6 +938,8 @@ impl Scene {
             finish: super::finish::Finish::new(device, format),
             mine_art: None,
             pozo_art: None,
+            headframe: None,
+            headframe_tried: false,
             tendero: None,
             tendero_tried: false,
             mine_waters: Vec::new(),
@@ -1643,15 +1647,15 @@ impl Scene {
             }
             // the winch over the miner's shaft, by his stall
             if let Some(shaft) = run.shaft {
-                let npc = mine.npcs.first().map_or(shaft, |n| n.position);
-                let away = shaft - npc;
+                self.ensure_headframe(renderer, device, queue);
                 self.draw_headframe(
                     &mut draws,
                     &mut lights,
                     shaft,
-                    away.x.atan2(away.z),
+                    run.shaft_yaw,
                     run.elapsed,
                     false,
+                    0.0,
                 );
             }
             if !(run.seal && run.crest) {

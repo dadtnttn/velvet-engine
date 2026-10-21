@@ -245,6 +245,28 @@ pub fn enemy_style(definition: &str, kind: SpawnKind) -> EnemyStyle {
     }
 }
 
+/// The head-frame's floor in its own frame (x across, z toward its open front): its deck's
+/// corners and middle, the winch behind, the cart and its rails beside, the stones in front.
+const HEADFRAME_FOOT: [(f32, f32); 11] = [
+    (-1.6, -1.6),
+    (1.6, -1.6),
+    (-1.6, 1.6),
+    (1.6, 1.6),
+    (0.0, 0.0),
+    (-0.7, -2.7),
+    (0.7, -2.7),
+    (-2.35, -1.3),
+    (-2.35, 0.9),
+    (-2.75, -0.2),
+    (2.0, 1.9),
+];
+
+/// `v` turned by `yaw` about the vertical (as `Mat4::from_rotation_y`).
+fn turn_y(v: Vec3, yaw: f32) -> Vec3 {
+    let (s, c) = yaw.sin_cos();
+    Vec3::new(v.x * c + v.z * s, v.y, -v.x * s + v.z * c)
+}
+
 /// How far she walks from `p`, out to `limit` metres, in the controller's own steps (12 cm, up a
 /// step or down any drop): the top of an altar walled by its rim, or a pocket between props,
 /// reaches less than a metre.
@@ -744,8 +766,10 @@ pub struct Dungeon {
     pub pozo: Option<Box<pozo::Pozo>>,
     /// The shaft as she last left it (its galleries stay open a while).
     pub pozo_memory: Option<pozo::Memory>,
-    /// Where the shaft's winch stands in the mine (by the Tendero's stall).
+    /// Where the shaft's winch stands in the mine (by the Tendero's stall), and the way its front
+    /// faces (a quarter turn).
     pub shaft: Option<Vec3>,
+    pub shaft_yaw: f32,
     /// Her pick and bag for the shaft (the best she owns; the game fills it from her things).
     pub gear: pozo::Gear,
     /// The gold she keeps at home (the game mirrors it every frame) and what the Tendero took of it.
@@ -820,7 +844,11 @@ impl Dungeon {
         run.checkpoint = run.controller.position;
         run.notice =
             "Alinea las tres runas, vence al Custodio y abre la garganta del Corazón.".into();
-        run.shaft = run.find_shaft();
+        if let Some((at, yaw)) = run.find_shaft() {
+            run.shaft = Some(at);
+            run.shaft_yaw = yaw;
+            run.solid_headframe(at, yaw);
+        }
         Ok(run)
     }
 
@@ -946,6 +974,7 @@ impl Dungeon {
             pozo: None,
             pozo_memory: None,
             shaft: None,
+            shaft_yaw: 0.0,
             gear: Default::default(),
             purse: 0,
             purse_spent: 0,
@@ -1204,18 +1233,71 @@ impl Dungeon {
     /// The named champions' powers while she is in their room: embers, volleys, the dead
     /// raised, their fury.
     /// Where the shaft's winch stands: a little east of the Tendero's stall, on open ground.
-    fn find_shaft(&self) -> Option<Vec3> {
+    /// Where the head-frame (tools/castillete_blender.py) stands by the Tendero's stall, and the
+    /// way it faces: a quarter turn with its deck, winch and cart all on clear floor at his level,
+    /// its open front toward where she comes in from, as near that as fits.
+    fn find_shaft(&self) -> Option<(Vec3, f32)> {
         let npc = self.authored.as_ref()?.npcs.first()?;
         let want = npc.position + Vec3::new(3.6, 0.0, 1.2);
-        (0..48).find_map(|k| {
+        let from = self.map.spawn() - want;
+        let quarter = std::f32::consts::FRAC_PI_2;
+        let toward = (from.x.atan2(from.z) / quarter).round() * quarter;
+        let fits = |at: Vec3, yaw: f32| {
+            HEADFRAME_FOOT.iter().all(|&(x, z)| {
+                let p = at + turn_y(Vec3::new(x, 0.0, z), yaw);
+                self.map
+                    .capsule_floor(p + Vec3::Y * 0.6, 0.3)
+                    .is_some_and(|y| (y - at.y).abs() < 0.45)
+            })
+        };
+        let placed = (0..60).find_map(|k| {
             let r = (k / 12) as f32 * 0.6;
             let a = k as f32 * std::f32::consts::TAU / 12.0;
             let at = want + Vec3::new(a.cos() * r, 0.0, a.sin() * r);
-            self.map
-                .capsule_floor(at + Vec3::Y * 0.6, 1.1)
-                .filter(|y| (y - npc.position.y).abs() < 0.8)
-                .map(|y| Vec3::new(at.x, y, at.z))
+            let y = self
+                .map
+                .capsule_floor(at + Vec3::Y * 0.6, 0.3)
+                .filter(|y| (y - npc.position.y).abs() < 0.8)?;
+            let at = Vec3::new(at.x, y, at.z);
+            [0.0, quarter, -quarter, 2.0 * quarter]
+                .into_iter()
+                .map(|turn| toward + turn)
+                .find(|&yaw| fits(at, yaw))
+                .map(|yaw| (at, yaw))
+        });
+        // nowhere it all fits: where the frame itself does, facing her way
+        placed.or_else(|| {
+            (0..48).find_map(|k| {
+                let r = (k / 12) as f32 * 0.6;
+                let a = k as f32 * std::f32::consts::TAU / 12.0;
+                let at = want + Vec3::new(a.cos() * r, 0.0, a.sin() * r);
+                self.map
+                    .capsule_floor(at + Vec3::Y * 0.6, 1.1)
+                    .filter(|y| (y - npc.position.y).abs() < 0.8)
+                    .map(|y| (Vec3::new(at.x, y, at.z), toward))
+            })
         })
+    }
+
+    /// The head-frame is solid: its four legs, the winch behind and the cart beside (boxes on the
+    /// map, as a quarter turn keeps them square).
+    fn solid_headframe(&mut self, at: Vec3, yaw: f32) {
+        let room = self.map.region_at(at);
+        let mut add = |center: (f32, f32), half: (f32, f32), height: f32| {
+            let c = at + turn_y(Vec3::new(center.0, 0.0, center.1), yaw);
+            let h = turn_y(Vec3::new(half.0, 0.0, half.1), yaw);
+            self.map.obstacles.push(Obstacle {
+                room,
+                center: c,
+                half: [h.x.abs(), h.z.abs()],
+                height,
+            });
+        };
+        for (x, z) in [(-1.3, -1.3), (1.3, -1.3), (-1.3, 1.3), (1.3, 1.3)] {
+            add((x, z), (0.18, 0.18), 4.0);
+        }
+        add((0.0, -2.25), (0.7, 0.5), 1.3);
+        add((-2.35, -0.2), (0.45, 0.62), 1.0);
     }
 
     /// Whether she stands by the shaft's winch (F takes her down).

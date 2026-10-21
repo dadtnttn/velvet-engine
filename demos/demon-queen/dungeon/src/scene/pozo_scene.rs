@@ -20,6 +20,106 @@ struct Nugget {
     chest: bool,
 }
 
+/// What moves a part of the head-frame, and where it shows.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Piece {
+    /// the tower, its sign, lanterns and head (in the mine)
+    Frame,
+    /// the sheave wheel and the winch's drum: they turn about their axles
+    Wheel,
+    Drum,
+    /// the cage (in the mine and down in the shaft's room)
+    Cage,
+    /// the cart of ore, its rails, the stones and the pick beside it (both)
+    Yard,
+}
+
+struct HeadPart {
+    piece: Piece,
+    mesh: MeshHandle,
+    base: Mat4,
+    material: Material3D,
+    texture: Option<TextureHandle>,
+}
+
+/// The head-frame's model (tools/castillete_blender.py) on the GPU, and the planks' texture for
+/// the timbers drawn round it.
+pub(super) struct Headframe {
+    parts: Vec<HeadPart>,
+    wood: Option<TextureHandle>,
+    iron: Option<TextureHandle>,
+}
+
+/// The wheel's hub and radius, the lanterns, the cage's shackle, in the model's frame (y up, its
+/// open front toward +z; the script prints them).
+const HUB: Vec3 = Vec3::new(0.0, 5.22, -0.75);
+const WHEEL_R: f32 = 0.72;
+const LANTERNS: [Vec3; 2] = [Vec3::new(-0.891, 1.98, 1.321), Vec3::new(0.891, 1.98, 1.321)];
+const CAGE_TOP: f32 = 2.67;
+
+impl Headframe {
+    pub(super) fn load(
+        renderer: &mut Wgpu3DRenderer,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+    ) -> Option<Self> {
+        let path = super::super::assets::root()
+            .join("mina")
+            .join("castillete.glb");
+        let model = GltfModel::load(&path).ok()?;
+        let wood = load_texture(renderer, device, queue, "old_planks_02");
+        let iron = load_texture(renderer, device, queue, "rusty_metal_04");
+        let mut parts = Vec::new();
+        for (index, mesh) in model.meshes.iter().enumerate() {
+            let name = model
+                .mesh_names
+                .get(index)
+                .map(String::as_str)
+                .unwrap_or("");
+            let piece = if name.starts_with("rueda") {
+                Piece::Wheel
+            } else if name.starts_with("tambor") {
+                Piece::Drum
+            } else if name.starts_with("jaula") {
+                Piece::Cage
+            } else if ["vagoneta", "carga", "piedras"]
+                .iter()
+                .any(|p| name.starts_with(p))
+                || name.contains("vias")
+                || name.contains("pico")
+            {
+                Piece::Yard
+            } else {
+                Piece::Frame
+            };
+            // the scanned textures are dark: lifted, as the mine's
+            let (texture, lift) = if name.contains("madera") {
+                (wood, 1.35)
+            } else if name.contains("hierro") {
+                (iron, 1.25)
+            } else {
+                (None, 1.0)
+            };
+            let c = mesh.material.base_color;
+            let mut material =
+                Material3D::rgb(c[0] * lift, c[1] * lift, c[2] * lift).with_ambient_occlusion(0.2);
+            if name.starts_with("farol") {
+                material = material.with_emission(3.2);
+            } else if name.starts_with("carga") && !name.contains("carbon") {
+                material = material.with_emission(0.35);
+            }
+            parts.push(HeadPart {
+                piece,
+                mesh: renderer.upload_mesh(device, mesh).ok()?,
+                base: model.mesh_transform(index),
+                material,
+                texture,
+            });
+        }
+        (!parts.is_empty()).then_some(Self { parts, wood, iron })
+    }
+}
+
 /// What the shaft keeps on the GPU.
 pub(super) struct PozoArt {
     seed: u64,
@@ -371,6 +471,19 @@ fn oriented(center: Vec3, x: Vec3, y: Vec3, size: Vec3) -> Mat4 {
 }
 
 impl Scene {
+    /// The head-frame's model, loaded the first time it shows.
+    pub(super) fn ensure_headframe(
+        &mut self,
+        renderer: &mut Wgpu3DRenderer,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+    ) {
+        if !self.headframe_tried {
+            self.headframe_tried = true;
+            self.headframe = Headframe::load(renderer, device, queue);
+        }
+    }
+
     fn push_box(&self, draws: &mut Vec<MeshDraw3D>, transform: Mat4, color: [f32; 3], glow: f32) {
         let mut material = Material3D::rgb(color[0], color[1], color[2]);
         if glow > 0.0 {
@@ -398,8 +511,64 @@ impl Scene {
         );
     }
 
-    /// The winch's head-frame over a shaft's cage: four posts, the beams, the wheel, the rope and
-    /// the cage; `foot` its middle on the ground, `yaw` the way it faces.
+    /// A timber between two points, its planks' texture on it (`shade` darkens it).
+    fn timber(
+        &self,
+        draws: &mut Vec<MeshDraw3D>,
+        wood: Option<TextureHandle>,
+        a: Vec3,
+        b: Vec3,
+        thick: f32,
+        shade: f32,
+    ) {
+        let d = b - a;
+        let y = d.normalize_or_zero();
+        let side = if y.y.abs() > 0.9 { Vec3::X } else { Vec3::Y };
+        let x = y.cross(side).normalize_or_zero();
+        let lift = 1.35 * shade;
+        draws.push(MeshDraw3D {
+            mesh: self.cube,
+            transform: oriented((a + b) * 0.5, x, y, Vec3::new(thick, d.length(), thick)),
+            material: Material3D::rgb(lift, lift * 0.94, lift * 0.88).with_ambient_occlusion(0.2),
+            texture: wood,
+        });
+    }
+
+    /// A lantern hanging at `at`: its iron cage and lit glass, and its light.
+    fn lantern(
+        &self,
+        draws: &mut Vec<MeshDraw3D>,
+        lights: &mut Vec<PointLight3D>,
+        at: Vec3,
+        flicker: f32,
+        reach: f32,
+    ) {
+        let iron = [0.16, 0.15, 0.15];
+        self.push_box(
+            draws,
+            oriented(at + Vec3::Y * 0.15, Vec3::X, Vec3::Y, Vec3::new(0.22, 0.05, 0.22)),
+            iron,
+            0.0,
+        );
+        self.push_box(
+            draws,
+            oriented(at - Vec3::Y * 0.15, Vec3::X, Vec3::Y, Vec3::new(0.24, 0.05, 0.24)),
+            iron,
+            0.0,
+        );
+        self.push_box(
+            draws,
+            oriented(at, Vec3::X, Vec3::Y, Vec3::new(0.15, 0.26, 0.15)),
+            [1.0, 0.78, 0.42],
+            3.2,
+        );
+        lights.push(PointLight3D::new(at, [1.0, 0.66, 0.32], 5.5 * flicker, reach));
+    }
+
+    /// The head-frame (tools/castillete_blender.py). In the mine all of it at `foot` facing `yaw`;
+    /// down in the shaft's room (`below`) only its cage, come down its guides from the ceiling,
+    /// and the cart and stones beside it. The wheel and the winch's drum turn by `turn`.
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn draw_headframe(
         &self,
         draws: &mut Vec<MeshDraw3D>,
@@ -407,80 +576,70 @@ impl Scene {
         foot: Vec3,
         yaw: f32,
         elapsed: f32,
-        cage: bool,
+        below: bool,
+        turn: f32,
     ) {
-        let wood = [0.42, 0.27, 0.14];
-        let dark = [0.26, 0.17, 0.09];
-        let (s, c) = yaw.sin_cos();
-        let at = |x: f32, y: f32, z: f32| foot + Vec3::new(x * c + z * s, y, -x * s + z * c);
-        let top = 4.4;
-        for (x, z) in [(-1.3, -1.1), (1.3, -1.1), (-1.3, 1.1), (1.3, 1.1)] {
-            self.beam(draws, at(x, 0.0, z), at(x * 0.82, top, z * 0.82), 0.2, wood);
-        }
-        for (a, b) in [
-            ((-1.07, -0.9), (1.07, -0.9)),
-            ((-1.07, 0.9), (1.07, 0.9)),
-            ((-1.07, -0.9), (-1.07, 0.9)),
-            ((1.07, -0.9), (1.07, 0.9)),
-        ] {
-            self.beam(draws, at(a.0, top, a.1), at(b.0, top, b.1), 0.22, dark);
-            self.beam(
-                draws,
-                at(a.0 * 1.2, 1.9, a.1 * 1.2),
-                at(b.0 * 1.2, 1.9, b.1 * 1.2),
-                0.14,
-                wood,
-            );
-        }
-        // the wheel, turning while the cage runs
-        let hub = at(0.0, top + 0.55, 0.0);
-        let turn = elapsed * 0.6;
-        for k in 0..8 {
-            let a = turn + k as f32 * std::f32::consts::FRAC_PI_4;
-            let spoke = Vec3::new(a.cos() * c, a.sin(), -a.cos() * s) * 0.6;
-            self.beam(draws, hub, hub + spoke, 0.06, [0.3, 0.3, 0.32]);
-            let next = turn + (k + 1) as f32 * std::f32::consts::FRAC_PI_4;
-            let rim = Vec3::new(next.cos() * c, next.sin(), -next.cos() * s) * 0.6;
-            self.beam(draws, hub + spoke, hub + rim, 0.08, [0.36, 0.36, 0.38]);
-        }
-        self.beam(draws, at(-0.9, top, 0.0), at(0.9, top, 0.0), 0.16, dark);
-        self.beam(
-            draws,
-            hub + Vec3::Y * -0.6,
-            at(0.0, 2.3, 0.0),
-            0.03,
-            [0.62, 0.52, 0.34],
-        );
-        if cage {
-            let iron = [0.3, 0.3, 0.32];
-            for (x, z) in [(-0.7, -0.7), (0.7, -0.7), (-0.7, 0.7), (0.7, 0.7)] {
-                self.beam(draws, at(x, 0.0, z), at(x, 2.3, z), 0.06, iron);
+        let Some(frame) = self.headframe.as_ref() else {
+            return;
+        };
+        let root = Mat4::from_translation(foot) * Mat4::from_rotation_y(yaw);
+        for part in &frame.parts {
+            let shown = match part.piece {
+                Piece::Cage | Piece::Yard => true,
+                _ => !below,
+            };
+            if !shown {
+                continue;
             }
-            for y in [0.05, 1.1, 2.3] {
-                for (a, b) in [
-                    ((-0.7, -0.7), (0.7, -0.7)),
-                    ((-0.7, 0.7), (0.7, 0.7)),
-                    ((-0.7, -0.7), (-0.7, 0.7)),
-                ] {
-                    self.beam(draws, at(a.0, y, a.1), at(b.0, y, b.1), 0.05, iron);
-                }
+            let local = match part.piece {
+                Piece::Wheel => part.base * Mat4::from_rotation_x(turn),
+                // the drum winds faster than the big wheel turns
+                Piece::Drum => part.base * Mat4::from_rotation_x(-turn * 2.4),
+                _ => part.base,
+            };
+            draws.push(MeshDraw3D {
+                mesh: part.mesh,
+                transform: root * local,
+                material: part.material,
+                texture: part.texture,
+            });
+        }
+        let rope = [0.72, 0.58, 0.36];
+        let flicker = |k: f32| 0.88 + 0.12 * (elapsed * 8.0 + k).sin();
+        if below {
+            // the cage's guides and rope go up into the ceiling, through a collar of timber
+            let top = ROOM_HEIGHT;
+            for (x, z) in [(-0.8, -0.8), (0.8, -0.8), (-0.8, 0.8), (0.8, 0.8)] {
+                let a = root.transform_point3(Vec3::new(x, 0.0, z));
+                self.timber(draws, frame.wood, a, a + Vec3::Y * top, 0.16, 0.8);
+            }
+            for (a, b) in [
+                ((-1.0, -1.0), (1.0, -1.0)),
+                ((-1.0, 1.0), (1.0, 1.0)),
+                ((-1.0, -1.0), (-1.0, 1.0)),
+                ((1.0, -1.0), (1.0, 1.0)),
+            ] {
+                let pa = root.transform_point3(Vec3::new(a.0, top - 0.15, a.1));
+                let pb = root.transform_point3(Vec3::new(b.0, top - 0.15, b.1));
+                self.timber(draws, frame.wood, pa, pb, 0.3, 0.7);
+            }
+            let hook = root.transform_point3(Vec3::new(0.0, CAGE_TOP, 0.0));
+            self.beam(draws, hook, Vec3::new(hook.x, foot.y + top, hook.z), 0.035, rope);
+        } else {
+            // the rope over the wheel's front and down to the cage
+            let over = root.transform_point3(HUB + Vec3::new(0.0, 0.0, WHEEL_R));
+            let hook = root.transform_point3(Vec3::new(0.0, CAGE_TOP, HUB.z + WHEEL_R));
+            self.beam(draws, over, hook, 0.035, rope);
+            for (k, l) in LANTERNS.iter().enumerate() {
+                let at = root.transform_point3(*l);
+                lights.push(PointLight3D::new(
+                    at,
+                    [1.0, 0.66, 0.32],
+                    2.4 * flicker(k as f32),
+                    9.0,
+                ));
             }
         }
-        // a lantern on a post
-        let lamp = at(1.3, 2.6, -1.25);
-        self.push_box(
-            draws,
-            oriented(lamp, Vec3::X, Vec3::Y, Vec3::new(0.14, 0.2, 0.14)),
-            [1.0, 0.78, 0.4],
-            3.5,
-        );
-        let flicker = 0.9 + 0.1 * (elapsed * 9.0).sin();
-        lights.push(PointLight3D::new(
-            lamp,
-            [1.0, 0.66, 0.32],
-            2.6 * flicker,
-            9.0,
-        ));
     }
 
     /// The pick in her right hand: raised, brought down and back with each blow.
@@ -525,40 +684,65 @@ impl Scene {
         let across = blade.cross(right).normalize_or_zero();
         let a = hand - blade * 0.08;
         let b = hand + blade * 0.48;
-        self.push_box(
-            draws,
-            oriented(
-                (a + b) * 0.5,
-                right,
-                blade,
-                Vec3::new(0.034, (b - a).length(), 0.034),
-            ),
-            [0.45, 0.3, 0.16],
+        let (wood, iron) = self
+            .headframe
+            .as_ref()
+            .map_or((None, None), |h| (h.wood, h.iron));
+        let mut part = |transform: Mat4, color: [f32; 3], texture: Option<TextureHandle>, glow: f32| {
+            let mut material = Material3D::rgb(color[0], color[1], color[2]);
+            if glow > 0.0 {
+                material = material.with_emission(glow);
+            }
+            draws.push(MeshDraw3D {
+                mesh: self.cube,
+                transform,
+                material,
+                texture,
+            });
+        };
+        // the haft, wood with a leather grip at the fist
+        part(
+            oriented((a + b) * 0.5, right, blade, Vec3::new(0.036, (b - a).length(), 0.036)),
+            [1.1, 0.86, 0.66],
+            wood,
             0.0,
         );
+        part(
+            oriented(hand + blade * 0.02, right, blade, Vec3::new(0.044, 0.14, 0.044)),
+            [0.26, 0.15, 0.09],
+            None,
+            0.0,
+        );
+        // the head: an iron eye round the haft's end, a long spike and a short blade
         let glow = if pick.tier >= 4 { 0.6 } else { 0.0 };
-        self.push_box(
-            draws,
-            oriented(
-                b + across * 0.04,
-                right,
-                across,
-                Vec3::new(0.045, 0.38, 0.05),
-            ),
-            pick.color,
-            glow,
+        let metal = [
+            pick.color[0] * 1.5 + 0.1,
+            pick.color[1] * 1.5 + 0.1,
+            pick.color[2] * 1.5 + 0.1,
+        ];
+        part(
+            oriented(b, right, blade, Vec3::new(0.06, 0.09, 0.06)),
+            [0.5, 0.48, 0.46],
+            iron,
+            0.0,
         );
-        self.push_box(
-            draws,
-            oriented(
-                b + across * 0.23,
-                right,
-                across,
-                Vec3::new(0.026, 0.09, 0.03),
-            ),
-            pick.color,
-            glow,
-        );
+        for (along, length, thick, tip) in [(0.2, 0.3, 0.05, 0.1), (-0.13, 0.17, 0.055, 0.07)] {
+            let mid = b + across * along;
+            part(
+                oriented(mid, right, across, Vec3::new(thick, length, thick * 1.1)),
+                metal,
+                iron,
+                glow,
+            );
+            // and its point
+            let end = mid + across * (length * 0.5 + tip * 0.45) * along.signum();
+            part(
+                oriented(end, right, across, Vec3::new(thick * 0.55, tip, thick * 0.6)),
+                metal,
+                iron,
+                glow,
+            );
+        }
     }
 
     /// The shaft and the room round its mouth, then the HUD.
@@ -584,6 +768,7 @@ impl Scene {
             self.pozo_art = Some(PozoArt::new(pozo, renderer, device, queue));
         }
         let mut art = self.pozo_art.take().expect("just made");
+        self.ensure_headframe(renderer, device, queue);
         art.update(pozo, renderer, device);
         let mut draws = Vec::new();
         let mut lights = Vec::new();
@@ -596,8 +781,9 @@ impl Scene {
             });
         }
         let depth = Pozo::depth_of(run.controller.position);
-        // the bands she can see: from the mouth (looking down from the top) to well below her
-        let near = (depth as i32 - 18).max(0).div_euclid(BAND);
+        // the bands she can see: from the mouth (she looks up its walls from the bottom) to well
+        // below her
+        let near = 0;
         let far = (depth as i32 + 30).div_euclid(BAND);
         for (&(band, texture), &mesh) in &art.bands {
             if band < near || band > far {
@@ -669,51 +855,158 @@ impl Scene {
         for (_, at, color, glow) in glows.into_iter().take(5) {
             lights.push(PointLight3D::new(at, color, 0.9 * glow, 3.2));
         }
-        // the rim of the shaft: timbers round the mouth; lamps at its corners
-        let rim = [0.4, 0.26, 0.13];
+        let wood = art.textures[3];
         let w = WIDTH as f32;
-        for (a, b) in [
-            (Vec3::new(-0.1, 0.06, -0.1), Vec3::new(w + 0.1, 0.06, -0.1)),
-            (
-                Vec3::new(-0.1, 0.06, w + 0.1),
-                Vec3::new(w + 0.1, 0.06, w + 0.1),
-            ),
-            (Vec3::new(-0.1, 0.06, -0.1), Vec3::new(-0.1, 0.06, w + 0.1)),
-            (
-                Vec3::new(w + 0.1, 0.06, -0.1),
-                Vec3::new(w + 0.1, 0.06, w + 0.1),
-            ),
-        ] {
-            self.beam(&mut draws, a, b, 0.2, rim);
-        }
+        let (lo, hi) = (-LEDGE as f32, (WIDTH + LEDGE) as f32);
         let flicker = |k: f32| 0.88 + 0.12 * (run.elapsed * 7.0 + k).sin();
-        for (k, (x, z)) in [
-            (-1.4, -1.4),
-            (w + 1.4, -1.4),
-            (-1.4, w + 1.4),
-            (w + 1.4, w + 1.4),
-        ]
-        .into_iter()
-        .enumerate()
-        {
-            let foot = Vec3::new(x, 0.0, z);
-            self.beam(&mut draws, foot, foot + Vec3::Y * 2.4, 0.16, rim);
-            let lamp = foot + Vec3::Y * 2.5;
-            self.push_box(
+        // the rim of the shaft: timbers round its mouth
+        for (a, b) in [
+            (Vec3::new(-0.15, 0.08, -0.15), Vec3::new(w + 0.15, 0.08, -0.15)),
+            (Vec3::new(-0.15, 0.08, w + 0.15), Vec3::new(w + 0.15, 0.08, w + 0.15)),
+            (Vec3::new(-0.15, 0.08, -0.15), Vec3::new(-0.15, 0.08, w + 0.15)),
+            (Vec3::new(w + 0.15, 0.08, -0.15), Vec3::new(w + 0.15, 0.08, w + 0.15)),
+        ] {
+            self.timber(&mut draws, wood, a, b, 0.28, 0.75);
+        }
+        // the room is timbered: posts along its walls every three metres, caps across its ceiling
+        let mut posts = Vec::new();
+        let mut z = lo + 1.5;
+        while z < hi {
+            posts.push((Vec3::new(lo + 0.2, 0.0, z), Vec3::new(hi - 0.2, 0.0, z)));
+            z += 3.0;
+        }
+        for (k, (a, b)) in posts.iter().enumerate() {
+            for p in [*a, *b] {
+                self.timber(&mut draws, wood, p, p + Vec3::Y * ROOM_HEIGHT, 0.32, 0.8);
+            }
+            let cap = Vec3::Y * (ROOM_HEIGHT - 0.2);
+            self.timber(&mut draws, wood, *a + cap, *b + cap, 0.34, 0.65);
+            // braces from each post up to its cap
+            for (p, d) in [(*a, 1.0f32), (*b, -1.0)] {
+                self.timber(
+                    &mut draws,
+                    wood,
+                    p + Vec3::new(0.0, ROOM_HEIGHT - 1.4, 0.0),
+                    p + Vec3::new(d * 1.2, ROOM_HEIGHT - 0.25, 0.0),
+                    0.16,
+                    0.7,
+                );
+            }
+            // a lantern on every other post
+            if k % 2 == 0 {
+                for (p, d) in [(*a, 1.0f32), (*b, -1.0)] {
+                    self.lantern(
+                        &mut draws,
+                        &mut lights,
+                        p + Vec3::new(d * 0.32, 2.6, 0.0),
+                        flicker(k as f32 + d),
+                        13.0,
+                    );
+                }
+            }
+        }
+        // two lamps hung from the caps over the shaft's mouth
+        for (k, x) in [(0usize, w * 0.3), (1, w * 0.7)] {
+            let z = posts
+                .iter()
+                .map(|(a, _)| a.z)
+                .min_by(|a, b| (a - w * 0.5).abs().total_cmp(&(b - w * 0.5).abs()))
+                .unwrap_or(w * 0.5);
+            let hook = Vec3::new(x, ROOM_HEIGHT - 0.35, z);
+            self.beam(&mut draws, hook, hook - Vec3::Y * 1.2, 0.02, [0.2, 0.19, 0.18]);
+            self.lantern(
                 &mut draws,
-                oriented(lamp, Vec3::X, Vec3::Y, Vec3::new(0.16, 0.22, 0.16)),
-                [1.0, 0.76, 0.4],
-                3.2,
+                &mut lights,
+                hook - Vec3::Y * 1.45,
+                flicker(9.0 + k as f32),
+                16.0,
             );
-            lights.push(PointLight3D::new(
-                lamp,
-                [1.0, 0.64, 0.3],
-                2.4 * flicker(k as f32),
-                12.0,
-            ));
+        }
+        // rings of timber down the shaft every ten metres, in its walls (the rock hides them
+        // until she digs to them), a lamp at their corners
+        let deepest = pozo.deepest.max(0);
+        let mut ring = 10;
+        while ring <= pozo.depth_shown() {
+            let y = -(ring as f32) + 0.18;
+            if (ring - depth as i32).abs() < 40 {
+                for (a, b) in [
+                    (Vec3::new(0.0, y, 0.0), Vec3::new(w, y, 0.0)),
+                    (Vec3::new(0.0, y, w), Vec3::new(w, y, w)),
+                    (Vec3::new(0.0, y, 0.0), Vec3::new(0.0, y, w)),
+                    (Vec3::new(w, y, 0.0), Vec3::new(w, y, w)),
+                ] {
+                    self.timber(&mut draws, wood, a, b, 0.36, 0.7);
+                }
+                if ring <= deepest + 1 {
+                    for (x, z) in [(0.35, 0.35), (w - 0.35, 0.35), (0.35, w - 0.35), (w - 0.35, w - 0.35)] {
+                        let k = ring.min(deepest);
+                        let bx = (x as i32).clamp(0, WIDTH - 1);
+                        let bz = (z as i32).clamp(0, WIDTH - 1);
+                        if pozo.open(bx, k, bz) {
+                            let at = Vec3::new(x, y - 0.32, z);
+                            self.push_box(
+                                &mut draws,
+                                oriented(at, Vec3::X, Vec3::Y, Vec3::new(0.14, 0.22, 0.14)),
+                                [1.0, 0.76, 0.4],
+                                3.0,
+                            );
+                            lights.push(PointLight3D::new(
+                                at,
+                                [1.0, 0.62, 0.3],
+                                2.2 * flicker(ring as f32 + x),
+                                9.0,
+                            ));
+                        }
+                    }
+                }
+            }
+            ring += 10;
+        }
+        // the miner's ladder down the west wall, as deep as she has dug
+        let (top, bottom) = (
+            (-(depth - 26.0)).min(0.0),
+            -((deepest + 1) as f32).min(depth + 26.0),
+        );
+        if bottom < top {
+            for z in [4.62, 5.38] {
+                self.timber(
+                    &mut draws,
+                    wood,
+                    Vec3::new(0.05, top + 0.9, z),
+                    Vec3::new(0.05, bottom, z),
+                    0.07,
+                    0.7,
+                );
+            }
+            let mut y = top - 0.25;
+            while y > bottom {
+                self.timber(
+                    &mut draws,
+                    wood,
+                    Vec3::new(0.06, y, 4.62),
+                    Vec3::new(0.06, y, 5.38),
+                    0.05,
+                    0.7,
+                );
+                y -= 0.45;
+            }
         }
         let (arrival, yaw) = Pozo::arrival();
-        self.draw_headframe(&mut draws, &mut lights, arrival, yaw, run.elapsed, true);
+        // the cage stands where she arrives, its open side toward the shaft
+        let turn = if pozo.hauling.is_some() {
+            run.elapsed * 4.0
+        } else {
+            0.0
+        };
+        self.draw_headframe(
+            &mut draws,
+            &mut lights,
+            arrival,
+            yaw + std::f32::consts::PI,
+            run.elapsed,
+            true,
+            turn,
+        );
         // her helmet lamp: the shaft is dark below the lamps of its mouth
         let lamp =
             eye + Vec3::Y * 0.12 + (camera.target - camera.position).normalize_or_zero() * 0.05;
@@ -786,7 +1079,9 @@ impl Scene {
         let mut environment = EnvironmentFrame3D::default();
         environment.clear_color = [fog[0], fog[1], fog[2], 1.0];
         environment.celestial = Celestial3D::default();
-        let ambient = 0.085 - 0.03 * (depth / 40.0).clamp(0.0, 1.0);
+        // the room round the mouth is lamp-lit; the shaft darkens as it goes down
+        let ambient = 0.085 - 0.03 * (depth / 40.0).clamp(0.0, 1.0)
+            + 0.06 * (1.0 - depth / 6.0).clamp(0.0, 1.0);
         environment.lighting = Lighting3D {
             direction_to_light: Vec3::new(-0.3, 0.8, 0.2).normalize_or_zero(),
             key_color: [ambient * 0.5, ambient * 0.46, ambient * 0.42],

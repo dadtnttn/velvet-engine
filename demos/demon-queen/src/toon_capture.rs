@@ -7215,9 +7215,40 @@ pub(super) fn capture(out: &Path) -> Result<()> {
                 app.dungeon.close_stall();
             }
         }
+        // The shaft's head-frame by the stall, from its front and from a corner.
+        for (view, side) in [("castillete", 0.35f32), ("castillete_lado", -0.9)] {
+            if !only
+                .as_deref()
+                .is_some_and(|o| o.split(',').any(|v| v == view))
+            {
+                continue;
+            }
+            let Some(shaft) = app.dungeon.shaft else {
+                continue;
+            };
+            let yaw = app.dungeon.shaft_yaw + side;
+            let at = shaft + Vec3::new(yaw.sin(), 0.0, yaw.cos()) * 8.0;
+            let y = app
+                .dungeon
+                .map
+                .capsule_floor(at + Vec3::Y * 1.0, 0.28)
+                .unwrap_or(shaft.y);
+            app.dungeon.controller.position = Vec3::new(at.x, y, at.z);
+            let look = shaft + Vec3::Y * 2.6 - (app.dungeon.controller.position + Vec3::Y * 1.62);
+            app.dungeon.controller.yaw = (-look.x).atan2(-look.z);
+            app.dungeon.controller.pitch = (look.y / look.length()).asin();
+            app.player = app.dungeon.controller.position;
+            save(&mut app, out, &format!("mina-{view}"))?;
+        }
         // Down the miner's shaft: its mouth, the bottom of a pit dug 26 m down (her pick raised at a
         // wall with ore), and the deep rock at 92 m.
-        for view in ["pozo_boca", "pozo_fondo", "pozo_hondo"] {
+        for view in [
+            "pozo_boca",
+            "pozo_fondo",
+            "pozo_hondo",
+            "pozo_sala",
+            "pozo_arriba",
+        ] {
             if !only
                 .as_deref()
                 .is_some_and(|o| o.split(',').any(|v| v == view))
@@ -7227,15 +7258,17 @@ pub(super) fn capture(out: &Path) -> Result<()> {
             app.dungeon.enter_pozo();
             let depth = match view {
                 "pozo_boca" => 8,
-                "pozo_fondo" => 26,
+                "pozo_fondo" | "pozo_arriba" | "pozo_sala" => 26,
                 _ => 92,
             };
             if let Some(pozo) = app.dungeon.pozo.as_mut() {
                 // a pit 4 blocks square down to `depth`, a stair of blocks cut down its side
+                // (looking up: the whole shaft dug out, wall to wall, to show its timbers)
+                let span = if view == "pozo_arriba" { 0..10 } else { 3..7 };
                 let mut blocks = Vec::new();
                 for k in 0..depth {
-                    for x in 3..7 {
-                        for z in 3..7 {
+                    for x in span.clone() {
+                        for z in span.clone() {
                             blocks.push([x, k, z]);
                         }
                     }
@@ -7244,6 +7277,10 @@ pub(super) fn capture(out: &Path) -> Result<()> {
             }
             let (eye, yaw, pitch) = match view {
                 "pozo_boca" => (Vec3::new(5.0, 0.0, -1.2), std::f32::consts::PI, -0.62),
+                // the room from beside the cage, across the shaft's mouth
+                "pozo_sala" => (Vec3::new(10.5, 0.0, 3.5), 0.75, 0.02),
+                // the bottom of the pit, looking up its walls to the room
+                "pozo_arriba" => (Vec3::new(4.5, -26.0, 4.5), 0.6, 1.05),
                 "pozo_fondo" => (
                     Vec3::new(4.0, -depth as f32, 4.0),
                     std::f32::consts::PI * 0.75,
@@ -7255,7 +7292,7 @@ pub(super) fn capture(out: &Path) -> Result<()> {
             app.dungeon.controller.yaw = yaw;
             app.dungeon.controller.pitch = pitch;
             app.player = eye;
-            if view != "pozo_boca" {
+            if !matches!(view, "pozo_boca" | "pozo_sala" | "pozo_arriba") {
                 app.dungeon.gear.pick = if view == "pozo_hondo" { 4 } else { 2 };
                 if let Some(pozo) = app.dungeon.pozo.as_mut() {
                     pozo.swing = 0.2;
