@@ -65,6 +65,48 @@ impl App {
         self.dungeon_mouse_captured = false;
     }
 
+    /// Down the mine she takes her pick and bag for the shaft (the best she owns), and what she
+    /// brought up out of it before (so the Tendero can buy it and the bag counts it).
+    fn carry_mining_things(&mut self) {
+        let inventory = &self.inventory;
+        self.dungeon.gear =
+            dungeon::pozo::Gear::from_owned(|id| inventory.get(id).is_some_and(|n| *n > 0));
+        let goods: Vec<String> = self
+            .inventory
+            .keys()
+            .filter(|id| dungeon::pozo::value(id).is_some())
+            .cloned()
+            .collect();
+        for id in goods {
+            if let Some(n) = self.inventory.remove(&id) {
+                *self.dungeon.materials.entry(id).or_default() += n;
+            }
+        }
+        let mut pack = self.backpack.clone();
+        pack.reconcile(&self.inventory);
+        self.backpack = pack;
+    }
+
+    /// What the Tendero sold her goes into her things, and the gold from home he took leaves it.
+    fn settle_mining_things(&mut self) {
+        let spent = std::mem::take(&mut self.dungeon.purse_spent);
+        if spent > 0 {
+            self.gold = self.gold.saturating_sub(spent);
+        }
+        let bought = std::mem::take(&mut self.dungeon.bought);
+        if !bought.is_empty() {
+            for id in bought {
+                *self.inventory.entry(id).or_default() += 1;
+            }
+            let mut pack = self.backpack.clone();
+            pack.reconcile(&self.inventory);
+            self.backpack = pack;
+            if !self.session_path.as_os_str().is_empty() {
+                self.persist_3d_state(true);
+            }
+        }
+    }
+
     /// The way down: not without something to defend herself with.
     pub(super) fn enter_dungeon(&mut self) {
         self.achievement_event("visit:mina");
@@ -96,6 +138,7 @@ impl App {
         // The relic sword, once found, goes on every expedition unless another
         // weapon was chosen in the equipment screen.
         self.apply_equipment();
+        self.carry_mining_things();
         self.dungeon.controller =
             velvet_dungeon::controller::Controller::new(self.dungeon.spawn_position());
         self.dungeon.controller.yaw = self.dungeon.spawn_yaw();
@@ -165,7 +208,19 @@ impl App {
             sprint: self.sprint,
             jump: std::mem::take(&mut self.dungeon.jump_requested),
         };
+        // what she has at home, for the Tendero's stall
+        self.dungeon.purse = self.gold;
+        let stall_was_open = self.dungeon.stall.open;
         self.dungeon.update(input, dt);
+        self.settle_mining_things();
+        if self.dungeon.stall.open != stall_was_open {
+            self.clear_input();
+            if self.dungeon.stall.open {
+                self.release_dungeon_mouse();
+            } else {
+                self.dungeon_mouse_captured = self.capture_dungeon_mouse();
+            }
+        }
         // The dungeon's sounds, heard from the Queen's eyes.
         let sounds = self.dungeon.take_sounds();
         self.poll_audio_boot();

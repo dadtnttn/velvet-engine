@@ -48,7 +48,11 @@ impl Dungeon {
             seed: self.seed(),
             rules_hash: self.map.rules_hash,
             config: self.map.config.clone(),
-            position: self.controller.position,
+            // saved down the shaft: she comes back by its winch, in the mine
+            position: self
+                .pozo
+                .as_ref()
+                .map_or(self.controller.position, |p| p.came_from.0),
             yaw: self.controller.yaw,
             pitch: self.controller.pitch,
             checkpoint: self.checkpoint,

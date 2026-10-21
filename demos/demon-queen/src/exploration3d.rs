@@ -1912,11 +1912,16 @@ mod dungeon_mode_tests {
         let camera = app.camera();
         assert_eq!(camera.orthographic_height, None);
         assert!((camera.position.y - app.dungeon.controller.position.y - 1.62).abs() < 0.001);
-        // Entrance orientation is seed-dependent, not always world +X.
-        let expected = velvet_dungeon::horizontal(
-            app.dungeon.map.rooms[0].sockets[0].position - app.dungeon.spawn_position(),
-        )
-        .normalize_or_zero();
+        // Entrance orientation is seed-dependent, not always world +X; the hand-made mine sets its own.
+        let expected = if app.dungeon.authored.is_some() {
+            let yaw = app.dungeon.spawn_yaw();
+            Vec3::new(-yaw.sin(), 0.0, -yaw.cos())
+        } else {
+            velvet_dungeon::horizontal(
+                app.dungeon.map.rooms[0].sockets[0].position - app.dungeon.spawn_position(),
+            )
+            .normalize_or_zero()
+        };
         assert!(
             (camera.target - camera.position)
                 .normalize_or_zero()

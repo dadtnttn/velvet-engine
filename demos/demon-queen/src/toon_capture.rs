@@ -7161,6 +7161,108 @@ pub(super) fn capture(out: &Path) -> Result<()> {
                 .replace(['@', '.'], "_");
             save(&mut app, out, &format!("mina-poses-{tag}"))?;
         }
+        // The Tendero in 3D by his stall, the winch over the miner's shaft beside it; his stall open.
+        for (view, open) in [("tendero3d", false), ("tienda_mina", true)] {
+            if !only
+                .as_deref()
+                .is_some_and(|o| o.split(',').any(|v| v == view))
+            {
+                continue;
+            }
+            let npc = app
+                .dungeon
+                .authored
+                .as_ref()
+                .and_then(|m| m.npcs.first().map(|n| n.position));
+            if let Some(npc) = npc {
+                let at = npc + Vec3::new(0.6, 0.0, 3.4);
+                let y = app
+                    .dungeon
+                    .map
+                    .capsule_floor(at + Vec3::Y * 0.5, 0.28)
+                    .unwrap_or(npc.y);
+                app.dungeon.controller.position = Vec3::new(at.x, y, at.z);
+                let look = npc + Vec3::new(1.6, 0.0, 0.0) - app.dungeon.controller.position;
+                app.dungeon.controller.yaw = (-look.x).atan2(-look.z);
+                app.dungeon.controller.pitch = -0.12;
+                app.player = app.dungeon.controller.position;
+                if open {
+                    app.dungeon.gold = 140;
+                    app.dungeon.purse = 900;
+                    app.dungeon.materials.insert("mineral_plata".into(), 7);
+                    app.dungeon.materials.insert("gema_rubi".into(), 2);
+                    app.dungeon.open_stall();
+                    app.dungeon.stall.said_at -= 5.0;
+                }
+                save(&mut app, out, &format!("mina-{view}"))?;
+                app.dungeon.close_stall();
+            }
+        }
+        // Down the miner's shaft: its mouth, the bottom of a pit dug 26 m down (her pick raised at a
+        // wall with ore), and the deep rock at 92 m.
+        for view in ["pozo_boca", "pozo_fondo", "pozo_hondo"] {
+            if !only
+                .as_deref()
+                .is_some_and(|o| o.split(',').any(|v| v == view))
+            {
+                continue;
+            }
+            app.dungeon.enter_pozo();
+            let depth = match view {
+                "pozo_boca" => 8,
+                "pozo_fondo" => 26,
+                _ => 92,
+            };
+            if let Some(pozo) = app.dungeon.pozo.as_mut() {
+                // a pit 4 blocks square down to `depth`, a stair of blocks cut down its side
+                let mut blocks = Vec::new();
+                for k in 0..depth {
+                    for x in 3..7 {
+                        for z in 3..7 {
+                            blocks.push([x, k, z]);
+                        }
+                    }
+                }
+                pozo.dig_out(blocks);
+            }
+            let (eye, yaw, pitch) = match view {
+                "pozo_boca" => (Vec3::new(5.0, 0.0, -1.2), std::f32::consts::PI, -0.62),
+                "pozo_fondo" => (
+                    Vec3::new(4.0, -depth as f32, 4.0),
+                    std::f32::consts::PI * 0.75,
+                    -0.05,
+                ),
+                _ => (Vec3::new(5.0, -depth as f32, 5.0), 0.4, -0.1),
+            };
+            app.dungeon.controller.position = eye;
+            app.dungeon.controller.yaw = yaw;
+            app.dungeon.controller.pitch = pitch;
+            app.player = eye;
+            if view != "pozo_boca" {
+                app.dungeon.gear.pick = if view == "pozo_hondo" { 4 } else { 2 };
+                if let Some(pozo) = app.dungeon.pozo.as_mut() {
+                    pozo.swing = 0.2;
+                }
+                app.dungeon.mine_notes.push((
+                    "+1 Hierro".into(),
+                    [0.72, 0.6, 0.52],
+                    app.dungeon.elapsed,
+                ));
+                app.dungeon.mine_notes.push((
+                    "+1 Plata".into(),
+                    [0.86, 0.88, 0.92],
+                    app.dungeon.elapsed,
+                ));
+                app.dungeon.materials.insert("mineral_hierro".into(), 14);
+            }
+            app.dungeon
+                .update(velvet_dungeon::controller::Input::default(), 1.0 / 60.0);
+            if let Some(pozo) = app.dungeon.pozo.as_mut() {
+                pozo.swing = 0.2;
+            }
+            save(&mut app, out, &format!("mina-{view}"))?;
+            app.dungeon.leave_pozo();
+        }
         // The mine's champions in a row before her in the loading hall, each in its own build and gear
         // (VELVET_FOE_POSE for one clip), the smith saying his first words.
         if only

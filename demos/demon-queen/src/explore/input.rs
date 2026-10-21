@@ -101,6 +101,10 @@ impl ApplicationHandler for App {
             }
             WindowEvent::CursorMoved { position, .. } => {
                 self.cursor_position = Some((position.x as f32, position.y as f32));
+                if self.dungeon_mode && self.dungeon.stall.open {
+                    let at = self.shop_pointer_position().map(|(x, y)| [x, y]);
+                    self.dungeon.stall_pointer(at);
+                }
                 if self.war.is_some() {
                     self.war_pointer();
                 }
@@ -173,6 +177,14 @@ impl ApplicationHandler for App {
                 ..
             } if self.mascot_held() => {
                 self.mascot_release();
+            }
+            // down the miner's shaft the pick digs while the button is held
+            WindowEvent::MouseInput {
+                state: ElementState::Released,
+                button: MouseButton::Left,
+                ..
+            } if self.dungeon_mode && !self.dungeon.map_open && self.dungeon.pozo.is_some() => {
+                self.dungeon.release_attack();
             }
             WindowEvent::MouseInput { state, button, .. }
                 if self.caricias_open()
@@ -342,6 +354,12 @@ impl ApplicationHandler for App {
                     }
                 }
                 if self.dungeon_mode {
+                    if self.dungeon.stall.open {
+                        if let Some((x, y)) = self.shop_pointer_position() {
+                            self.dungeon.stall_click([x, y]);
+                        }
+                        return;
+                    }
                     self.dungeon.swing_sword();
                     return;
                 }

@@ -10,6 +10,8 @@ mod glass;
 mod map;
 #[path = "hud_map3d.rs"]
 mod map3d;
+#[path = "hud_pozo.rs"]
+mod pozo_hud;
 use super::super::prompt_icons::{self, Icon, Prompt};
 use glass::{Rgba, Tone, CRIMSON, GREEN, INK, IVORY, MUTED};
 
@@ -738,11 +740,21 @@ impl Hud {
 
     pub(super) fn chrome(&self, run: &Dungeon, v: &mut Vec<Vertex>) {
         let room = &run.map.rooms[run.map.region_at(run.controller.position)];
-        let tone = Tone::new(run.catalog.biomes[room.biome].accent);
-        self.location_plate(run, &tone, v);
-        self.objective_card(run, &tone, v);
-        self.vitality_card(run, &tone, v);
-        self.controls_card(run, &tone, v);
+        let tone = if run.pozo.is_some() {
+            Tone::new([0.95, 0.62, 0.25])
+        } else {
+            Tone::new(run.catalog.biomes[room.biome].accent)
+        };
+        if run.pozo.is_some() {
+            self.pozo_hud(run, &tone, v);
+        } else if run.stall.open {
+            // the stall over the scene: the mine's cards wait
+        } else {
+            self.location_plate(run, &tone, v);
+            self.objective_card(run, &tone, v);
+            self.vitality_card(run, &tone, v);
+            self.controls_card(run, &tone, v);
+        }
         // Small quiet aiming diamond leaves most of the scene unobstructed.
         let hit_marker = run.sword_hit_flash > 0.0;
         diamond(
@@ -822,7 +834,9 @@ impl Hud {
                 rect(v, [1920.0 - band, 0.0, band, 1080.0], c);
             }
         }
-        self.boss_plate(run, &tone, v);
+        if run.pozo.is_none() {
+            self.boss_plate(run, &tone, v);
+        }
         if run.hit_flash > 0.0 {
             for y in [0.0, 1074.0] {
                 rect(
@@ -831,6 +845,9 @@ impl Hud {
                     [0.8, 0.004, 0.0, (run.hit_flash * 3.0).min(1.0)],
                 );
             }
+        }
+        if run.stall.open {
+            self.stall_panel(run, v);
         }
     }
 }

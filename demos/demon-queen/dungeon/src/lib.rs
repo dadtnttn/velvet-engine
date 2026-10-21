@@ -39,6 +39,8 @@ mod incidents;
 mod mine_art;
 #[path = "pickups.rs"]
 pub mod pickups;
+/// The shaft by the mine's mouth, dug block by block.
+pub mod pozo;
 #[path = "prompt_icons.rs"]
 pub mod prompt_icons;
 #[path = "replay.rs"]
@@ -56,6 +58,8 @@ pub mod scene;
 pub mod slime;
 #[path = "sound.rs"]
 pub mod sound;
+/// The Tendero's stall at the mine's mouth.
+pub mod stall;
 #[path = "streaming.rs"]
 mod streaming;
 #[path = "surfaces.rs"]
@@ -655,6 +659,21 @@ pub struct Dungeon {
     champion_state: std::collections::BTreeMap<usize, (f32, u8)>,
     /// What a champion is saying.
     pub speech: Option<Speech>,
+    /// The miner's shaft by the mouth, while she is down it.
+    pub pozo: Option<Box<pozo::Pozo>>,
+    /// Where the shaft's winch stands in the mine (by the Tendero's stall).
+    pub shaft: Option<Vec3>,
+    /// Her pick and bag for the shaft (the best she owns; the game fills it from her things).
+    pub gear: pozo::Gear,
+    /// The gold she keeps at home (the game mirrors it every frame) and what the Tendero took of it.
+    pub purse: u32,
+    pub purse_spent: u32,
+    /// What she bought down here, for the game to put in her things.
+    pub bought: Vec<String>,
+    /// The Tendero's stall.
+    pub stall: stall::Stall,
+    /// What the shaft gave her lately: the label, its colour, when.
+    pub mine_notes: Vec<(String, [f32; 3], f32)>,
     /// Per champion: what it has said (1 on seeing her, 2 raging, 4 falling), when it taunts next, how many
     /// taunts it has said.
     voices: std::collections::BTreeMap<usize, (u8, f32, usize)>,
@@ -718,6 +737,7 @@ impl Dungeon {
         run.checkpoint = run.controller.position;
         run.notice =
             "Alinea las tres runas, vence al Custodio y abre la garganta del Corazón.".into();
+        run.shaft = run.find_shaft();
         Ok(run)
     }
 
@@ -839,6 +859,14 @@ impl Dungeon {
             champion_state: Default::default(),
             speech: None,
             voices: Default::default(),
+            pozo: None,
+            shaft: None,
+            gear: Default::default(),
+            purse: 0,
+            purse_spent: 0,
+            bought: Vec::new(),
+            stall: Default::default(),
+            mine_notes: Vec::new(),
         }
     }
     pub fn seed(&self) -> u64 {
@@ -1090,6 +1118,175 @@ impl Dungeon {
 
     /// The named champions' powers while she is in their room: embers, volleys, the dead
     /// raised, their fury.
+    /// Where the shaft's winch stands: a little east of the Tendero's stall, on open ground.
+    fn find_shaft(&self) -> Option<Vec3> {
+        let npc = self.authored.as_ref()?.npcs.first()?;
+        let want = npc.position + Vec3::new(3.6, 0.0, 1.2);
+        (0..48).find_map(|k| {
+            let r = (k / 12) as f32 * 0.6;
+            let a = k as f32 * std::f32::consts::TAU / 12.0;
+            let at = want + Vec3::new(a.cos() * r, 0.0, a.sin() * r);
+            self.map
+                .capsule_floor(at + Vec3::Y * 0.6, 1.1)
+                .filter(|y| (y - npc.position.y).abs() < 0.8)
+                .map(|y| Vec3::new(at.x, y, at.z))
+        })
+    }
+
+    /// Whether she stands by the shaft's winch (F takes her down).
+    pub fn at_shaft(&self) -> bool {
+        self.pozo.is_none()
+            && self
+                .shaft
+                .is_some_and(|s| horizontal(s - self.controller.position).length() < 2.4)
+    }
+
+    /// Down the shaft: the cage takes her to its ledge.
+    pub fn enter_pozo(&mut self) {
+        let came_from = (self.controller.position, self.controller.yaw);
+        let seed = self.map.seed ^ 0x504f_5a4f;
+        let pozo = pozo::Pozo::new(seed, &self.map, came_from);
+        let (at, yaw) = pozo::Pozo::arrival();
+        self.controller.position = at;
+        self.controller.velocity = Vec3::ZERO;
+        self.controller.yaw = yaw;
+        self.controller.pitch = -0.25;
+        self.pozo = Some(Box::new(pozo));
+        self.auto_walk = false;
+        self.message(
+            "El Pozo del Minero: clic para picar (mantén pulsado), U para que el torno te suba.",
+        );
+        self.sound(sound::Sfx::ChestCreak, None, 0.6);
+    }
+
+    /// Back up and out to the mine by the winch.
+    pub fn leave_pozo(&mut self) {
+        let Some(pozo) = self.pozo.take() else {
+            return;
+        };
+        let (at, yaw) = pozo.came_from;
+        self.controller.position = at;
+        self.controller.velocity = Vec3::ZERO;
+        self.controller.yaw = yaw;
+        self.message(format!(
+            "Fuera del pozo. Tu marca: {} m.",
+            (pozo.deepest + 1).max(0)
+        ));
+    }
+
+    /// She stops holding the pick down.
+    pub fn release_attack(&mut self) {
+        if let Some(pozo) = self.pozo.as_mut() {
+            pozo.holding = false;
+        }
+    }
+
+    /// One step in the shaft: she walks its floors (or the winch hauls her up), and digs.
+    fn update_pozo(&mut self, input: Input, dt: f32) {
+        let dt = dt.clamp(0.0, 0.05);
+        self.elapsed += dt;
+        self.shake = (self.shake - dt * 1.6).max(0.0);
+        let Some(mut pozo) = self.pozo.take() else {
+            return;
+        };
+        if let Some(left) = pozo.hauling.as_mut() {
+            *left -= dt;
+            if *left <= 0.0 {
+                pozo.hauling = None;
+                let (at, yaw) = pozo::Pozo::arrival();
+                self.controller.position = at;
+                self.controller.velocity = Vec3::ZERO;
+                self.controller.yaw = yaw;
+                self.message("El torno te ha subido hasta la boca del pozo.");
+            }
+        } else {
+            let before = self.controller.position;
+            self.controller.step(&pozo.map, input, dt);
+            let walked = horizontal(self.controller.position - before).length();
+            self.step_distance += walked;
+            if self.step_distance > 1.6 && self.controller.grounded {
+                self.step_distance = 0.0;
+                self.sound(sound::Sfx::Footstep, None, 0.35);
+            }
+        }
+        let eye = self.controller.eye();
+        let forward = self.controller.forward();
+        let gear = self.gear;
+        let events = pozo.dig(
+            eye,
+            forward,
+            gear,
+            &mut self.materials,
+            &mut self.gold,
+            self.elapsed,
+            dt,
+        );
+        for event in events {
+            match event {
+                pozo::Event::Hit { at, rock } => {
+                    let c = rock.color();
+                    self.fx.push(combat::Fx::Burst {
+                        at,
+                        color: [c[0] * 0.55, c[1] * 0.5, c[2] * 0.45],
+                        count: 8,
+                        speed: 1.6,
+                        life: 0.35,
+                        gravity: 6.0,
+                        up: 0.6,
+                        length: 0.04,
+                        seed: (self.elapsed * 1000.0) as u32,
+                        age: 0.0,
+                    });
+                    self.sound(sound::Sfx::HitBone, Some(at), 0.45);
+                }
+                pozo::Event::Broke { at, rock } => {
+                    let c = rock.color();
+                    self.fx.push(combat::Fx::Burst {
+                        at,
+                        color: [c[0] * 0.6, c[1] * 0.55, c[2] * 0.5],
+                        count: 22,
+                        speed: 2.6,
+                        life: 0.6,
+                        gravity: 7.0,
+                        up: 0.8,
+                        length: 0.07,
+                        seed: (self.elapsed * 977.0) as u32,
+                        age: 0.0,
+                    });
+                    self.sound(sound::Sfx::Rubble, Some(at), 0.8);
+                    self.shake = self.shake.max(0.12);
+                }
+                pozo::Event::Got { label, color } => {
+                    let shiny = color.iter().copied().fold(0.0f32, f32::max) > 0.8;
+                    self.sound(
+                        if label.contains("oro") {
+                            sound::Sfx::Coins
+                        } else if shiny {
+                            sound::Sfx::RuneChime
+                        } else {
+                            sound::Sfx::Pickup
+                        },
+                        None,
+                        0.7,
+                    );
+                    self.mine_notes.push((label, color, self.elapsed));
+                }
+                pozo::Event::TooHard { needs } => self.message(format!(
+                    "Esta roca es demasiado dura: hace falta un {needs}."
+                )),
+                pozo::Event::Full => {
+                    self.message("La mochila está llena: sube (U) y véndeselo al Tendero.")
+                }
+            }
+        }
+        // effects fade
+        let player = self.controller.position;
+        self.fx.retain_mut(|effect| effect.tick(dt, player).1);
+        let now = self.elapsed;
+        self.mine_notes.retain(|n| now - n.2 < 3.6);
+        self.pozo = Some(pozo);
+    }
+
     /// A champion's name, as its bar shows it.
     pub fn champion_name(&self, spawn: &gameplay::Spawn) -> Option<String> {
         if let Some(c) = self
@@ -1686,6 +1883,14 @@ impl Dungeon {
             self.steer_map(input, dt.clamp(0.0, 0.05));
         }
         if self.seed_input.is_some() || self.map_open {
+            return;
+        }
+        if self.stall.open {
+            self.elapsed += dt.clamp(0.0, 0.05);
+            return;
+        }
+        if self.pozo.is_some() {
+            self.update_pozo(input, dt);
             return;
         }
         if self.auto_walk && input.forward == 0.0 {
@@ -2824,7 +3029,12 @@ impl Dungeon {
         );
     }
     pub fn swing_sword(&mut self) {
-        if self.seed_input.is_some() || self.map_open {
+        if self.seed_input.is_some() || self.map_open || self.stall.open {
+            return;
+        }
+        // in the shaft the pick: held down, it keeps digging
+        if let Some(pozo) = self.pozo.as_mut() {
+            pozo.holding = true;
             return;
         }
         if self.sword_swing > 0.0 {
@@ -3183,8 +3393,24 @@ impl Dungeon {
     /// What F does here: its icon, verb and what it acts on.
     pub fn interaction(&self) -> Option<prompt_icons::Prompt> {
         use prompt_icons::{Icon, Prompt};
+        if self.pozo.is_some() {
+            return pozo::Pozo::at_cage(self.controller.position).then(|| {
+                Prompt::new(Icon::Leave, "Salir del pozo").detail("Volver a la boca de la mina")
+            });
+        }
         if let Some(npc) = self.npc_near() {
+            if npc.id == "tendero" {
+                return Some(
+                    Prompt::new(Icon::Shop, "Comerciar").detail("Picos, mochilas y minerales"),
+                );
+            }
             return Some(Prompt::new(Icon::Talk, "Hablar").detail(npc.name.clone()));
+        }
+        if self.at_shaft() {
+            return Some(
+                Prompt::new(Icon::Mine, "Bajar al Pozo del Minero")
+                    .detail("Pica hacia abajo: cuanto más hondo, más vale"),
+            );
         }
         if let Some(mine) = &self.authored {
             if !(self.seal && self.crest)
@@ -3271,6 +3497,20 @@ impl Dungeon {
     }
     pub fn interact(&mut self) {
         if self.seed_input.is_some() || self.map_open {
+            return;
+        }
+        if self.pozo.is_some() {
+            if pozo::Pozo::at_cage(self.controller.position) {
+                self.leave_pozo();
+            }
+            return;
+        }
+        if self.npc_near().is_some_and(|npc| npc.id == "tendero") {
+            self.open_stall();
+            return;
+        }
+        if self.at_shaft() {
+            self.enter_pozo();
             return;
         }
         if let Some(npc) = self.npc_near() {
@@ -3521,6 +3761,25 @@ impl Dungeon {
             }
         }
         if repeat {
+            return;
+        }
+        if self.stall.open {
+            self.stall_key(code);
+            return;
+        }
+        if self.pozo.is_some() {
+            match code {
+                KeyF => self.interact(),
+                KeyU => {
+                    if let Some(pozo) = self.pozo.as_mut() {
+                        pozo.haul();
+                    }
+                }
+                KeyT => self.torch = !self.torch,
+                F3 => self.debug = !self.debug,
+                Space => self.jump_requested = true,
+                _ => {}
+            }
             return;
         }
         match code {

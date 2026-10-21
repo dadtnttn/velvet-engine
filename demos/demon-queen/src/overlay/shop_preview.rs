@@ -735,7 +735,8 @@ mod tests {
     #[test]
     fn every_catalog_item_has_a_renderable_svg() {
         let products = &super::super::super::shop::catalog().products;
-        assert_eq!(products.len(), 24);
+        // the villa's wares, the dungeon's leavings, the miner's shaft's goods and the Tendero's picks and bags
+        assert_eq!(products.len(), 47);
         let mut ids = std::collections::HashSet::new();
         for p in products {
             assert!(ids.insert(&p.id));

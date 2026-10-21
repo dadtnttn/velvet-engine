@@ -87,6 +87,18 @@ pub fn info(id: &str) -> Info {
         "sales_despertadoras" => info_of(1, 1, 5, None),
         "amuleto_ojo_cerrado" => info_of(1, 1, 1, None),
         "pendulo_practica" => info_of(1, 2, 1, None),
+        // What the miner's shaft gives, and what its Tendero sells (`dungeon::pozo`).
+        "mineral_carbon" | "mineral_cobre" | "mineral_hierro" | "mineral_plata" | "mineral_oro"
+        | "mineral_mithril" | "mineral_adamantita" => info_of(1, 1, 50, None),
+        "gema_amatista" | "gema_rubi" | "gema_zafiro" | "gema_esmeralda" | "corazonita" => {
+            info_of(1, 1, 50, None)
+        }
+        "fosil" => info_of(1, 1, 10, None),
+        "pico_hierro" | "pico_acero" | "pico_templado" | "pico_mithril" | "pico_runico"
+        | "pico_corazon" => info_of(1, 4, 1, None),
+        "mochila_cuero" | "mochila_reforzada" | "mochila_minero" | "carretilla" => {
+            info_of(2, 2, 1, None)
+        }
         _ => info_of(1, 1, 5, None),
     }
 }

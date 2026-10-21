@@ -1,4 +1,8 @@
 use super::{fp, hud::Hud, runes, visual, Dungeon};
+#[path = "scene/pozo_scene.rs"]
+mod pozo_scene;
+#[path = "scene/tendero.rs"]
+mod tendero;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use velvet_dungeon::*;
 use velvet_math::{Mat4, Vec3};
@@ -791,6 +795,11 @@ pub struct Scene {
     finish: super::finish::Finish,
     /// The hand-made mine's meshes, while its run is the one drawn, and its standing water.
     mine_art: Option<super::mine_art::MineArt>,
+    /// The miner's shaft's meshes and textures, while she is down it.
+    pozo_art: Option<pozo_scene::PozoArt>,
+    /// The Tendero's model (tried once).
+    tendero: Option<tendero::Tendero>,
+    tendero_tried: bool,
     mine_waters: Vec<super::water::WaterGpu>,
     pub stats: RenderStats,
     pub hud: Hud,
@@ -926,6 +935,9 @@ impl Scene {
             water_pool: Vec::new(),
             finish: super::finish::Finish::new(device, format),
             mine_art: None,
+            pozo_art: None,
+            tendero: None,
+            tendero_tried: false,
             mine_waters: Vec::new(),
             stats: Default::default(),
             hud: Hud::new(device, queue, format)?,
@@ -1082,6 +1094,11 @@ impl Scene {
         let mut phases = [0.0f32; 9];
         self.finish.resize(device, size);
         self.stats = Default::default();
+        // down the miner's shaft: its own scene
+        if run.pozo.is_some() {
+            self.render_pozo(run, renderer, device, queue, target, size, camera);
+            return;
+        }
         let signature = (run.map.seed, run.map.rules_hash);
         if self.signature != Some(signature) {
             for s in &mut self.slots {
@@ -1601,8 +1618,36 @@ impl Scene {
                     radius + 3.0,
                 ));
             }
+            if !self.tendero_tried {
+                self.tendero_tried = true;
+                self.tendero = tendero::Tendero::load(renderer, device);
+            }
             for npc in &mine.npcs {
-                self.draw_stick_figure(&mut draws, &mut lights, npc, run);
+                match (&self.tendero, npc.id.as_str()) {
+                    (Some(model), "tendero") => model.draw(
+                        &mut draws,
+                        &mut lights,
+                        npc.position,
+                        npc.face,
+                        run.controller.position,
+                        run.stall.open,
+                        run.elapsed,
+                    ),
+                    _ => self.draw_stick_figure(&mut draws, &mut lights, npc, run),
+                }
+            }
+            // the winch over the miner's shaft, by his stall
+            if let Some(shaft) = run.shaft {
+                let npc = mine.npcs.first().map_or(shaft, |n| n.position);
+                let away = shaft - npc;
+                self.draw_headframe(
+                    &mut draws,
+                    &mut lights,
+                    shaft,
+                    away.x.atan2(away.z),
+                    run.elapsed,
+                    false,
+                );
             }
             if !(run.seal && run.crest) {
                 for gate in &mine.gates {
