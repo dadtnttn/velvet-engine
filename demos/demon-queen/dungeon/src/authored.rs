@@ -37,6 +37,15 @@ struct File {
     waters: Vec<WaterData>,
     #[serde(default)]
     lake: Option<WaterData>,
+    #[serde(default)]
+    heart: Option<HeartData>,
+}
+
+/// The Heart: the middle of its body and the floor under it.
+#[derive(Deserialize)]
+struct HeartData {
+    center: [f32; 3],
+    floor: [f32; 3],
 }
 
 /// Standing water: an ellipse (`c`, `rx`, `ry` on the plan) or a rectangle (`rect`: x0, z0, x1, z1).
@@ -149,6 +158,8 @@ struct NpcData {
     p: [f32; 3],
     #[serde(default)]
     face: [f32; 2],
+    #[serde(default)]
+    lines: Vec<String>,
 }
 
 /// A way the Queen cannot take until the seal is turned and the Custodio's key is hers.
@@ -211,6 +222,8 @@ pub struct Npc {
     pub name: String,
     pub position: Vec3,
     pub face: Vec3,
+    /// What they say, one line each time she talks to them.
+    pub lines: Vec<String>,
 }
 
 /// What the hand-made mine adds to a run: its art, the names of its places, how each spawn
@@ -230,6 +243,8 @@ pub struct Authored {
     pub lamps: Vec<Lamp>,
     pub npcs: Vec<Npc>,
     pub pools: Vec<Pool>,
+    /// The Heart's middle (it beats round it) and the floor under it (its chamber breathes round it).
+    pub heart: Option<(Vec3, Vec3)>,
     /// The floor, metre by metre, for the map: every floor with room over it and a room.
     pub chart: Vec<ChartCell>,
     /// Where the Queen comes in, and which way she looks.
@@ -608,6 +623,7 @@ pub fn load() -> Result<(Blueprint, Authored, Vec<Slime>), String> {
                 name: n.name.clone(),
                 position: v3(n.p),
                 face: Vec3::new(n.face[0], 0.0, n.face[1]),
+                lines: n.lines.clone(),
             })
             .collect(),
         pools: file
@@ -617,6 +633,7 @@ pub fn load() -> Result<(Blueprint, Authored, Vec<Slime>), String> {
             .chain(file.lake.as_ref().and_then(|w| pool(w, true)))
             .collect(),
         chart,
+        heart: file.heart.as_ref().map(|h| (v3(h.center), v3(h.floor))),
         spawn: v3(file.spawn.p),
         spawn_yaw: file.spawn.yaw,
     };
@@ -956,5 +973,84 @@ mod tests {
                 "seal {seal}, key {crest}: through the gate {passed}"
             );
         }
+    }
+
+    /// The Heart awake in the mine: it spits blood orbs at her, raises a wave of servants when its
+    /// guardian falls to two thirds, and its ring of blood hurts her if she stands on the floor.
+    #[test]
+    fn the_heart_fights() {
+        use crate::{combat::Fx, Dungeon};
+        use velvet_dungeon::controller::Input;
+        if !available() {
+            return;
+        }
+        let mut run = Dungeon::mine().unwrap();
+        let (_, floor) = run.authored.as_ref().unwrap().heart.unwrap();
+        let boss = run
+            .actors
+            .iter()
+            .position(|a| run.map.spawns[a.spawn].kind == SpawnKind::Boss)
+            .unwrap();
+        let room = run.map.spawns[run.actors[boss].spawn].room;
+        // stand in the chamber, the guardian kept from reaching her
+        let (at, y) = (0..24)
+            .find_map(|k| {
+                let a = k as f32 * std::f32::consts::TAU / 24.0;
+                let at = floor + Vec3::new(a.cos(), 0.0, a.sin()) * 7.5;
+                run.map
+                    .capsule_floor(at + Vec3::Y * 0.4, 0.28)
+                    .filter(|y| {
+                        (y - floor.y).abs() < 0.6
+                            && run.map.room_at(Vec3::new(at.x, *y, at.z)) == Some(room)
+                    })
+                    .map(|y| (at, y))
+            })
+            .expect("floor in the Heart's chamber");
+        run.controller.position = Vec3::new(at.x, y, at.z);
+        assert_eq!(run.map.region_at(run.controller.position), room);
+        let before = run.actors.len();
+        let mut spat = false;
+        for _ in 0..(12 * 60) {
+            run.actors[boss].cooldown = 9.0;
+            run.actors[boss].position = floor + Vec3::new(4.0, 0.0, -4.0);
+            let was = (run.controller.position, run.health, run.notice.clone());
+            run.update(Input::default(), 1.0 / 60.0);
+            assert!(
+                (run.controller.position - was.0).length() < 2.0,
+                "she was moved from {:?} (health {}, {}) to {:?}: {}",
+                was.0,
+                was.1,
+                was.2,
+                run.controller.position,
+                run.notice
+            );
+            spat |= run.fx.iter().any(|fx| matches!(fx, Fx::Spell { .. }));
+            run.health = 100.0;
+        }
+        assert!(
+            run.heart.awake,
+            "the Heart woke (boss room {room} {}, she is in {} at {:?}, boss health {})",
+            run.map.rooms[room].template,
+            run.map.rooms[run.map.region_at(run.controller.position)].template,
+            run.controller.position,
+            run.actors[boss].health
+        );
+        assert!(spat, "the Heart spat blood at her");
+        // its guardian at half its life: a wave of servants
+        let full = run.map.spawns[run.actors[boss].spawn].health;
+        run.actors[boss].health = full * 0.5;
+        run.update(Input::default(), 1.0 / 60.0);
+        assert!(run.heart.thresholds >= 1, "the turning point passed");
+        assert!(run.actors.len() > before, "it raised servants");
+        // the ring of blood: standing on the floor where it passes, she is hurt once
+        let origin = floor;
+        run.heart.wave = Some((origin, 0.0));
+        run.heart.wave_hit = false;
+        run.health = 100.0;
+        for _ in 0..120 {
+            run.actors[boss].cooldown = 9.0;
+            run.update(Input::default(), 1.0 / 60.0);
+        }
+        assert!(run.heart.wave_hit, "the ring caught her");
     }
 }

@@ -61,7 +61,7 @@ pub fn melee_staff(definition: &str, kind: SpawnKind) -> bool {
 /// Body height in metres (the web fits every skeleton to this).
 pub fn body_height(kind: SpawnKind) -> f32 {
     match kind {
-        SpawnKind::Boss => 2.85,
+        SpawnKind::Boss => 3.9,
         SpawnKind::Miniboss => 2.36,
         _ => 1.95,
     }

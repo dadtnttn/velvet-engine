@@ -456,7 +456,21 @@ pub struct HeartState {
     pub rain: f32,
     /// Whether the player is in the Heart's chamber with its guardian alive.
     pub awake: bool,
+    /// Seconds to the Heart's next spit of blood at her.
+    pub spit_in: f32,
+    /// A ring of blood racing out from the Heart over the floor: from where, and how long ago.
+    pub wave: Option<(Vec3, f32)>,
+    /// The ring already caught her.
+    pub wave_hit: bool,
+    /// Beats since it woke, for the rings.
+    pub beats: u32,
+    /// How many of the guardian's turning points (two thirds and a third of its life) have passed.
+    pub thresholds: u8,
 }
+
+/// How fast the Heart's ring races over the floor, and how far it goes.
+pub const HEART_WAVE_SPEED: f32 = 7.5;
+const HEART_WAVE_REACH: f32 = 17.0;
 
 /// Materials foes leave behind instead of gold: (inventory id, name). They
 /// are carried back to the villa and sold at the shop for very little.
@@ -502,7 +516,7 @@ pub fn skeleton_drops(
 /// Vitality blood rain takes per second.
 const BLOOD_RAIN_DRAIN: f32 = 1.6;
 /// At most this many summoned minions stand at once.
-const MAX_SUMMONS: usize = 5;
+const MAX_SUMMONS: usize = 7;
 
 pub struct Dungeon {
     pub map: Blueprint,
@@ -594,6 +608,8 @@ pub struct Dungeon {
     pub pending_exit: bool,
     pub jump_requested: bool,
     pub auto_walk: bool,
+    /// How many times she has talked to the mine's people (the line they say next).
+    pub npc_talks: usize,
 }
 /// The 3D map opens turned a third of the way round and looking down at
 /// about fifty degrees.
@@ -766,6 +782,7 @@ impl Dungeon {
             pending_exit: false,
             jump_requested: false,
             auto_walk: false,
+            npc_talks: 0,
         }
     }
     pub fn seed(&self) -> u64 {
@@ -938,6 +955,65 @@ impl Dungeon {
         });
     }
 
+    /// The Heart's middle: the modelled one in the hand-made mine, else above its room's centre.
+    fn heart_center(&self, room: usize) -> Vec3 {
+        match self.authored.as_ref().and_then(|mine| mine.heart) {
+            Some((center, _)) => center,
+            None => self.map.rooms[room].center + Vec3::Y * 1.5,
+        }
+    }
+
+    /// The floor under the Heart.
+    fn heart_floor(&self, room: usize) -> Vec3 {
+        match self.authored.as_ref().and_then(|mine| mine.heart) {
+            Some((_, floor)) => floor,
+            None => self.map.rooms[room].center,
+        }
+    }
+
+    /// The Heart spits blood at her: orbs arcing from its body to where she stands and round it,
+    /// each mark glowing on the floor before it bursts.
+    fn heart_spit(&mut self, room: usize, enraged: bool, fx: &mut Vec<combat::Fx>) {
+        let from = self.heart_center(room);
+        let player = self.controller.position;
+        let count = if enraged { 5 } else { 3 };
+        let turn = self.elapsed * 1.3;
+        for k in 0..count {
+            let mut to = if k == 0 {
+                player
+            } else {
+                let a = turn + k as f32 * std::f32::consts::TAU / (count - 1) as f32;
+                player + Vec3::new(a.cos(), 0.0, a.sin()) * 2.0
+            };
+            let Some(y) = self
+                .map
+                .capsule_floor(to + Vec3::Y * 0.5, 0.2)
+                .filter(|y| (y - player.y).abs() < 1.5)
+            else {
+                continue;
+            };
+            to.y = y;
+            let lag = k as f32 * 0.14;
+            let flight = combat::Fx::spell_travel(from, to);
+            fx.push(combat::Fx::Telegraph {
+                at: to,
+                age: -lag,
+                life: flight,
+                radius: 1.25,
+            });
+            fx.push(combat::Fx::Spell {
+                from,
+                to,
+                age: -lag,
+                damage: 9.0,
+                radius: 1.25,
+                color: combat::BOSS_CRIMSON,
+            });
+        }
+        let at = self.heart_center(room);
+        self.sound(sound::Sfx::SpellBurst, Some(at), 0.7);
+    }
+
     /// Raise `count` minions around the Heart's chamber.
     fn heart_summon(&mut self, room: usize, count: usize, fx: &mut Vec<combat::Fx>) {
         let living = self.actors[self.base_actors..]
@@ -948,7 +1024,13 @@ impl Dungeon {
         let Some(r) = self.map.rooms.get(room) else {
             return;
         };
-        let center = r.center;
+        // in the hand-made mine they rise round the Heart, on its chamber's floor
+        let authored = self.authored.is_some();
+        let center = if authored {
+            self.heart_floor(room)
+        } else {
+            r.center
+        };
         let player = self.controller.position;
         let template = self
             .map
@@ -964,9 +1046,14 @@ impl Dungeon {
                 break;
             }
             let angle = turn + k as f32 * std::f32::consts::TAU / 7.0;
-            let reach = 3.2 + (k % 3) as f32 * 1.1;
+            let reach = if authored { 4.6 } else { 3.2 } + (k % 3) as f32 * 1.1;
             let mut at = center + Vec3::new(angle.cos(), 0.0, angle.sin()) * reach;
-            if !r.contains(at.x, at.z, 0.8) || horizontal(at - player).length() < 2.2 {
+            let inside = if authored {
+                self.map.room_at(at + Vec3::Y * 0.3) == Some(room)
+            } else {
+                r.contains(at.x, at.z, 0.8)
+            };
+            if !inside || horizontal(at - player).length() < 2.2 {
                 continue;
             }
             let Some(y) = self
@@ -1030,11 +1117,19 @@ impl Dungeon {
     fn heart_tick(&mut self, current: usize, dt: f32, fx: &mut Vec<combat::Fx>) {
         let guardian = self.actors[..self.base_actors].iter().find_map(|actor| {
             let spawn = &self.map.spawns[actor.spawn];
-            (spawn.kind == SpawnKind::Boss && actor.health > 0.0)
-                .then_some((spawn.room, actor.enraged))
+            (spawn.kind == SpawnKind::Boss && actor.health > 0.0).then_some((
+                spawn.room,
+                actor.enraged,
+                actor.health / spawn.health.max(1.0),
+            ))
         });
-        let awake = guardian.filter(|(room, _)| *room == current);
+        let awake = guardian
+            .filter(|(room, _, _)| *room == current)
+            .map(|(room, enraged, _)| (room, enraged));
+        let life = guardian.map_or(1.0, |(_, _, life)| life);
         let heart = &mut self.heart;
+        let mut spit = false;
+        let mut ring = false;
         if let Some((room, enraged)) = awake {
             if !heart.awake {
                 // The first beats come soon after the player walks in.
@@ -1045,9 +1140,17 @@ impl Dungeon {
             heart.summon_in -= dt;
             heart.rain_in -= dt;
             heart.beat_in -= dt;
+            heart.spit_in -= dt;
             let beat = heart.beat_in <= 0.0;
             if beat {
                 heart.beat_in = if enraged { 0.78 } else { 1.1 };
+                heart.beats += 1;
+                // Raging, every third beat sends a ring of blood over the floor: jump it.
+                ring = enraged && heart.beats % 3 == 0 && heart.wave.is_none();
+            }
+            if heart.spit_in <= 0.0 {
+                heart.spit_in = if enraged { 5.5 } else { 8.5 };
+                spit = heart.beats > 2;
             }
             let mut summon = false;
             if heart.summon_in <= 0.0 {
@@ -1064,12 +1167,74 @@ impl Dungeon {
                 self.message("El Corazón late y alza a sus siervos.");
             }
             if beat {
-                let at = self.map.rooms[room].center + Vec3::Y * 1.5;
+                let at = self.heart_center(room);
+                self.sound(sound::Sfx::HeartBeat, Some(at), 1.0);
+            }
+            if spit {
+                self.heart_spit(room, enraged, fx);
+            }
+            if ring {
+                let origin = self.heart_floor(room);
+                self.heart.wave = Some((origin, 0.0));
+                self.heart.wave_hit = false;
+                fx.push(combat::Fx::Burst {
+                    at: origin + Vec3::Y * 0.4,
+                    color: [0.9, 0.05, 0.08],
+                    count: 30,
+                    speed: 5.0,
+                    life: 0.7,
+                    gravity: 2.0,
+                    up: 0.5,
+                    length: 0.18,
+                    seed: self.heart.beats,
+                    age: 0.0,
+                });
+            }
+            // The guardian's turning points: at two thirds and at a third of its life the Heart
+            // raises a whole wave of servants, and the second time it rains blood at once.
+            let turning = [0.66f32, 0.33];
+            let passed = self.heart.thresholds as usize;
+            if passed < turning.len() && life < turning[passed] {
+                self.heart.thresholds += 1;
+                self.heart_summon(room, 4, fx);
+                if passed == 1 {
+                    self.heart.rain_left = self.heart.rain_left.max(8.0);
+                    self.message(
+                        "El guardián se tambalea: el Corazón alza a los suyos y llueve sangre.",
+                    );
+                } else {
+                    self.message("El guardián ruge y el Corazón alza una oleada de siervos.");
+                }
+                let at = self.heart_center(room);
                 self.sound(sound::Sfx::HeartBeat, Some(at), 1.0);
             }
         } else {
             heart.awake = false;
             heart.rain_left = 0.0;
+            heart.wave = None;
+        }
+        // The ring of blood: it catches her if she stands on the floor where it passes.
+        if let Some((origin, age)) = self.heart.wave {
+            let age = age + dt;
+            let radius = age * HEART_WAVE_SPEED;
+            if radius > HEART_WAVE_REACH {
+                self.heart.wave = None;
+            } else {
+                self.heart.wave = Some((origin, age));
+                let p = self.controller.position;
+                let reach = horizontal(p - origin).length();
+                if !self.heart.wave_hit
+                    && (reach - radius).abs() < 0.6
+                    && self.controller.grounded
+                    && (p.y - origin.y).abs() < 1.6
+                {
+                    self.heart.wave_hit = true;
+                    self.health -= 14.0;
+                    self.hit_flash = 0.3;
+                    self.shake = self.shake.max(0.5);
+                    self.sound(sound::Sfx::PlayerHurt, None, 0.9);
+                }
+            }
         }
         let heart = &mut self.heart;
         heart.rain_left = (heart.rain_left - dt).max(0.0);
@@ -1284,6 +1449,19 @@ impl Dungeon {
                 self.controller.velocity.x = 0.0;
                 self.controller.velocity.z = 0.0;
             }
+            // The mine's people stand in the way: she steps round them.
+            for npc in &mine.npcs {
+                let d = horizontal(self.controller.position - npc.position);
+                if d.length() < 0.5 && (self.controller.position.y - npc.position.y).abs() < 1.6 {
+                    let out = if d.length() > 1.0e-4 {
+                        d.normalize_or_zero()
+                    } else {
+                        Vec3::Z
+                    };
+                    self.controller.position.x = npc.position.x + out.x * 0.5;
+                    self.controller.position.z = npc.position.z + out.z * 0.5;
+                }
+            }
         }
         for c in &self.map.connections {
             let secret = c.kind == ConnectionKind::Secret && !self.opened.contains(&c.id);
@@ -1357,7 +1535,13 @@ impl Dungeon {
         }
         let room_role = self.map.rooms[current].role;
         let room_center_y = self.map.rooms[current].center.y;
-        if player.y < room_center_y - 2.5 {
+        // A generated cave's rooms are flat: well below one's floor she has fallen into a crack. The
+        // hand-made mine's places slope and its floor map has no void: only a fall out of it all.
+        let fell = match &self.authored {
+            Some(_) => player.y < -40.0,
+            None => player.y < room_center_y - 2.5,
+        };
+        if fell {
             self.health = (self.health - 12.0).max(1.0);
             self.controller = Controller::new(self.checkpoint);
             self.message("Caida en la grieta. Regresas al santuario: -12 vitalidad.");
@@ -2614,6 +2798,18 @@ impl Dungeon {
             })
             .map(|(i, _)| i)
     }
+    /// Someone of the mine near enough to talk to, and in front of her.
+    pub fn npc_near(&self) -> Option<&authored::Npc> {
+        let mine = self.authored.as_ref()?;
+        let eye = self.controller.position;
+        let forward = Vec3::new(-self.controller.yaw.sin(), 0.0, -self.controller.yaw.cos());
+        mine.npcs.iter().find(|npc| {
+            let d = horizontal(npc.position - eye);
+            d.length() < 2.6
+                && (npc.position.y - eye.y).abs() < 1.6
+                && d.normalize_or_zero().dot(forward) > 0.55
+        })
+    }
     /// What F does here, as plain text (logs, tests).
     pub fn prompt(&self) -> String {
         self.interaction().map(|p| p.text()).unwrap_or_default()
@@ -2622,6 +2818,9 @@ impl Dungeon {
     /// What F does here: its icon, verb and what it acts on.
     pub fn interaction(&self) -> Option<prompt_icons::Prompt> {
         use prompt_icons::{Icon, Prompt};
+        if let Some(npc) = self.npc_near() {
+            return Some(Prompt::new(Icon::Talk, "Hablar").detail(npc.name.clone()));
+        }
         if let Some(mine) = &self.authored {
             if !(self.seal && self.crest)
                 && mine
@@ -2707,6 +2906,15 @@ impl Dungeon {
     }
     pub fn interact(&mut self) {
         if self.seed_input.is_some() || self.map_open {
+            return;
+        }
+        if let Some(npc) = self.npc_near() {
+            if !npc.lines.is_empty() {
+                let line = npc.lines[self.npc_talks % npc.lines.len()].clone();
+                let name = npc.name.clone();
+                self.npc_talks += 1;
+                self.message(format!("{name}: «{line}»"));
+            }
             return;
         }
         if let Some(c) = self.map.connections.iter().find(|c| {
@@ -2806,7 +3014,12 @@ impl Dungeon {
             }
             SpawnKind::Rest => {
                 self.health = 100.0;
-                self.checkpoint = self.map.rooms[s.room].center;
+                // in the hand-made mine, right where the sanctuary's font stands
+                self.checkpoint = if self.authored.is_some() {
+                    s.position
+                } else {
+                    self.map.rooms[s.room].center
+                };
                 self.actors[i].used = true;
                 self.potions = self.potions.max(2);
                 self.message("Santuario activado. Vitalidad restaurada.");

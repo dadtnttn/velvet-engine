@@ -10,13 +10,128 @@ use velvet_math::{Mat4, Vec3};
 use velvet_render::*;
 
 use super::authored::Authored;
+use super::Dungeon;
+use velvet_dungeon::gameplay::SpawnKind;
 
 /// Beyond this a mesh is not drawn (the fog has it by then).
 const FAR: f32 = 70.0;
 /// Lamps further than this from the eye are left dark.
 const LAMP_REACH: f32 = 34.0;
 
+/// The Heart's chamber's pieces that move (the build names their meshes after them).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Group {
+    /// The Heart's body and the veins of light on its skin: it beats.
+    Heart,
+    /// The arteries from it into the roof and the floor: they throb with it.
+    Vessels,
+    /// The veins over the floor out to the walls: they light up just after each beat.
+    Veins,
+    /// The vast ribcage arching over the chamber: it breathes, and shakes when the Heart rages.
+    Ribs,
+    /// The bones and arms of those who reached it: they tremble at each beat.
+    Remains,
+    /// The kneeling iron knight: its eye burns with the beat.
+    Knight,
+}
+
+fn group_of(name: &str) -> Option<Group> {
+    Some(match name.rsplit(':').next()? {
+        "heart" => Group::Heart,
+        "vessels" => Group::Vessels,
+        "veins" => Group::Veins,
+        "ribs" => Group::Ribs,
+        "remains" => Group::Remains,
+        "knight" => Group::Knight,
+        _ => return None,
+    })
+}
+
+/// How the Heart's chamber moves this frame.
+#[derive(Clone, Copy, Debug)]
+pub struct HeartPose {
+    /// The beat: lub-dub, 0 between beats, about 1 at its peak.
+    pub thump: f32,
+    /// The same beat a moment later, as it runs along the veins.
+    pub echo: f32,
+    /// 1 while its guardian lives, fading to 0 after it falls (the Heart stops).
+    pub alive: f32,
+    /// How much it rages (its guardian enraged, the blood rain).
+    pub rage: f32,
+    pub time: f32,
+    pub center: Vec3,
+    pub floor: Vec3,
+}
+
+/// The Heart's pose from the run: beating fast while she fights its guardian, slow while it waits.
+pub fn heart_pose(run: &Dungeon) -> Option<HeartPose> {
+    let (center, floor) = run.authored.as_ref()?.heart?;
+    let guardian = run
+        .actors
+        .iter()
+        .find(|a| run.map.spawns[a.spawn].kind == SpawnKind::Boss);
+    let alive = guardian.map_or(1.0, |a| {
+        if a.health > 0.0 {
+            1.0
+        } else {
+            (1.0 - a.death / 3.0).clamp(0.0, 1.0)
+        }
+    });
+    let enraged = guardian.is_some_and(|a| a.enraged && a.health > 0.0);
+    let (since, _) = if run.heart.awake {
+        let period = if enraged { 0.78 } else { 1.1 };
+        ((period - run.heart.beat_in).clamp(0.0, period), period)
+    } else {
+        (run.elapsed % 1.5, 1.5)
+    };
+    let lub = |t: f32, at: f32| (-((t - at) / 0.05).powi(2)).exp();
+    Some(HeartPose {
+        thump: (lub(since, 0.05) + 0.7 * lub(since, 0.27)) * alive,
+        echo: (lub(since, 0.17) + 0.7 * lub(since, 0.39)) * alive,
+        alive,
+        rage: ((run.heart.rain + if enraged { 0.6 } else { 0.0 }) * alive).min(1.0),
+        time: run.elapsed,
+        center,
+        floor,
+    })
+}
+
+/// Where a moving piece is this frame (a transform before its own) and how much its glow is worth.
+fn moved(group: Group, pose: &HeartPose) -> (Mat4, f32) {
+    let around = |pivot: Vec3, scale: Vec3| {
+        Mat4::from_translation(pivot) * Mat4::from_scale(scale) * Mat4::from_translation(-pivot)
+    };
+    let t = pose.time;
+    let dim = 0.2 + 0.8 * pose.alive;
+    match group {
+        Group::Heart => {
+            let s = 1.0 + 0.075 * pose.thump;
+            (
+                around(pose.center, Vec3::new(s, 1.0 + 0.09 * pose.thump, s)),
+                (0.35 + 1.6 * pose.thump) * dim,
+            )
+        }
+        Group::Vessels => {
+            let s = 1.0 + 0.02 * pose.thump;
+            (around(pose.center, Vec3::new(s, s, s)), 1.0)
+        }
+        Group::Veins => (Mat4::IDENTITY, (0.25 + 1.8 * pose.echo) * dim),
+        Group::Ribs => {
+            let breath = 0.012 * (t * 0.9).sin() * (0.3 + 0.7 * pose.alive);
+            let shake = 0.006 * pose.rage * (t * 23.0).sin();
+            let s = 1.0 + breath + shake;
+            (around(pose.floor, Vec3::new(s, 1.0 + breath * 0.6, s)), 1.0)
+        }
+        Group::Remains => {
+            let lift = 0.03 * pose.thump + 0.025 * pose.rage * (t * 29.0).sin().abs();
+            (Mat4::from_translation(Vec3::new(0.0, lift, 0.0)), 1.0)
+        }
+        Group::Knight => (Mat4::IDENTITY, (0.35 + 1.3 * pose.thump) * dim),
+    }
+}
+
 struct Part {
+    group: Option<Group>,
     mesh: MeshHandle,
     transform: Mat4,
     material: Material3D,
@@ -140,6 +255,7 @@ impl MineArt {
                     material.with_ambient_occlusion(0.35)
                 };
                 parts.push(Part {
+                    group: group_of(name),
                     mesh: renderer.upload_mesh(device, mesh)?,
                     transform,
                     material,
@@ -164,7 +280,13 @@ impl MineArt {
     }
 
     /// Adds what the eye can see: near enough and inside the view's cone. Returns the triangles.
-    pub fn draw(&self, camera: Camera3D, aspect: f32, draws: &mut Vec<MeshDraw3D>) -> usize {
+    pub fn draw(
+        &self,
+        camera: Camera3D,
+        aspect: f32,
+        heart: Option<&HeartPose>,
+        draws: &mut Vec<MeshDraw3D>,
+    ) -> usize {
         let eye = camera.position;
         let forward = (camera.target - eye).normalize_or_zero();
         // the cone round the view: half its diagonal angle
@@ -184,10 +306,21 @@ impl MineArt {
                     continue;
                 }
             }
+            let (transform, material) = match (part.group, heart) {
+                (Some(group), Some(pose)) => {
+                    let (motion, glow) = moved(group, pose);
+                    let mut material = part.material;
+                    if material.occlusion_window[0] > 0.0 {
+                        material.occlusion_window[0] *= glow;
+                    }
+                    (motion * part.transform, material)
+                }
+                _ => (part.transform, part.material),
+            };
             draws.push(MeshDraw3D {
                 mesh: part.mesh,
-                transform: part.transform,
-                material: part.material,
+                transform,
+                material,
                 texture: part.texture,
             });
             triangles += part.triangles;
@@ -197,7 +330,13 @@ impl MineArt {
 }
 
 /// The mine's lamps near the eye, flickering where they burn.
-pub fn lamps(mine: &Authored, eye: Vec3, elapsed: f32, lights: &mut Vec<PointLight3D>) {
+pub fn lamps(
+    mine: &Authored,
+    eye: Vec3,
+    elapsed: f32,
+    heart: Option<&HeartPose>,
+    lights: &mut Vec<PointLight3D>,
+) {
     for (i, lamp) in mine.lamps.iter().enumerate() {
         if (lamp.position - eye).length() > LAMP_REACH + lamp.distance * 0.5 {
             continue;
@@ -210,12 +349,18 @@ pub fn lamps(mine: &Authored, eye: Vec3, elapsed: f32, lights: &mut Vec<PointLig
             _ => 1.0,
         };
         // the page's lamps are physical; these are the game's: the Heart's red is far stronger here
-        let strength = match lamp.kind.as_str() {
-            "heart" => 0.3,
-            "fill" => 0.8,
-            "crystal" | "slime" | "fungus" => 0.75,
+        // the Heart's own light swells with each beat and dies with it
+        let beat = match (lamp.kind.as_str(), heart) {
+            ("heart", Some(pose)) => (0.45 + 1.1 * pose.thump) * (0.25 + 0.75 * pose.alive),
             _ => 1.0,
         };
+        let strength = beat
+            * match lamp.kind.as_str() {
+                "heart" => 0.3,
+                "fill" => 0.8,
+                "crystal" | "slime" | "fungus" => 0.75,
+                _ => 1.0,
+            };
         lights.push(PointLight3D::new(
             lamp.position,
             lamp.color,

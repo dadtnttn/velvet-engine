@@ -1568,8 +1568,41 @@ impl Scene {
         }
         if let (Some(mine), Some(art)) = (&authored, &self.mine_art) {
             let aspect = size.0 as f32 / size.1.max(1) as f32;
-            self.stats.triangles += art.draw(camera, aspect, &mut draws);
-            super::mine_art::lamps(mine, camera.position, run.elapsed, &mut lights);
+            let heart = super::mine_art::heart_pose(run);
+            self.stats.triangles += art.draw(camera, aspect, heart.as_ref(), &mut draws);
+            super::mine_art::lamps(
+                mine,
+                camera.position,
+                run.elapsed,
+                heart.as_ref(),
+                &mut lights,
+            );
+            // the Heart's ring of blood racing over the floor
+            if let Some((origin, age)) = run.heart.wave {
+                let radius = age * super::HEART_WAVE_SPEED;
+                let mut material = Material3D::rgb(0.9, 0.04, 0.07).with_emission(2.6);
+                material.base_color[3] = (1.0 - radius / 17.0).clamp(0.2, 1.0);
+                draws.push(MeshDraw3D {
+                    mesh: self.fx_ring,
+                    transform: Transform3D {
+                        position: origin + Vec3::Y * 0.07,
+                        rotation: Vec3::ZERO,
+                        scale: Vec3::new(radius.max(0.3), 1.0, radius.max(0.3)),
+                    }
+                    .matrix(),
+                    material,
+                    texture: None,
+                });
+                lights.push(PointLight3D::new(
+                    origin + Vec3::Y * 0.6,
+                    [1.0, 0.1, 0.12],
+                    7.0,
+                    radius + 3.0,
+                ));
+            }
+            for npc in &mine.npcs {
+                self.draw_stick_figure(&mut draws, &mut lights, npc, run);
+            }
             if !(run.seal && run.crest) {
                 for gate in &mine.gates {
                     self.draw_mine_gate(&mut draws, &mut lights, gate, run.elapsed);
@@ -3644,6 +3677,153 @@ impl Scene {
                 }
             }
         }
+    }
+
+    /// One of the mine's people, for now a figure of sticks (where its model will stand): it
+    /// breathes, turns its head to her when she comes near and waves now and then; a miner's helmet
+    /// with its lamp, a pick resting on the floor.
+    fn draw_stick_figure(
+        &self,
+        draws: &mut Vec<MeshDraw3D>,
+        lights: &mut Vec<PointLight3D>,
+        npc: &super::authored::Npc,
+        run: &Dungeon,
+    ) {
+        let t = run.elapsed;
+        let feet = npc.position;
+        let face = if npc.face.length_squared() > 0.5 {
+            npc.face
+        } else {
+            Vec3::Z
+        };
+        let side = Vec3::new(face.z, 0.0, -face.x);
+        let up = Vec3::Y;
+        let to_her = run.controller.position - feet;
+        let near = Vec3::new(to_her.x, 0.0, to_her.z).length();
+        let breath = (t * 1.7).sin();
+        let hips = feet + up * (0.94 + 0.008 * breath);
+        let neck = hips + up * 0.52 + face * (0.012 * breath);
+        // the head turns to her when she is near, as far as a neck turns
+        let look = if near < 6.0 {
+            let want = to_her.x.atan2(to_her.z) - face.x.atan2(face.z);
+            want.sin().atan2(want.cos()).clamp(-1.1, 1.1)
+        } else {
+            0.0
+        };
+        let (ls, lc) = look.sin_cos();
+        let head_face = face * lc + side * ls;
+        let head = neck + up * 0.17;
+        let ink = [0.93, 0.87, 0.77];
+        let mut stick = |a: Vec3, b: Vec3, width: f32, color: [f32; 3], glow: f32| {
+            let d = b - a;
+            let length = d.length().max(1.0e-3);
+            let dir = d * (1.0 / length);
+            draws.push(MeshDraw3D {
+                mesh: self.cube,
+                transform: Transform3D {
+                    position: (a + b) * 0.5,
+                    rotation: Vec3::new(
+                        -dir.y.atan2((dir.x * dir.x + dir.z * dir.z).sqrt()),
+                        dir.x.atan2(dir.z),
+                        0.0,
+                    ),
+                    scale: Vec3::new(width, width, length),
+                }
+                .matrix(),
+                material: Material3D::rgb(color[0], color[1], color[2]).with_emission(glow),
+                texture: None,
+            });
+        };
+        stick(hips, neck, 0.06, ink, 0.12);
+        stick(neck, head - up * 0.1, 0.05, ink, 0.12);
+        let shoulder = neck - up * 0.05;
+        stick(
+            shoulder - side * 0.19,
+            shoulder + side * 0.19,
+            0.05,
+            ink,
+            0.12,
+        );
+        stick(hips - side * 0.11, hips + side * 0.11, 0.05, ink, 0.12);
+        for s in [-1.0f32, 1.0] {
+            let hip = hips + side * (s * 0.1);
+            let knee = hip - up * 0.46 + face * 0.02;
+            stick(hip, knee, 0.055, ink, 0.12);
+            stick(knee, feet + side * (s * 0.12), 0.05, ink, 0.12);
+        }
+        // the right hand on the pick's haft, its head on the floor
+        let right = shoulder - side * 0.19;
+        let elbow = right - up * 0.29 - side * 0.04;
+        let hand = elbow - up * 0.26 + face * 0.08;
+        stick(right, elbow, 0.05, ink, 0.12);
+        stick(elbow, hand, 0.045, ink, 0.12);
+        let pick_foot = feet - side * 0.36 + face * 0.3 + up * 0.04;
+        stick(hand + up * 0.12, pick_foot, 0.04, [0.45, 0.28, 0.14], 0.0);
+        stick(
+            pick_foot - face * 0.26,
+            pick_foot + face * 0.26 + up * 0.05,
+            0.045,
+            [0.42, 0.42, 0.45],
+            0.0,
+        );
+        // the left arm: hanging, or waving at her now and then when she is near
+        let left = shoulder + side * 0.19;
+        let waving = near < 4.5 && (t % 6.0) < 1.7;
+        let (elbow, hand) = if waving {
+            let elbow = left + side * 0.2 + up * 0.18;
+            (elbow, elbow + up * 0.26 + side * (0.08 * (t * 12.0).sin()))
+        } else {
+            let elbow = left - up * 0.29 + side * 0.04;
+            (elbow, elbow - up * 0.26 + face * 0.04)
+        };
+        stick(left, elbow, 0.05, ink, 0.12);
+        stick(elbow, hand, 0.045, ink, 0.12);
+        // the head, its helmet, the helmet's lamp
+        self.draw(
+            draws,
+            self.fx_orb,
+            head,
+            Vec3::new(0.12, 0.13, 0.12),
+            0.0,
+            ink,
+        );
+        if let Some(draw) = draws.last_mut() {
+            draw.material = draw.material.with_emission(0.12);
+        }
+        self.draw(
+            draws,
+            self.fx_orb,
+            head + up * 0.05,
+            Vec3::new(0.145, 0.085, 0.145),
+            0.0,
+            [0.85, 0.6, 0.22],
+        );
+        self.draw(
+            draws,
+            self.fx_orb,
+            head + up * 0.035,
+            Vec3::new(0.2, 0.014, 0.2),
+            0.0,
+            [0.8, 0.56, 0.2],
+        );
+        let lamp = head + up * 0.08 + head_face * 0.13;
+        self.draw(
+            draws,
+            self.fx_orb,
+            lamp,
+            Vec3::new(0.035, 0.035, 0.035),
+            0.0,
+            [1.0, 0.85, 0.55],
+        );
+        if let Some(draw) = draws.last_mut() {
+            draw.material = draw.material.with_emission(5.0);
+        }
+        lights.push(PointLight3D::new(
+            lamp + head_face * 0.3,
+            [1.0, 0.78, 0.45],
+            2.2,
+            4.0,
+        ));
     }
 
     /// A gate of the hand-made mine while it is shut: a wall of rune light across the way.

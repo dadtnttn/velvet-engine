@@ -7048,6 +7048,7 @@ pub(super) fn capture(out: &Path) -> Result<()> {
             ("tesoro", [68.8, -14.0, -81.0], -90.0, 6.0),
             ("sello", [53.0, -14.4, -93.5], 0.0, 10.0),
             ("corazon", [53.2, -16.0, -118.8], 0.0, 12.0),
+            ("tendero", [7.6, 0.0, 11.3], 0.0, -4.0),
         ];
         let only = std::env::var("VELVET_MINA_VIEW").ok();
         for (name, p, yaw, pitch) in views {
@@ -7065,6 +7066,30 @@ pub(super) fn capture(out: &Path) -> Result<()> {
             app.dungeon.notice_until = 0.0;
             app.player = app.dungeon.controller.position;
             save(&mut app, out, &format!("mina-{name}"))?;
+        }
+        // The Heart awake: its guardian before it, the blood rain, a ring racing out, a spit of orbs.
+        if only
+            .as_deref()
+            .is_none_or(|o| o.split(',').any(|v| v == "pelea"))
+        {
+            if let Some((_, floor)) = app.dungeon.authored.as_ref().and_then(|m| m.heart) {
+                let at = Vec3::new(floor.x - 3.0, floor.y, floor.z + 8.5);
+                let y = app
+                    .dungeon
+                    .map
+                    .capsule_floor(at + Vec3::Y * 0.4, 0.28)
+                    .unwrap_or(floor.y);
+                app.dungeon.controller.position = Vec3::new(at.x, y, at.z);
+                app.dungeon.controller.yaw = 0.0;
+                app.dungeon.controller.pitch = 0.2;
+                app.player = app.dungeon.controller.position;
+                app.dungeon.heart.awake = true;
+                app.dungeon.heart.rain = 0.85;
+                app.dungeon.heart.beat_in = 0.75;
+                app.dungeon.heart.wave = Some((floor, 0.9));
+                save(&mut app, out, "mina-pelea")?;
+                app.dungeon.heart = Default::default();
+            }
         }
         // The chests 2.0: each kind, the treasure's open with its loot showing.
         for (tier, open) in [("comun", false), ("rico", false), ("tesoro", true)] {
