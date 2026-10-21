@@ -1734,7 +1734,12 @@ impl Scene {
                     continue;
                 }
                 let size = super::authored::foe_size(run.authored.as_deref(), s);
-                let loadout = super::combat::loadout(&s.definition, s.kind, s.id);
+                let mut loadout = super::combat::loadout(&s.definition, s.kind, s.id);
+                // a champion of the mine wears its own build and gear, and its colour glows about it
+                let champion = super::authored::champion_model(run.authored.as_deref(), s);
+                if let Some(model) = champion {
+                    loadout.model = model;
+                }
                 let moves = super::combat::moves(&s.definition, s.kind, s.id);
                 let yaw = a.yaw;
                 let swing = a
@@ -1785,7 +1790,8 @@ impl Scene {
                     a.spawn,
                     a.position + Vec3::Y * lift,
                     yaw,
-                    super::combat::body_height(s.kind),
+                    // its own height (a champion of the mine stands as tall as its reach)
+                    size * 1.95,
                     animation,
                     animation_time,
                     run.elapsed,
@@ -1797,16 +1803,19 @@ impl Scene {
                     queue,
                     &mut draws,
                 );
-                if s.kind == gameplay::SpawnKind::Miniboss {
+                if (s.kind == gameplay::SpawnKind::Miniboss || champion.is_some()) && !dying {
                     let charge = swing
                         .filter(|(swing, mv)| swing.t < mv.strike)
                         .map(|(swing, mv)| (swing.t / mv.strike).clamp(0.0, 1.0))
                         .unwrap_or(0.0);
+                    let color = champion
+                        .map(super::authored::champion_color)
+                        .unwrap_or([0.92, 0.17, 0.045]);
                     lights.push(PointLight3D::new(
                         a.position + Vec3::Y * (1.15 * size),
-                        [0.92, 0.17, 0.045],
-                        0.62 + charge * 1.55,
-                        4.1,
+                        color,
+                        0.9 + charge * 1.55,
+                        4.6,
                     ));
                 }
                 let (fracture_anchor, weapon_edge) = if let Some(pose) = imported {

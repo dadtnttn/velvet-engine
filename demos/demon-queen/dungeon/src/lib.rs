@@ -260,6 +260,18 @@ fn foe_step(map: &Blueprint, to: Vec3) -> Option<Vec3> {
     Some(Vec3::new(to.x, y, to.z))
 }
 
+/// A champion speaking: its words under the scene for a few seconds, its name in its colour.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Speech {
+    pub who: String,
+    pub line: &'static str,
+    pub color: [f32; 3],
+    pub at: f32,
+}
+
+/// How long a champion's words stay up.
+pub const SPEECH_SECONDS: f32 = 4.6;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum EnemyIntent {
     Approach,
@@ -641,6 +653,11 @@ pub struct Dungeon {
     loot_note_at: f32,
     /// The named champions' clocks and the turning points they have passed, by spawn.
     champion_state: std::collections::BTreeMap<usize, (f32, u8)>,
+    /// What a champion is saying.
+    pub speech: Option<Speech>,
+    /// Per champion: what it has said (1 on seeing her, 2 raging, 4 falling), when it taunts next, how many
+    /// taunts it has said.
+    voices: std::collections::BTreeMap<usize, (u8, f32, usize)>,
 }
 /// The 3D map opens turned a third of the way round and looking down at
 /// about fifty degrees.
@@ -820,6 +837,8 @@ impl Dungeon {
             loot_note: Vec::new(),
             loot_note_at: -100.0,
             champion_state: Default::default(),
+            speech: None,
+            voices: Default::default(),
         }
     }
     pub fn seed(&self) -> u64 {
@@ -1071,6 +1090,99 @@ impl Dungeon {
 
     /// The named champions' powers while she is in their room: embers, volleys, the dead
     /// raised, their fury.
+    /// A champion's name, as its bar shows it.
+    pub fn champion_name(&self, spawn: &gameplay::Spawn) -> Option<String> {
+        if let Some(c) = self
+            .authored
+            .as_ref()
+            .and_then(|mine| mine.champions.get(&spawn.id))
+        {
+            return Some(c.name.clone());
+        }
+        match spawn.kind {
+            SpawnKind::Boss => Some("Guardián del Corazón".into()),
+            SpawnKind::Miniboss if self.map.rooms[spawn.room].role == Role::Miniboss => {
+                Some("Custodio del Sello".into())
+            }
+            _ => None,
+        }
+    }
+
+    /// The champions speak: once on seeing her (when they move on her), once when they rage, now and then
+    /// while they fight her close, and as they fall.
+    fn voices_tick(&mut self) {
+        let player = self.controller.position;
+        for index in 0..self.actors.len() {
+            let (spawn_id, health, enraged, engaged, at) = {
+                let a = &self.actors[index];
+                (
+                    a.spawn,
+                    a.health,
+                    a.enraged,
+                    a.gait != combat::Gait::Idle || a.attack.is_some(),
+                    a.position,
+                )
+            };
+            let spawn = &self.map.spawns[spawn_id];
+            let Some(model) = authored::champion_model(self.authored.as_deref(), spawn) else {
+                continue;
+            };
+            let Some(lines) = authored::champion_lines(model) else {
+                continue;
+            };
+            let close = horizontal(at - player).length();
+            let (said, next, taunts) = self.voices.get(&spawn_id).copied().unwrap_or((0, 0.0, 0));
+            let line = if health <= 0.0 {
+                (said & 1 != 0 && said & 4 == 0).then(|| (lines.fall, 4u8, true))
+            } else if said & 1 == 0 {
+                (engaged && close < 16.0).then(|| (lines.wake, 1, true))
+            } else if enraged && said & 2 == 0 {
+                Some((lines.rage, 2, true))
+            } else if close < 9.0
+                && self.elapsed > next
+                && self
+                    .speech
+                    .as_ref()
+                    .is_none_or(|s| self.elapsed - s.at > SPEECH_SECONDS + 2.0)
+            {
+                Some((lines.taunts[taunts % lines.taunts.len()], 0, false))
+            } else {
+                None
+            };
+            let Some((line, mark, urgent)) = line else {
+                continue;
+            };
+            // a word just said is not cut off, but by one that must be heard
+            if !urgent
+                && self
+                    .speech
+                    .as_ref()
+                    .is_some_and(|s| self.elapsed - s.at < 1.5)
+            {
+                continue;
+            }
+            let who = self.champion_name(spawn).unwrap_or_default();
+            self.speech = Some(Speech {
+                who,
+                line,
+                color: authored::champion_color(model),
+                at: self.elapsed,
+            });
+            let gap = 11.0 + (taunts % 3) as f32 * 2.0;
+            self.voices.insert(
+                spawn_id,
+                (
+                    said | mark,
+                    self.elapsed + gap,
+                    taunts + usize::from(mark == 0),
+                ),
+            );
+            if mark == 1 {
+                self.sound(sound::Sfx::Roar, Some(at), 0.55);
+            }
+        }
+    }
+
     fn champions_tick(&mut self, current: usize, dt: f32, fx: &mut Vec<combat::Fx>) {
         let Some(mine) = self.authored.clone() else {
             return;
@@ -2577,6 +2689,7 @@ impl Dungeon {
         }
         self.heart_tick(current, dt, &mut new_fx);
         self.champions_tick(current, dt, &mut new_fx);
+        self.voices_tick();
         let taken = pickups::update(&mut self.pickups, &self.map, self.controller.position, dt);
         if !taken.is_empty() {
             self.take_loot(&taken);

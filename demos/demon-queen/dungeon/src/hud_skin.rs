@@ -778,6 +778,38 @@ impl Hud {
                 IVORY,
             );
         }
+        // A champion speaking: its name in its colour over its words, low in the middle.
+        if let Some(speech) = run
+            .speech
+            .as_ref()
+            .filter(|s| run.elapsed - s.at < crate::SPEECH_SECONDS)
+        {
+            let age = run.elapsed - speech.at;
+            let fade = (age / 0.25)
+                .min((crate::SPEECH_SECONDS - age) / 0.45)
+                .clamp(0.0, 1.0);
+            let line = format!("«{}»", speech.line);
+            let width = (self.width(&line, 26.0) + 96.0).clamp(520.0, 1240.0);
+            let (x, y, h) = ((1920.0 - width) * 0.5, 744.0, 86.0);
+            let color = [speech.color[0], speech.color[1], speech.color[2], 1.0];
+            glass::plate(v, [x, y, width, h], glass::alpha(color, fade), fade);
+            self.kicker(
+                v,
+                &speech.who.to_uppercase(),
+                x + 40.0,
+                y - 8.0,
+                glass::alpha(color, fade),
+            );
+            self.mid_fit(
+                v,
+                &line,
+                x + 40.0,
+                y + h * 0.56,
+                26.0,
+                width - 80.0,
+                glass::alpha(IVORY, fade),
+            );
+        }
         // Blood rain: the edges of sight run red.
         let rain = run.heart.rain;
         if rain > 0.01 {

@@ -108,7 +108,7 @@ struct Weapon {
 
 /// The weapon models the skeletons carry (web `WEAPON_PATHS`): the skeletons' own (tools/armas_blender.py,
 /// real weapons in KayKit's frame and reach) when they are there, else KayKit's.
-const WEAPON_FILES: [(&str, &str, &str); 5] = [
+const WEAPON_FILES: [(&str, &str, &str); 15] = [
     (
         "staff",
         "../esqueletos/armas/staff.glb",
@@ -134,17 +134,98 @@ const WEAPON_FILES: [(&str, &str, &str); 5] = [
         "../esqueletos/armas/shield.glb",
         "weapons/Skeleton_Shield_Large_A.gltf",
     ),
+    // the champions' own gear (KayKit's nearest stands in when it is missing)
+    (
+        "hammer",
+        "../esqueletos/armas/hammer.glb",
+        "weapons/Skeleton_Axe.gltf",
+    ),
+    (
+        "tongs",
+        "../esqueletos/armas/tongs.glb",
+        "weapons/Skeleton_Staff.gltf",
+    ),
+    (
+        "greatsword",
+        "../esqueletos/armas/greatsword.glb",
+        "weapons/Skeleton_Blade.gltf",
+    ),
+    (
+        "kite",
+        "../esqueletos/armas/kite.glb",
+        "weapons/Skeleton_Shield_Large_A.gltf",
+    ),
+    (
+        "halberd",
+        "../esqueletos/armas/halberd.glb",
+        "weapons/Skeleton_Axe.gltf",
+    ),
+    (
+        "tower",
+        "../esqueletos/armas/tower.glb",
+        "weapons/Skeleton_Shield_Large_A.gltf",
+    ),
+    (
+        "key",
+        "../esqueletos/armas/key.glb",
+        "weapons/Skeleton_Axe.gltf",
+    ),
+    (
+        "seal_shield",
+        "../esqueletos/armas/seal_shield.glb",
+        "weapons/Skeleton_Shield_Large_A.gltf",
+    ),
+    (
+        "lantern_staff",
+        "../esqueletos/armas/lantern_staff.glb",
+        "weapons/Skeleton_Staff.gltf",
+    ),
+    (
+        "femur_club",
+        "../esqueletos/armas/femur_club.glb",
+        "weapons/Skeleton_Staff.gltf",
+    ),
 ];
+
+/// What a champion holds in each slot of its loadout: its moves are those of the slot's weapon (an axe's
+/// chops, a staff's sweeps), its hands hold its own (the smith's hammer and tongs, the custodian's key).
+const CHAMPION_GEAR: [(&str, &str, &str); 10] = [
+    ("herrero", "axe", "hammer"),
+    ("herrero", "shield", "tongs"),
+    ("senor", "axe", "greatsword"),
+    ("senor", "shield", "kite"),
+    ("centinela", "axe", "halberd"),
+    ("centinela", "shield", "tower"),
+    ("custodio", "axe", "key"),
+    ("custodio", "shield", "seal_shield"),
+    ("bibliotecaria", "staff", "lantern_staff"),
+    ("guardian", "staff", "femur_club"),
+];
+
+/// The mesh a model holds in a slot.
+fn gear<'a>(model: &str, slot: &'a str) -> &'a str {
+    CHAMPION_GEAR
+        .iter()
+        .find(|(m, s, _)| *m == model && *s == slot)
+        .map_or(slot, |(_, _, mesh)| mesh)
+}
 
 /// Every loadout each model is dressed in (web `enemyLoadout`), with
 /// whether its staff fights in melee.
-const MODEL_LOADOUTS: [(&str, &str, Option<&str>, bool); 6] = [
+const MODEL_LOADOUTS: [(&str, &str, Option<&str>, bool); 12] = [
     ("minion", "blade", None, false),
     ("rogue", "blade", None, false),
     ("rogue", "crossbow", None, false),
     ("warrior", "axe", Some("shield"), false),
     ("mage", "staff", None, false),
     ("mage", "staff", None, true),
+    // the mine's champions, in the loadouts of the foes they are
+    ("herrero", "axe", Some("shield"), false),
+    ("senor", "axe", Some("shield"), false),
+    ("centinela", "axe", Some("shield"), false),
+    ("custodio", "axe", Some("shield"), false),
+    ("bibliotecaria", "staff", None, false),
+    ("guardian", "staff", None, true),
 ];
 
 /// KayKit's shared clips hold a chibi's arms well out from its wide body; a body of human build
@@ -511,7 +592,7 @@ impl Enemies {
             if let Some(model) = models.get(model_id) {
                 fits.insert(
                     (model_id.to_string(), weapon, offhand),
-                    armed_fit(model, &weapons, weapon, offhand),
+                    armed_fit(model, model_id, &weapons, weapon, offhand),
                 );
             }
         }
@@ -601,7 +682,7 @@ impl Enemies {
             * Mat4::from_rotation_z(-stagger);
         for (name, left) in [(Some(loadout.weapon), false), (loadout.offhand, true)] {
             let Some(name) = name else { continue };
-            let Some(weapon) = self.weapons.get(name) else {
+            let Some(weapon) = self.weapons.get(gear(loadout.model, name)) else {
                 continue;
             };
             let (hand, part) = if left {
@@ -978,15 +1059,23 @@ mod tests {
             .map(|path| GltfModel::load(directory.join(path)).expect("shared animation set"))
             .collect::<Vec<_>>();
 
-        // the four KayKit skeletons, and whatever stands in for them
-        assert_eq!(
-            manifest
-                .models
-                .iter()
-                .filter(|definition| definition.replaces.is_none())
-                .count(),
-            4
-        );
+        // the four KayKit skeletons, whatever stands in for them, and the mine's champions (each its own
+        // build, in a loadout of MODEL_LOADOUTS)
+        let own: Vec<&str> = manifest
+            .models
+            .iter()
+            .filter(|definition| definition.replaces.is_none())
+            .map(|definition| definition.id.as_str())
+            .collect();
+        for kaykit in ["minion", "warrior", "rogue", "mage"] {
+            assert!(own.contains(&kaykit), "{kaykit}");
+        }
+        for model in &own {
+            assert!(
+                MODEL_LOADOUTS.iter().any(|(m, ..)| m == model),
+                "{model} fights in a loadout"
+            );
+        }
         for definition in manifest.models {
             let mut model =
                 GltfModel::load(directory.join(definition.path)).expect("skeleton model");
@@ -1296,6 +1385,7 @@ fn bake_combat_clips(source: &mut GltfModel, model_id: &str) -> anyhow::Result<(
 /// (web `normalizeToHeight`).
 fn armed_fit(
     model: &Model,
+    model_id: &str,
     weapons: &BTreeMap<&'static str, Weapon>,
     weapon: &str,
     offhand: Option<&str>,
@@ -1303,7 +1393,7 @@ fn armed_fit(
     let (mut low, mut high) = model.rest_bounds;
     if let Some(slots) = model.source.node_transforms(&["handslot.r", "handslot.l"]) {
         for (name, left) in [(Some(weapon), false), (offhand, true)] {
-            let Some(held) = name.and_then(|name| weapons.get(name)) else {
+            let Some(held) = name.and_then(|name| weapons.get(gear(model_id, name))) else {
                 continue;
             };
             let attach = slots[usize::from(left)] * weapon_attach(name.unwrap_or_default(), left);

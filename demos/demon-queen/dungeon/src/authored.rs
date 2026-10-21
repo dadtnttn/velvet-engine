@@ -150,6 +150,120 @@ pub struct Champion {
     pub reward: Loot,
 }
 
+/// The model a champion of the mine wears (its own build and gear), by what it is: the named ones by
+/// their power, the Custodio of the seal (the mine's only other miniboss) and the Heart's guardian.
+pub fn champion_model(mine: Option<&Authored>, spawn: &Spawn) -> Option<&'static str> {
+    let mine = mine?;
+    if let Some(champion) = mine.champions.get(&spawn.id) {
+        return Some(match champion.power {
+            Power::Sparks => "herrero",
+            Power::Volley => "bibliotecaria",
+            Power::Raise => "senor",
+            Power::Fury => "centinela",
+            Power::None => return None,
+        });
+    }
+    match spawn.kind {
+        SpawnKind::Miniboss => Some("custodio"),
+        SpawnKind::Boss => Some("guardian"),
+        _ => None,
+    }
+}
+
+/// What a champion says: on seeing her, when it rages, now and then while they fight, and as it falls.
+pub struct Lines {
+    pub wake: &'static str,
+    pub rage: &'static str,
+    pub taunts: &'static [&'static str],
+    pub fall: &'static str,
+}
+
+/// Each champion's words (by its model).
+pub fn champion_lines(model: &str) -> Option<&'static Lines> {
+    static HERRERO: Lines = Lines {
+        wake: "¿Una reina en mi forja? Hace tres siglos que no templo un acero tan fino.",
+        rage: "¡Más fuego! ¡Que el yunque cante!",
+        taunts: &[
+            "Quieta, majestad. Solo voy a darte forma.",
+            "Te enfrías demasiado rápido.",
+            "Cada golpe, una chispa. Cada chispa, un recuerdo.",
+        ],
+        fall: "Por fin... se apaga la fragua.",
+    };
+    static BIBLIOTECARIA: Lines = Lines {
+        wake: "Silencio. En esta sala no se habla desde hace trescientos años.",
+        rage: "¿Has arrancado una página? ¡Eso se paga con huesos!",
+        taunts: &[
+            "Baja la voz, majestad.",
+            "Tu nombre no figura en mis registros. Todavía.",
+            "Te archivaré con los olvidados.",
+        ],
+        fall: "Cerrad el libro... con cuidado.",
+    };
+    static SENOR: Lines = Lines {
+        wake: "Arrodíllate. En esta cripta solo hay un rey.",
+        rage: "¡Levantaos, mis fieles! ¡Vuestro señor os llama!",
+        taunts: &[
+            "Una reina sin corte no es más que una visitante.",
+            "Mi corte entera murió por mí. ¿Quién moriría por ti?",
+            "Inclina la cabeza. Así te la quito antes.",
+        ],
+        fall: "Ni la muerte... me quitó la corona.",
+    };
+    static CENTINELA: Lines = Lines {
+        wake: "Ni una moneda sale de aquí. Ni una.",
+        rage: "¡Ladrona! ¡LADRONA!",
+        taunts: &[
+            "Te he contado los pasos. Y las monedas.",
+            "El oro no se mueve. Tú tampoco.",
+            "¿Sabes cuántos lo intentaron? Están debajo del oro.",
+        ],
+        fall: "El oro... era lo único... que me quedaba.",
+    };
+    static CUSTODIO: Lines = Lines {
+        wake: "El sello no se abre. Lo juré hace mil años, y lo cumplo.",
+        rage: "La llave es mía. ¡MÍA!",
+        taunts: &[
+            "Detrás de esa puerta late algo que no debes despertar.",
+            "Mi juramento pesa más que tu corona.",
+            "Retrocede, reina. Por tu bien.",
+        ],
+        fall: "Que el Corazón... te perdone.",
+    };
+    static GUARDIAN: Lines = Lines {
+        wake: "Late... ¿lo oyes? Late por mí.",
+        rage: "¡SANGRE PARA EL CORAZÓN!",
+        taunts: &[
+            "Cada latido me hace más grande.",
+            "Tu sangre suena igual que la suya.",
+            "Quédate. El Corazón tiene hambre.",
+        ],
+        fall: "El latido... se... calla...",
+    };
+    Some(match model {
+        "herrero" => &HERRERO,
+        "bibliotecaria" => &BIBLIOTECARIA,
+        "senor" => &SENOR,
+        "centinela" => &CENTINELA,
+        "custodio" => &CUSTODIO,
+        "guardian" => &GUARDIAN,
+        _ => return None,
+    })
+}
+
+/// A champion's colour: its eyes, the light about it, its name when it speaks.
+pub fn champion_color(model: &str) -> [f32; 3] {
+    match model {
+        "herrero" => [1.0, 0.5, 0.12],
+        "bibliotecaria" => [0.78, 0.5, 1.0],
+        "senor" => [0.45, 1.0, 0.45],
+        "centinela" => [1.0, 0.82, 0.3],
+        "custodio" => [1.0, 0.22, 0.14],
+        "guardian" => [1.0, 0.1, 0.12],
+        _ => [1.0, 0.9, 0.8],
+    }
+}
+
 /// How big a foe stands: a champion's own height, else its kind's.
 pub fn foe_size(mine: Option<&Authored>, spawn: &Spawn) -> f32 {
     mine.and_then(|m| m.champions.get(&spawn.id))
@@ -1339,5 +1453,82 @@ mod tests {
             checked >= 10,
             "foes with the Queen in their room ({checked})"
         );
+    }
+
+    /// Every champion of the mine wears its own model and has its words; the smith speaks when he moves
+    /// on her, rages at half his life, and says his last as he falls.
+    #[test]
+    fn champions_have_their_own_look_and_voice() {
+        use crate::Dungeon;
+        use velvet_dungeon::controller::Input;
+        if !available() {
+            return;
+        }
+        let mut run = Dungeon::mine().unwrap();
+        let mine = run.authored.clone().unwrap();
+        let mut models: Vec<&str> = run
+            .map
+            .spawns
+            .iter()
+            .filter_map(|s| champion_model(Some(&mine), s))
+            .collect();
+        models.sort_unstable();
+        models.dedup();
+        assert_eq!(
+            models,
+            [
+                "bibliotecaria",
+                "centinela",
+                "custodio",
+                "guardian",
+                "herrero",
+                "senor"
+            ]
+        );
+        assert!(models.iter().all(|m| champion_lines(m).is_some()));
+        let (&id, smith) = mine
+            .champions
+            .iter()
+            .find(|(_, c)| c.power == Power::Sparks)
+            .unwrap();
+        let index = run.actors.iter().position(|a| a.spawn == id).unwrap();
+        let home = run.actors[index].position;
+        let spot = (0..24)
+            .find_map(|k| {
+                let a = k as f32 * std::f32::consts::TAU / 24.0;
+                let at = home + Vec3::new(a.cos(), 0.0, a.sin()) * 5.0;
+                run.map
+                    .capsule_floor(at + Vec3::Y * 0.4, 0.28)
+                    .filter(|y| (y - home.y).abs() < 0.5)
+                    .map(|y| Vec3::new(at.x, y, at.z))
+            })
+            .unwrap();
+        run.controller.position = spot;
+        let said = |run: &Dungeon| run.speech.as_ref().map(|s| (s.who.clone(), s.line));
+        let mut woke = None;
+        for _ in 0..(4 * 60) {
+            run.update(Input::default(), 1.0 / 60.0);
+            run.health = 100.0;
+            if woke.is_none() {
+                woke = said(&run);
+            }
+        }
+        let lines = champion_lines("herrero").unwrap();
+        assert_eq!(
+            woke,
+            Some((smith.name.clone(), lines.wake)),
+            "he speaks on seeing her"
+        );
+        run.actors[index].health = run.map.spawns[id].health * 0.45;
+        let mut raged = false;
+        for _ in 0..(3 * 60) {
+            run.update(Input::default(), 1.0 / 60.0);
+            run.health = 100.0;
+            raged |= said(&run).is_some_and(|(_, l)| l == lines.rage);
+        }
+        assert!(raged, "he rages aloud");
+        run.actors[index].health = 0.0;
+        run.update(Input::default(), 1.0 / 60.0);
+        assert_eq!(said(&run).map(|s| s.1), Some(lines.fall), "his last words");
     }
 }

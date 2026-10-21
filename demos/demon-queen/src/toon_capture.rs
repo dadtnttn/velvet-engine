@@ -7161,6 +7161,74 @@ pub(super) fn capture(out: &Path) -> Result<()> {
                 .replace(['@', '.'], "_");
             save(&mut app, out, &format!("mina-poses-{tag}"))?;
         }
+        // The mine's champions in a row before her in the loading hall, each in its own build and gear
+        // (VELVET_FOE_POSE for one clip), the smith saying his first words.
+        if only
+            .as_deref()
+            .is_some_and(|o| o.split(',').any(|v| v == "jefes"))
+        {
+            let eye = Vec3::new(1.0, -3.0, -44.0);
+            let y = app
+                .dungeon
+                .map
+                .capsule_floor(eye + Vec3::Y * 0.4, 0.28)
+                .unwrap_or(eye.y);
+            app.dungeon.controller.position = Vec3::new(eye.x, y, eye.z);
+            app.dungeon.controller.yaw = 0.0;
+            app.dungeon.controller.pitch = 0.05;
+            app.player = app.dungeon.controller.position;
+            let order = [
+                "herrero",
+                "bibliotecaria",
+                "senor",
+                "centinela",
+                "custodio",
+                "guardian",
+            ];
+            for (k, model) in order.iter().enumerate() {
+                let Some(index) = app.dungeon.actors.iter().position(|a| {
+                    let s = &app.dungeon.map.spawns[a.spawn];
+                    dungeon::authored::champion_model(app.dungeon.authored.as_deref(), s)
+                        == Some(*model)
+                }) else {
+                    continue;
+                };
+                let at = Vec3::new(
+                    -6.6 + k as f32 * 2.9,
+                    y,
+                    eye.z - 8.5 - if k == 5 { 2.0 } else { 0.0 },
+                );
+                let y = app
+                    .dungeon
+                    .map
+                    .capsule_floor(at + Vec3::Y * 0.4, 0.4)
+                    .unwrap_or(y);
+                let actor = &mut app.dungeon.actors[index];
+                actor.position = Vec3::new(at.x, y, at.z);
+                actor.yaw = 0.0;
+                dungeon::combat::turn_toward(
+                    &mut actor.yaw,
+                    Vec3::new(eye.x - at.x, 0.0, eye.z - at.z),
+                    10.0,
+                    10.0,
+                );
+                actor.gait = dungeon::combat::Gait::Guard;
+                if *model == "herrero" {
+                    let s = app.dungeon.map.spawns[actor.spawn].clone();
+                    let who = app.dungeon.champion_name(&s).unwrap_or_default();
+                    app.dungeon.speech = Some(dungeon::Speech {
+                        who,
+                        line: dungeon::authored::champion_lines("herrero").unwrap().wake,
+                        color: dungeon::authored::champion_color("herrero"),
+                        at: app.dungeon.elapsed - 1.0,
+                    });
+                }
+            }
+            let tag = std::env::var("VELVET_FOE_POSE")
+                .unwrap_or_else(|_| "guard".into())
+                .replace(['@', '.'], "_");
+            save(&mut app, out, &format!("mina-jefes-{tag}"))?;
+        }
         // A fight in the guard room: she waits by the door, the room's foes come round the table
         // and strike — a frame every 0.4 s (their gait, their feet, their weapons, their way).
         if only
