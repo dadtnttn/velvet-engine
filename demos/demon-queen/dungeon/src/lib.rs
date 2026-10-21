@@ -245,6 +245,85 @@ pub fn enemy_style(definition: &str, kind: SpawnKind) -> EnemyStyle {
     }
 }
 
+/// How far she walks from `p`, out to `limit` metres, in the controller's own steps (12 cm, up a
+/// step or down any drop): the top of an altar walled by its rim, or a pocket between props,
+/// reaches less than a metre.
+fn walk_reach(map: &Blueprint, p: Vec3, limit: f32) -> f32 {
+    const STEP: f32 = 0.12;
+    let mut seen = std::collections::HashSet::new();
+    let mut queue = std::collections::VecDeque::from([(0i32, 0i32, p.y)]);
+    let mut far: f32 = 0.0;
+    while let Some((ix, iz, y)) = queue.pop_front() {
+        if far >= limit || seen.len() > 2400 {
+            break;
+        }
+        if !seen.insert((ix, iz)) {
+            continue;
+        }
+        far = far.max((ix as f32).hypot(iz as f32) * STEP);
+        for (dx, dz) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+            let (jx, jz) = (ix + dx, iz + dz);
+            if seen.contains(&(jx, jz)) {
+                continue;
+            }
+            let q = Vec3::new(p.x + jx as f32 * STEP, y, p.z + jz as f32 * STEP);
+            if let Some(floor) = map.capsule_floor(q, PLAYER_RADIUS) {
+                if floor <= y + map.step_height() + 0.015 {
+                    queue.push_back((jx, jz, floor));
+                }
+            }
+        }
+    }
+    far
+}
+
+/// Where she can stand near `p` and walk away from: `p` itself when it is such a spot, else the
+/// nearest floor round it (out to 6 m, within 2.5 m of its height) that is; `p` when none is.
+fn free_spot(map: &Blueprint, p: Vec3) -> Vec3 {
+    const FREE: f32 = 2.0;
+    let stands = |q: Vec3| {
+        map.capsule_floor(q, PLAYER_RADIUS)
+            .filter(|f| (f - q.y).abs() < 0.05)
+            .map(|f| Vec3::new(q.x, f, q.z))
+    };
+    if let Some(q) = stands(p).filter(|q| walk_reach(map, *q, FREE) >= FREE) {
+        return q;
+    }
+    for ring in 1..=12 {
+        let r = ring as f32 * 0.5;
+        let around = 8 + ring * 2;
+        let mut best: Option<(f32, Vec3)> = None;
+        for k in 0..around {
+            let a = k as f32 * std::f32::consts::TAU / around as f32;
+            let (x, z) = (p.x + a.cos() * r, p.z + a.sin() * r);
+            let floors: Vec<f32> = match &map.floors {
+                Some(grid) => grid
+                    .floors(x, z)
+                    .map(|(f, _)| f)
+                    .filter(|f| (f - p.y).abs() <= 2.5)
+                    .collect(),
+                None => map.surface(x, z, p.y + 1.0, PLAYER_HEIGHT).into_iter().collect(),
+            };
+            for floor in floors {
+                let Some(q) = stands(Vec3::new(x, floor, z)) else {
+                    continue;
+                };
+                let lift = (q.y - p.y).abs();
+                if best.is_some_and(|(b, _)| b <= lift) {
+                    continue;
+                }
+                if walk_reach(map, q, FREE) >= FREE {
+                    best = Some((lift, q));
+                }
+            }
+        }
+        if let Some((_, q)) = best {
+            return q;
+        }
+    }
+    p
+}
+
 /// How far round a foe looks for a walk to the Queen over a hand-made level's floors.
 const FOE_PATH_REACH: f32 = 18.0;
 /// How far from its post a foe of a hand-made level follows the Queen.
@@ -578,6 +657,8 @@ pub struct Dungeon {
     /// Distance walked since the last footstep, and whether on the ground.
     step_distance: f32,
     was_grounded: bool,
+    /// How long she has pushed to walk without moving (a spot boxed in lets her out).
+    stuck_for: f32,
     /// One authored first encounter, regenerated from the seed and saved as
     /// combat state without changing the procedural spawn table.
     pub slime: Option<slime::Slime>,
@@ -796,6 +877,7 @@ impl Dungeon {
             sounds: Vec::new(),
             step_distance: 0.0,
             was_grounded: true,
+            stuck_for: 0.0,
             map,
             catalog,
             controller,
@@ -1924,6 +2006,7 @@ impl Dungeon {
         self.shake = (self.shake - dt * 1.6).max(0.0);
         let before = self.controller.position;
         self.controller.step(&self.map, input, dt);
+        self.let_out_if_boxed(before, input, dt);
         // Footsteps every stride on the ground; a jump and its landing.
         let grounded = self.controller.grounded;
         if grounded {
@@ -2061,7 +2144,7 @@ impl Dungeon {
         };
         if fell {
             self.health = (self.health - 12.0).max(1.0);
-            self.controller = Controller::new(self.checkpoint);
+            self.back_to_sanctuary();
             self.message("Caida en la grieta. Regresas al santuario: -12 vitalidad.");
         }
         let mut encounter_targets = vec![None; self.actors.len()];
@@ -3001,12 +3084,46 @@ impl Dungeon {
                 *count -= *count / 2;
             }
             self.materials.retain(|_, count| *count > 0);
-            self.controller = Controller::new(self.checkpoint);
+            self.back_to_sanctuary();
             self.message(
                 "Has caido. Regresas al santuario y pierdes la mitad del oro y de los materiales de esta expedicion.",
             );
         }
     }
+    /// She pushes to walk and does not move: walled in by the floors round her (the top of an
+    /// altar, a pocket between props), she is let out onto the nearest free floor. Against a
+    /// plain wall she can still walk elsewhere, so nothing happens.
+    fn let_out_if_boxed(&mut self, before: Vec3, input: Input, dt: f32) {
+        let pushing = input.forward != 0.0 || input.strafe != 0.0;
+        let moved = horizontal(self.controller.position - before).length() > 0.002;
+        if !pushing || moved || !self.controller.grounded {
+            self.stuck_for = 0.0;
+            return;
+        }
+        self.stuck_for += dt;
+        if self.stuck_for < 1.0 {
+            return;
+        }
+        self.stuck_for = 0.0;
+        let here = self.controller.position;
+        if walk_reach(&self.map, here, 2.0) >= 2.0 {
+            return;
+        }
+        let free = free_spot(&self.map, here);
+        if free != here {
+            self.controller.position = free;
+            self.controller.velocity = Vec3::ZERO;
+            self.message("Sales de ahí de un salto.");
+        }
+    }
+
+    /// Back at the sanctuary she rested at (on free floor by it).
+    fn back_to_sanctuary(&mut self) {
+        let yaw = self.controller.yaw;
+        self.controller = Controller::new(free_spot(&self.map, self.checkpoint));
+        self.controller.yaw = yaw;
+    }
+
     fn start_sword_swing(&mut self, combo: usize) {
         self.sword_from = if self.sword_swing > 0.0 {
             let clip = fp::SWINGS[self.sword_combo];
@@ -3619,9 +3736,10 @@ impl Dungeon {
             }
             SpawnKind::Rest => {
                 self.health = 100.0;
-                // in the hand-made mine, right where the sanctuary's font stands
+                // in the hand-made mine, where she stands by its font (the font's own spot is
+                // the top of its dais, walled by its rim)
                 self.checkpoint = if self.authored.is_some() {
-                    s.position
+                    self.controller.position
                 } else {
                     self.map.rooms[s.room].center
                 };

@@ -1531,4 +1531,45 @@ mod tests {
         run.update(Input::default(), 1.0 / 60.0);
         assert_eq!(said(&run).map(|s| s.1), Some(lines.fall), "his last words");
     }
+
+    /// The sanctuary's own spot is the top of its altar, walled by its rim: dying (even with a
+    /// sanctuary saved there by an older game) brings her back onto free floor beside it, and
+    /// standing up there pushing to walk lets her out.
+    #[test]
+    fn she_is_never_left_boxed_in_at_the_sanctuary() {
+        use crate::{walk_reach, Dungeon};
+        use velvet_dungeon::{controller::Input, gameplay::SpawnKind, horizontal};
+        if !available() {
+            return;
+        }
+        let mut run = Dungeon::mine().unwrap();
+        let font = run
+            .actors
+            .iter()
+            .map(|a| run.map.spawns[a.spawn].clone())
+            .find(|s| s.kind == SpawnKind::Rest)
+            .unwrap()
+            .position;
+        assert!(walk_reach(&run.map, font, 2.0) < 2.0, "the altar's top is boxed in");
+        run.checkpoint = font;
+        run.health = 0.0;
+        run.update(Input::default(), 1.0 / 60.0);
+        let back = run.controller.position;
+        assert!(walk_reach(&run.map, back, 2.0) >= 2.0, "she walks away from {back:?}");
+        assert!(horizontal(back - font).length() < 4.0, "by the sanctuary");
+        // up on the altar, pushing to walk
+        run.controller = velvet_dungeon::controller::Controller::new(font);
+        let push = Input {
+            forward: 1.0,
+            ..Input::default()
+        };
+        for _ in 0..90 {
+            run.update(push, 1.0 / 60.0);
+        }
+        let out = run.controller.position;
+        assert!(walk_reach(&run.map, out, 2.0) >= 2.0, "let out to {out:?}");
+        // where she comes in, the floor is free: pushing there never moves her by magic
+        let run = Dungeon::mine().unwrap();
+        assert!(walk_reach(&run.map, run.controller.position, 2.0) >= 2.0);
+    }
 }

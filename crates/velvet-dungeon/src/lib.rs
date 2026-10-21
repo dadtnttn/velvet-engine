@@ -549,6 +549,10 @@ impl Blueprint {
     pub fn step_height(&self) -> f32 {
         self.floors.as_ref().map_or(STEP_HEIGHT, |grid| grid.step)
     }
+    /// The room a body needs over a floor here (a hand-made level's, as its bake measured it).
+    pub fn body_height(&self) -> f32 {
+        self.floors.as_ref().map_or(PLAYER_HEIGHT, |grid| grid.head)
+    }
     /// Whether a body `radius` wide standing with its feet at `p` hits one of the loose obstacles
     /// (the same test [`capsule_floor`](Self::capsule_floor) makes).
     pub fn hits_obstacle(&self, p: Vec3, radius: f32) -> bool {
@@ -593,14 +597,15 @@ impl Blueprint {
                 return None;
             }
         }
-        let mut y = self.surface(p.x, p.z, p.y, PLAYER_HEIGHT)?;
+        let body = self.body_height();
+        let mut y = self.surface(p.x, p.z, p.y, body)?;
         for i in 0..8 {
             let a = i as f32 * std::f32::consts::TAU / 8.0;
             y = y.max(self.surface(
                 p.x + a.cos() * radius,
                 p.z + a.sin() * radius,
                 p.y,
-                PLAYER_HEIGHT,
+                body,
             )?);
         }
         Some(y)

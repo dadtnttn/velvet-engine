@@ -48,6 +48,9 @@ pub struct FloorGrid {
     /// How far the bake already keeps bodies from walls: a column with something solid this close
     /// to its centre at body height is no floor. Bodies are that much narrower over this grid.
     pub margin: f32,
+    /// The room a body needs over a floor: the bake measured its beams, lintels and low rock for
+    /// a body this tall, so a taller one would stop at places its walk goes through.
+    pub head: f32,
     offsets: Vec<u32>,
     spans: Vec<FloorSpan>,
 }
@@ -56,6 +59,8 @@ pub struct FloorGrid {
 pub const AUTHORED_STEP: f32 = 0.45;
 /// The bakes' wall margin (the mine's floors.py keeps floors 0.18 m from walls).
 pub const AUTHORED_MARGIN: f32 = 0.18;
+/// The bakes' headroom: the prototypes' capsule stands 1.64 m (floors.py's HEAD).
+pub const AUTHORED_HEAD: f32 = 1.64;
 
 impl FloorGrid {
     /// A grid from its columns: `columns[row * width + col]` lists that column's floors.
@@ -87,6 +92,7 @@ impl FloorGrid {
             height,
             step: AUTHORED_STEP,
             margin: AUTHORED_MARGIN,
+            head: AUTHORED_HEAD,
             offsets,
             spans,
         }
@@ -152,6 +158,7 @@ impl FloorGrid {
             height,
             step: AUTHORED_STEP,
             margin: AUTHORED_MARGIN,
+            head: AUTHORED_HEAD,
             offsets,
             spans,
         })
@@ -389,8 +396,7 @@ impl FloorGrid {
             .filter(|&s| {
                 let span = &self.spans[s];
                 (span.floor - floor).abs() <= self.step
-                    && span.ceiling.min(ceiling) - span.floor.max(floor)
-                        >= crate::PLAYER_HEIGHT - 0.01
+                    && span.ceiling.min(ceiling) - span.floor.max(floor) >= self.head - 0.01
                     && span.ceiling > span.floor
             })
             .max_by(|&a, &b| self.spans[a].floor.total_cmp(&self.spans[b].floor))
@@ -452,7 +458,7 @@ impl FloorGrid {
                         let span = &self.spans[s];
                         if span.floor > p.y + self.step + 0.015
                             || span.floor < p.y - 1.0
-                            || span.ceiling - span.floor < crate::PLAYER_HEIGHT - 0.01
+                            || span.ceiling - span.floor < self.head - 0.01
                             || !self.fits(s, radius, &mut fits)
                         {
                             continue;
@@ -497,7 +503,7 @@ impl FloorGrid {
             let mut feet = a.y;
             (1..=steps).all(|i| {
                 let p = a + (b - a) * (i as f32 / steps as f32) + offset;
-                match self.surface(p.x, p.z, feet, crate::PLAYER_HEIGHT) {
+                match self.surface(p.x, p.z, feet, self.head) {
                     Some(y)
                         if (y - feet).abs() <= self.step && !blocked(Vec3::new(p.x, y, p.z)) =>
                     {
