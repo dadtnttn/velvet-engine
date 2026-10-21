@@ -49,8 +49,8 @@ const ALBUMS: [AlbumDef; 6] = [
         memories: false,
     },
     AlbumDef {
-        es: "Citas",
-        en: "Dates",
+        es: "Recuerdos",
+        en: "Memories",
         icon: Icon::Feast,
         scenes: &[],
         memories: true,
@@ -303,12 +303,12 @@ impl GalleryUi {
                     .collect()
             })
             .collect();
-        self.memories = crate::exploration3d::dates::memories()
+        self.memories = crate::exploration3d::dates::gallery_memories()
             .into_iter()
-            .map(|(girl, m)| {
+            .map(|(whose, m)| {
                 let key = format!("{}{}", gallery_seen::MEMORY, m.imagen);
                 (
-                    girl.nombre.clone(),
+                    whose.to_owned(),
                     Memory {
                         picture: m.imagen.clone(),
                         title: m.titulo.clone(),
@@ -863,8 +863,8 @@ impl App {
         canvas.display_text(fonts, name, 742, 66, size, ink);
         let what = if ALBUMS[album].memories {
             t(
-                "Los recuerdos de las citas del castillo: cada uno se abre al vivirlo.",
-                "The memories of the castle's dates: each opens once you live it.",
+                "Las citas y los momentos del castillo: cada recuerdo se abre al vivirlo.",
+                "The castle's dates and moments: each memory opens once you live it.",
             )
         } else if album == 0 {
             t(
@@ -1385,7 +1385,7 @@ mod tests {
     #[test]
     fn every_date_memory_has_its_picture_and_its_thumbnail() {
         let root = crate::assets_root();
-        let memories = crate::exploration3d::dates::memories();
+        let memories = crate::exploration3d::dates::gallery_memories();
         assert!(!memories.is_empty());
         for (_, m) in memories {
             assert!(

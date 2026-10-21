@@ -19,6 +19,18 @@ use super::*;
 #[serde(default)]
 pub(crate) struct Citas {
     pub chicas: Vec<Chica>,
+    /// The castle's memories that are no date's (the vanity's after the bath): who, and the memory.
+    pub sueltos: Vec<Suelto>,
+}
+
+/// A memory of the castle's that is no date's: whose it is and the memory (its scene plays it with
+/// `@recuerdo`, and the gallery keeps it with the dates').
+#[derive(Debug, Deserialize, Default, Clone)]
+#[serde(default)]
+pub(crate) struct Suelto {
+    pub quien: String,
+    #[serde(flatten)]
+    pub recuerdo: Recuerdo,
 }
 
 /// A girl of the court to date.
@@ -90,6 +102,15 @@ pub(crate) fn memories() -> Vec<(&'static Chica, &'static Recuerdo)> {
                 .iter()
                 .flat_map(move |c| c.recuerdos.iter().map(move |r| (g, r)))
         })
+        .collect()
+}
+
+/// Every memory the gallery keeps: the dates' (by girl) and then the loose ones: (whose, memory).
+pub(crate) fn gallery_memories() -> Vec<(&'static str, &'static Recuerdo)> {
+    memories()
+        .into_iter()
+        .map(|(g, r)| (g.nombre.as_str(), r))
+        .chain(citas().sueltos.iter().map(|s| (s.quien.as_str(), &s.recuerdo)))
         .collect()
 }
 
