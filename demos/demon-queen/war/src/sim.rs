@@ -1471,7 +1471,7 @@ impl Sim {
                 route = if self.field.line_clear(ax, az, tcx, tcz) {
                     None
                 } else {
-                    Some(self.field.find_path(ax, az, tcx, tcz))
+                    Some(self.field.route(ax, az, tcx, tcz))
                 };
             }
             if let Some(rt) = route.as_mut() {
@@ -2212,11 +2212,23 @@ impl Sim {
             let (px, pz) = (self.px[i], self.pz[i]);
             let far = (sx - px).hypot(sz - pz);
             let bumped = self.time - self.bump_t[i] < 0.6 && far > 2.5;
-            if !t.flyer && (far > 14.0 || bumped) && !self.field.line_clear(px, pz, sx, sz) {
+            // (a way round once taken is kept until its place is in sight: dropped as soon as it
+            // stops bumping, it walks straight back into the fence)
+            let following = !self.detour[i].is_empty();
+            if !t.flyer
+                && (far > 14.0 || bumped || following)
+                && !self.field.line_clear(px, pz, sx, sz)
+            {
                 if self.detour_t[i] <= self.time {
                     let wait = 2.0 + self.r();
                     self.detour_t[i] = self.time + wait;
-                    self.detour[i] = self.field.find_path(px, pz, sx, sz);
+                    // a place on the far side of a wall: back to the regiment's anchor first
+                    let (tx, tz) = if self.field.reachable(px, pz, sx, sz) {
+                        (sx, sz)
+                    } else {
+                        (ax, az)
+                    };
+                    self.detour[i] = self.field.find_path(px, pz, tx, tz);
                 }
                 if let Some(p) = self.detour[i].first().copied() {
                     if (p.x - px).hypot(p.z - pz) < 3.0 {

@@ -306,6 +306,9 @@ pub struct Siege {
     pub wood0: [f32; 2],
     /// The keep's ground: where attackers who hold it win the place.
     pub hold_at: Option<(f32, f32, f32)>,
+    /// The wall ring round the keep's ground (its innermost one): who stands outside it, even
+    /// close, does not hold the keep.
+    pub hold_ring: Option<Vec<[f32; 2]>>,
     /// How long the attackers have held it (they need `hold_need`).
     pub hold: f32,
     pub hold_need: f32,
@@ -324,6 +327,7 @@ impl Siege {
     pub fn new(map: Option<&BattleMap>, defender: Option<u8>, wood: [f32; 2]) -> Siege {
         let mut works = Vec::new();
         let mut hold_at = None;
+        let mut hold_ring = None;
         if let Some(m) = map {
             for w in &m.works {
                 let kind = w.kind();
@@ -362,6 +366,14 @@ impl Siege {
                         let z = ring.iter().map(|p| p[1]).sum::<f32>() / n;
                         Some((x, z, 26.0))
                     });
+                // the smallest ring the keep's ground is in
+                hold_ring = hold_at.and_then(|(x, z, _)| {
+                    m.enclosures
+                        .iter()
+                        .filter(|ring| crate::baked::in_poly(x, z, ring))
+                        .min_by(|a, b| ring_area(a).total_cmp(&ring_area(b)))
+                        .cloned()
+                });
             }
         }
         Siege {
@@ -377,6 +389,7 @@ impl Siege {
             wood,
             wood0: wood,
             hold_at,
+            hold_ring,
             hold: 0.0,
             hold_need: 45.0,
             limit: 15.0 * 60.0,
@@ -1209,6 +1222,13 @@ impl Siege {
                 if rg.state.routed() || rg.awake {
                     continue;
                 }
+                if self
+                    .hold_ring
+                    .as_ref()
+                    .is_some_and(|ring| !crate::baked::in_poly(sim.px[i], sim.pz[i], ring))
+                {
+                    continue;
+                }
                 count[rg.side as usize] += 1;
             }
             let was = self.hold;
@@ -1460,4 +1480,17 @@ mod tests {
             }
         }
     }
+}
+
+/// A ring's area (shoelace).
+fn ring_area(ring: &[[f32; 2]]) -> f32 {
+    let n = ring.len();
+    (0..n)
+        .map(|i| {
+            let (a, b) = (ring[i], ring[(i + 1) % n]);
+            a[0] * b[1] - b[0] * a[1]
+        })
+        .sum::<f32>()
+        .abs()
+        * 0.5
 }

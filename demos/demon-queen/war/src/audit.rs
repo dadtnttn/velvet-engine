@@ -162,8 +162,51 @@ pub fn play(map: &str, attacks: bool) -> Played {
     let mut last: Vec<(f32, f32)> = b.sim.regiments.iter().map(|r| (r.cx, r.cz)).collect();
     let mut trails: Vec<Vec<(f32, f32)>> = last.iter().map(|p| vec![*p]).collect();
     let mut cells: std::collections::HashMap<(i32, i32), f32> = Default::default();
+    // `VELVET_WAR_AUDIT_TRACE=<s>`: from that second on, where each regiment is and where it is
+    // going, every 20 s
+    let trace: Option<f32> = std::env::var("VELVET_WAR_AUDIT_TRACE")
+        .ok()
+        .and_then(|v| v.parse().ok());
     while b.sim.over.is_none() && b.sim.time < 16.5 * 60.0 {
         b.skip(step, false);
+        if trace.is_some_and(|t0| b.sim.time >= t0 && (b.sim.time % 20.0) < step - 0.01) {
+            let broken: Vec<String> = b
+                .sim
+                .siege
+                .as_ref()
+                .map(|s| {
+                    s.works
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, w)| w.broken)
+                        .map(|(k, w)| format!("{k}:{:?}", w.kind))
+                        .collect()
+                })
+                .unwrap_or_default();
+            println!("-- {:.0}s broken {broken:?}", b.sim.time);
+            for r in b.sim.regiments.iter().filter(|r| r.alive > 0) {
+                let goal = match &r.order {
+                    crate::sim::Order::Move { path, i, .. } => format!(
+                        "move {}/{} -> {:?} reach {}",
+                        i,
+                        path.len(),
+                        path.last().map(|p| (p.x.round(), p.z.round())),
+                        path.last().is_some_and(|p| b.sim.field.reachable(r.ax, r.az, p.x, p.z))
+                    ),
+                    crate::sim::Order::Attack { target, .. } => format!(
+                        "attack {} at ({:.0},{:.0})",
+                        b.sim.regiments[*target].ty.id,
+                        b.sim.regiments[*target].cx,
+                        b.sim.regiments[*target].cz
+                    ),
+                    o => format!("{:?}", std::mem::discriminant(o)),
+                };
+                println!(
+                    "  {} {:<12} {:>3} {:?} at ({:.0},{:.0}) anchor ({:.0},{:.0}) eng {} {}",
+                    r.side, r.ty.id, r.alive, r.state, r.cx, r.cz, r.ax, r.az, r.engaged, goal
+                );
+            }
+        }
         if out.contact.is_none() && b.sim.regiments.iter().any(|r| r.engaged > 0) {
             out.contact = Some(b.sim.time);
         }
@@ -549,4 +592,240 @@ fn every_battle_map_lets_its_armies_meet() {
         }
     }
     assert!(bad.is_empty(), "armies that cannot meet on {bad:?}");
+}
+
+/// A look at one map's ground as the soldiers see it, printed (`--ignored --nocapture`):
+/// `VELVET_PROBE_MAP` (default the fortress), `VELVET_PROBE_RECT=x0,z0,x1,z1` and
+/// `VELVET_PROBE_STEP` (metres) for the blocked/free picture ('#' blocked, '.' open to paths, ':'
+/// free but too narrow for them); `VELVET_PROBE_GRID=1` the path grid itself, a letter per
+/// connected stretch; `VELVET_PROBE_OPEN=1` with every gate and palisade broken, or
+/// `VELVET_PROBE_OPEN_IDS=a,b` those works; `VELVET_PROBE_PATH=ax,az,bx,bz;…` the paths found and
+/// `VELVET_PROBE_REACH=…` whether each pair is reachable.
+#[test]
+#[ignore]
+fn probe_map() {
+    let map = std::env::var("VELVET_PROBE_MAP").unwrap_or("asedio_fortaleza".into());
+    let root =
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../data/guerra/batallas");
+    crate::baked::ensure(&map, &root).unwrap();
+    let mut setup = Setup::scenario("vado", 0.3);
+    setup.map = map.clone();
+    setup.player_attacks = false;
+    let mut b = Battle::new(setup);
+    if let Ok(ids) = std::env::var("VELVET_PROBE_OPEN_IDS") {
+        for w in ids.split(',') {
+            b.sim.field.set_open(w.parse().unwrap(), true);
+        }
+    }
+    let open = std::env::var("VELVET_PROBE_OPEN").is_ok();
+    if open {
+        let n = b.sim.siege.as_ref().map_or(0, |s| s.works.len());
+        for w in 0..n {
+            let k = b.sim.siege.as_ref().unwrap().works[w].kind;
+            if matches!(k, crate::baked::WorkKind::Gate | crate::baked::WorkKind::Palisade) {
+                b.sim.field.set_open(w, true);
+            }
+        }
+    }
+    let r: Vec<f32> = std::env::var("VELVET_PROBE_RECT")
+        .unwrap_or("-45,-120,50,-45".into())
+        .split(',')
+        .map(|v| v.parse().unwrap())
+        .collect();
+    let f = &b.sim.field;
+    let step: f32 = std::env::var("VELVET_PROBE_STEP")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(1.5);
+    let mut z = r[1];
+    while z <= r[3] {
+        let mut line = format!("{z:>5} ");
+        let mut x = r[0];
+        while x <= r[2] {
+            let c = if f.blocked(x, z) {
+                '#'
+            } else if f.pass_at(x, z) {
+                '.'
+            } else {
+                ':'
+            };
+            line.push(c);
+            x += step;
+        }
+        println!("{line}");
+        z += step;
+    }
+    if let Some((x, z, rr)) = b.sim.siege.as_ref().and_then(|s| s.hold_at) {
+        println!("hold at ({x},{z}) r {rr}");
+    }
+    if std::env::var("VELVET_PROBE_GRID").is_ok() {
+        // the pass grid itself: '#' shut, '.' the biggest stretch of open ground, a letter for
+        // each of the others, the bigger first
+        let g = &f.grid;
+        let mut size: std::collections::HashMap<u32, usize> = Default::default();
+        for &r in &g.region {
+            if r != u32::MAX {
+                *size.entry(r).or_default() += 1;
+            }
+        }
+        let mut ranked: Vec<(u32, usize)> = size.into_iter().collect();
+        ranked.sort_by(|a, b| b.1.cmp(&a.1));
+        let mark: std::collections::HashMap<u32, char> = ranked
+            .iter()
+            .enumerate()
+            .map(|(k, &(r, _))| {
+                (r, if k == 0 { '.' } else { (b'a' + (k - 1).min(25) as u8) as char })
+            })
+            .collect();
+        let skip: usize = std::env::var("VELVET_PROBE_SKIP")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(1);
+        for j in (0..g.ph).step_by(skip) {
+            let cz = g.pz0 + (j as f32 + 0.5) * g.pc;
+            if cz < r[1] || cz > r[3] {
+                continue;
+            }
+            let mut line = format!("{cz:>6} ");
+            for i in (0..g.pw).step_by(skip) {
+                let cx = g.px0 + (i as f32 + 0.5) * g.pc;
+                if cx < r[0] || cx > r[2] {
+                    continue;
+                }
+                let k = j * g.pw + i;
+                line.push(if g.pass[k] == 0 { '#' } else { mark[&g.region[k]] });
+            }
+            println!("{line}");
+        }
+    }
+    if let Ok(pairs) = std::env::var("VELVET_PROBE_PATH") {
+        for p in pairs.split(';') {
+            let v: Vec<f32> = p.split(',').map(|v| v.parse().unwrap()).collect();
+            let path = f.find_path(v[0], v[1], v[2], v[3]);
+            println!(
+                "path ({},{}) -> ({},{}): line {} {:?}",
+                v[0],
+                v[1],
+                v[2],
+                v[3],
+                f.line_clear(v[0], v[1], v[2], v[3]),
+                path.iter().map(|p| (p.x.round(), p.z.round())).collect::<Vec<_>>()
+            );
+        }
+    }
+    if let Ok(pairs) = std::env::var("VELVET_PROBE_REACH") {
+        for p in pairs.split(';') {
+            let v: Vec<f32> = p.split(',').map(|v| v.parse().unwrap()).collect();
+            println!(
+                "reach ({},{}) -> ({},{}): {}",
+                v[0],
+                v[1],
+                v[2],
+                v[3],
+                f.reachable(v[0], v[1], v[2], v[3])
+            );
+        }
+    }
+}
+
+/// The stretches of open ground cut off from the rest of each map once gates and palisades are
+/// broken (a yard closed by a house against a tower, a berm between a moat and a wall): their size
+/// and middle, the biggest first; `VELVET_POCKETS_MIN` cells (2 m) to report, default 25.
+#[test]
+#[ignore]
+fn pockets() {
+    let root =
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../data/guerra/batallas");
+    let min: usize = std::env::var("VELVET_POCKETS_MIN")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(25);
+    let only = std::env::var("VELVET_WAR_AUDIT").ok();
+    for &(map, _) in crate::baked::BATTLE_MAPS.iter() {
+        if only.as_deref().is_some_and(|o| !o.split(',').any(|m| m == map)) {
+            continue;
+        }
+        if crate::baked::ensure(map, &root).is_none() {
+            continue;
+        }
+        let mut setup = Setup::scenario("vado", 0.3);
+        setup.map = map.to_owned();
+        setup.player_attacks = true;
+        let mut b = Battle::new(setup);
+        let n = b.sim.siege.as_ref().map_or(0, |s| s.works.len());
+        for w in 0..n {
+            let k = b.sim.siege.as_ref().unwrap().works[w].kind;
+            if matches!(k, crate::baked::WorkKind::Gate | crate::baked::WorkKind::Palisade) {
+                b.sim.field.set_open(w, true);
+            }
+        }
+        let g = &b.sim.field.grid;
+        let mut stats: std::collections::HashMap<u32, (usize, f32, f32)> = Default::default();
+        for (k, &r) in g.region.iter().enumerate() {
+            if r == u32::MAX {
+                continue;
+            }
+            let e = stats.entry(r).or_default();
+            e.0 += 1;
+            e.1 += g.px0 + ((k % g.pw) as f32 + 0.5) * g.pc;
+            e.2 += g.pz0 + ((k / g.pw) as f32 + 0.5) * g.pc;
+        }
+        let mut list: Vec<(usize, f32, f32)> = stats
+            .values()
+            .map(|&(c, x, z)| (c, x / c as f32, z / c as f32))
+            .collect();
+        list.sort_by(|a, b| b.0.cmp(&a.0));
+        let shown: Vec<String> = list
+            .iter()
+            .skip(1)
+            .filter(|p| p.0 >= min)
+            .map(|p| {
+                let inside = b
+                    .sim
+                    .field
+                    .baked
+                    .as_ref()
+                    .is_some_and(|m| m.inside(p.1, p.2));
+                format!(
+                    "{} cells at ({:.0},{:.0}){}",
+                    p.0,
+                    p.1,
+                    p.2,
+                    if inside { " INSIDE" } else { "" }
+                )
+            })
+            .collect();
+        // what of each deployment zone is off the ground the battle is fought on (the region of
+        // the attacker's zone's middle): soldiers set down there could never leave it
+        let f = &b.sim.field;
+        let mid = |r: crate::maps::Rect| ((r.x0 + r.x1) / 2.0, (r.z0 + r.z1) / 2.0);
+        let (ax, az) = mid(b.zone);
+        let off = |r: crate::maps::Rect| -> (usize, usize) {
+            let (mut n, mut bad) = (0, 0);
+            let mut z = r.z0 + 1.0;
+            while z < r.z1 {
+                let mut x = r.x0 + 1.0;
+                while x < r.x1 {
+                    if f.pass_at(x, z) {
+                        n += 1;
+                        if !f.reachable(ax, az, x, z) {
+                            bad += 1;
+                        }
+                    }
+                    x += 2.0;
+                }
+                z += 2.0;
+            }
+            (bad, n)
+        };
+        let (z1, z2) = (off(b.zone), off(b.enemy_zone));
+        println!(
+            "{map:<17} main {:>6}  zones off {}/{} {}/{}  {shown:?}",
+            list.first().map_or(0, |p| p.0),
+            z1.0,
+            z1.1,
+            z2.0,
+            z2.1
+        );
+    }
 }

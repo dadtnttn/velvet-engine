@@ -926,7 +926,9 @@ impl Field {
                 }
             }
         }
-        // the connected stretches of open ground (as the path search steps: eight ways)
+        // the connected stretches of open ground, as the path search steps: it cuts a corner only
+        // where both cells beside it are open, so two cells touching at a corner alone are not
+        // joined (four ways)
         let mut region = vec![u32::MAX; pw * ph];
         let mut next = 0u32;
         for start in 0..pw * ph {
@@ -937,17 +939,15 @@ impl Field {
             let mut stack = vec![start];
             while let Some(k) = stack.pop() {
                 let (i, j) = ((k % pw) as i32, (k / pw) as i32);
-                for dj in -1..=1i32 {
-                    for di in -1..=1i32 {
-                        let (ii, jj) = (i + di, j + dj);
-                        if ii < 0 || jj < 0 || ii >= pw as i32 || jj >= ph as i32 {
-                            continue;
-                        }
-                        let kk = jj as usize * pw + ii as usize;
-                        if pass[kk] == 1 && region[kk] == u32::MAX {
-                            region[kk] = next;
-                            stack.push(kk);
-                        }
+                for (di, dj) in [(-1i32, 0i32), (1, 0), (0, -1), (0, 1)] {
+                    let (ii, jj) = (i + di, j + dj);
+                    if ii < 0 || jj < 0 || ii >= pw as i32 || jj >= ph as i32 {
+                        continue;
+                    }
+                    let kk = jj as usize * pw + ii as usize;
+                    if pass[kk] == 1 && region[kk] == u32::MAX {
+                        region[kk] = next;
+                        stack.push(kk);
                     }
                 }
             }
@@ -1003,17 +1003,79 @@ impl Field {
         a != u32::MAX && a == b
     }
 
+    /// The open ground nearest (x, z) that can be walked to from `from`.
+    pub(crate) fn nearest_reachable(&self, from: Point, x: f32, z: f32) -> Option<Point> {
+        let g = &self.grid;
+        let want = self.region_at(from.x, from.z);
+        if want == u32::MAX {
+            return None;
+        }
+        let mut best: Option<(f32, usize)> = None;
+        for (k, &r) in g.region.iter().enumerate() {
+            if r != want {
+                continue;
+            }
+            let cx = g.px0 + ((k % g.pw) as f32 + 0.5) * g.pc;
+            let cz = g.pz0 + ((k / g.pw) as f32 + 0.5) * g.pc;
+            let d = (cx - x).hypot(cz - z);
+            if best.is_none_or(|(b, _)| d < b) {
+                best = Some((d, k));
+            }
+        }
+        best.map(|(_, k)| Point {
+            x: g.px0 + ((k % g.pw) as f32 + 0.5) * g.pc,
+            z: g.pz0 + ((k / g.pw) as f32 + 0.5) * g.pc,
+        })
+    }
+
     pub fn pass_at(&self, x: f32, z: f32) -> bool {
         let (i, j) = self.cell_of(x, z);
         self.grid.pass[j * self.grid.pw + i] == 1
     }
 
+    /// Whether the straight line from a to b crosses only open cells: every cell it passes through
+    /// (not the one it starts in: who stands against a wall can still walk away from it). Samples
+    /// along the line would step over a fence one cell thick.
     pub fn line_clear(&self, ax: f32, az: f32, bx: f32, bz: f32) -> bool {
-        let n = ((bx - ax).hypot(bz - az) / 2.5).ceil() as usize;
-        (1..=n).all(|s| {
-            let t = s as f32 / n as f32;
-            self.pass_at(ax + (bx - ax) * t, az + (bz - az) * t)
-        })
+        let g = &self.grid;
+        let (i0, j0) = self.cell_of(ax, az);
+        let (bi, bj) = self.cell_of(bx, bz);
+        let (mut i, mut j) = (i0 as i32, j0 as i32);
+        let (bi, bj) = (bi as i32, bj as i32);
+        let (dx, dz) = (bx - ax, bz - az);
+        let (fx, fz) = ((ax - g.px0) / g.pc, (az - g.pz0) / g.pc);
+        // how far along the line (0..1) the next cell edge across x and across z is, and how far
+        // apart those edges are
+        let first = |f: f32, d: f32| -> (f32, f32) {
+            if d.abs() < 1e-6 {
+                (f32::INFINITY, f32::INFINITY)
+            } else {
+                let cells = d / g.pc;
+                let edge = if d > 0.0 { f.floor() + 1.0 } else { f.floor() };
+                ((edge - f) / cells, 1.0 / cells.abs())
+            }
+        };
+        let (mut tx, step_tx) = first(fx, dx);
+        let (mut tz, step_tz) = first(fz, dz);
+        let (si, sj) = (if dx > 0.0 { 1 } else { -1 }, if dz > 0.0 { 1 } else { -1 });
+        let mut guard = g.pw + g.ph + 4;
+        while (i, j) != (bi, bj) && guard > 0 {
+            guard -= 1;
+            if tx < tz {
+                tx += step_tx;
+                i += si;
+            } else {
+                tz += step_tz;
+                j += sj;
+            }
+            if i < 0 || j < 0 || i >= g.pw as i32 || j >= g.ph as i32 {
+                break;
+            }
+            if g.pass[j as usize * g.pw + i as usize] == 0 {
+                return false;
+            }
+        }
+        true
     }
 
     pub fn nearest_free(&self, x: f32, z: f32) -> Point {
@@ -1042,7 +1104,13 @@ impl Field {
     }
 
     /// A* from a to b round obstacles, preferring roads and open ground; smoothed by line of sight.
+    /// A way from a to b round what is in the way; if b cannot be reached at all, just b (a
+    /// soldier's own step: cheap).
     pub fn find_path(&self, ax: f32, az: f32, bx: f32, bz: f32) -> Vec<Point> {
+        self.path(ax, az, bx, bz, false)
+    }
+
+    fn path(&self, ax: f32, az: f32, bx: f32, bz: f32, near: bool) -> Vec<Point> {
         if self.line_clear(ax, az, bx, bz) {
             return vec![Point { x: bx, z: bz }];
         }
@@ -1056,9 +1124,19 @@ impl Field {
         } else {
             self.nearest_free(ax, az)
         };
-        // no way there (a closed gate, the far side of a river): no search
-        if !self.reachable(start.x, start.z, goal.x, goal.z) {
+        // no way there (a closed gate, the far side of a river): as near to it as feet can get
+        let goal = if self.reachable(start.x, start.z, goal.x, goal.z) {
+            goal
+        } else if !near {
             return vec![Point { x: bx, z: bz }];
+        } else {
+            match self.nearest_reachable(start, bx, bz) {
+                Some(p) => p,
+                None => return vec![Point { x: bx, z: bz }],
+            }
+        };
+        if self.line_clear(start.x, start.z, goal.x, goal.z) {
+            return vec![goal];
         }
         let g = &self.grid;
         let (si, sj) = self.cell_of(start.x, start.z);
@@ -1066,16 +1144,19 @@ impl Field {
         let (s_k, g_k) = (sj * g.pw + si, gj * g.pw + gi);
         let mut cost = vec![f32::INFINITY; g.pw * g.ph];
         let mut came = vec![usize::MAX; g.pw * g.ph];
+        // each cell is looked at once (the heap keeps stale entries of cells reached again by a
+        // cheaper way; they are skipped): the goal is known to be reachable, so the search ends
+        // there at the latest once every cell has been looked at
+        let mut done = vec![false; g.pw * g.ph];
         let mut open = std::collections::BinaryHeap::new();
         cost[s_k] = 0.0;
         open.push(Open(0.0, s_k));
         let mut found = false;
-        let mut iter = 0;
         while let Some(Open(_, k)) = open.pop() {
-            iter += 1;
-            if iter > 60_000 {
-                break;
+            if done[k] {
+                continue;
             }
+            done[k] = true;
             if k == g_k {
                 found = true;
                 break;
@@ -1160,8 +1241,10 @@ impl Field {
         out
     }
 
+    /// A regiment's way to b; if b cannot be reached (behind a shut gate, across deep water), to
+    /// the ground nearest it that can.
     pub fn route(&self, ax: f32, az: f32, bx: f32, bz: f32) -> Vec<Point> {
-        self.find_path(ax, az, bx, bz)
+        self.path(ax, az, bx, bz, true)
     }
 
     /// A rough length of the way (straight, or round something).

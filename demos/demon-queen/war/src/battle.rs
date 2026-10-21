@@ -334,13 +334,14 @@ impl Battle {
         }
         for ri in 0..self.sim.regiments.len() {
             if self.sim.regiments[ri].side == side {
-                self.settle(ri, fx, fz);
+                self.settle(ri, fx, fz, (zx, zz));
             }
         }
     }
 
-    /// Steps a freshly deployed regiment off water, rock and walls (towards the front, then aside).
-    fn settle(&mut self, ri: usize, fx: f32, fz: f32) {
+    /// Steps a freshly deployed regiment off water, rock and walls (towards the front, then aside),
+    /// and out of any yard its zone's middle cannot be walked to from (it would never leave it).
+    fn settle(&mut self, ri: usize, fx: f32, fz: f32, home: (f32, f32)) {
         if self.sim.regiments[ri].ty.flyer {
             return;
         }
@@ -350,7 +351,9 @@ impl Battle {
             let mut k = 0;
             while k < r.alive as usize {
                 let (sx, sz) = b.sim.slot_pos(ri, k, x, z, r.heading, r.files);
-                if b.sim.field.blocked(sx, sz) {
+                if b.sim.field.blocked(sx, sz)
+                    || !b.sim.field.reachable(home.0, home.1, sx, sz)
+                {
                     n += 1;
                 }
                 m += 1;
@@ -388,6 +391,18 @@ impl Battle {
             let zn = self.zone;
             x = clamp(x, zn.x0 + half_w * 0.5, zn.x1 - half_w * 0.5);
             z = clamp(z, zn.z0 + 4.0, zn.z1 - 4.0);
+            // (set down in a yard cut off from the rest: onto the ground nearest it that is not)
+            let (mx, mz) = ((zn.x0 + zn.x1) / 2.0, (zn.z0 + zn.z1) / 2.0);
+            if !self.sim.regiments[ri].ty.flyer && !self.sim.field.reachable(mx, mz, x, z) {
+                if let Some(p) = self.sim.field.nearest_reachable(
+                    crate::field::Point { x: mx, z: mz },
+                    x,
+                    z,
+                ) {
+                    x = p.x;
+                    z = p.z;
+                }
+            }
         }
         {
             let r = &mut self.sim.regiments[ri];
