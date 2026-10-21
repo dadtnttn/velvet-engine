@@ -1,4 +1,4 @@
-//! The castle's dating sim. At the vanity («Citas», a page of the court) the Queen picks whom to
+//! The castle's dating sim. On the great hall's red sofas («Citas», a page of the court) the Queen picks whom to
 //! spend the day with, Lira, Nyxara or Nemi: four day dates and a first night each (texts in
 //! `data/castillo/citas.json`, scenes in `data/guiones/citas.md`). A date opens once the one before
 //! is had and her affection (`afecto_<id>`) reaches its mark; one date a day (`cita_hoy`), the
@@ -206,7 +206,7 @@ impl App {
         }
     }
 
-    /// F at the vanity: the dates' page.
+    /// F at the great hall's sofas: the dates' page.
     pub(super) fn open_dates(&mut self) -> bool {
         if citas().chicas.is_empty() {
             return false;
@@ -503,9 +503,9 @@ impl App {
         view.kind = 11;
         view.title = "Citas".to_owned();
         view.tag = if night {
-            "EL TOCADOR · ¿CON QUIÉN PASAS LA NOCHE?".to_owned()
+            "EL GRAN SALÓN · ¿CON QUIÉN PASAS LA NOCHE?".to_owned()
         } else {
-            "EL TOCADOR · ¿CON QUIÉN PASAS EL DÍA?".to_owned()
+            "EL GRAN SALÓN · ¿CON QUIÉN PASAS EL DÍA?".to_owned()
         };
         view.accent = 0xff6fa8;
         // (no stats: the title says day or night, each girl's row and card whether she can go)

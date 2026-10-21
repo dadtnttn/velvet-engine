@@ -100,7 +100,7 @@ pub(crate) const FAVORS: [Favor; 11] = [
         percent: 30,
         ask: "—Treinta… si me deja darle unos golpecitos con ella. Con cariño.",
         answer: (Voice::QueenAngry, "—Como cuentes una palabra de esto en la taberna…"),
-        aside: ("—Trescientos años de reinado para esto. Que conste que la culpa es tuya.", mascot::Cue::Jealous),
+        aside: ("—Todo un reinado para acabar en esto. Que conste que la culpa es tuya.", mascot::Cue::Jealous),
         during: ["—Pim. Pam. Con cariño, ¿eh?", "—Esto, por los impuestos del año pasado."],
         after: "—Treinta por ciento. Y estamos en paz con los impuestos.",
         hunger: -3,

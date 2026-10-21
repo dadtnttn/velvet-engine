@@ -1085,7 +1085,7 @@ impl PlayScene {
         match game {
             Game::Alba => {
                 scene.talk.say(Voice::Alba, "—¡Por fin alguien que me escucha! Túmbate, túmbate… y haz lo que yo te diga, ¿eh?");
-                scene.chiquita("—Esta habla más que yo. Y eso que yo tengo trescientos años de cosas que contar.", mascot::Cue::Talk, true);
+                scene.chiquita("—Esta habla más que yo. Y eso que yo tengo historias para llenar una biblioteca.", mascot::Cue::Talk, true);
             }
             Game::AlbaFuta => {
                 scene.talk.say(

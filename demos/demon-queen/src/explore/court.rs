@@ -495,7 +495,7 @@ pub(crate) enum Page {
     Telescope { look: Option<usize> },
     /// The library's book of lore.
     Codex,
-    /// The vanity: whom to date, and her memories (`dates.rs`).
+    /// The great hall's sofas: whom to date, and her memories (`dates.rs`).
     Dates(super::dates::DatesPage),
 }
 

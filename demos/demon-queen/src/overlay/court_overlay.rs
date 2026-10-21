@@ -119,7 +119,7 @@ pub struct CourtView {
     pub scope: bool,
     /// Since the lit card changed (the book's page turning), ms.
     pub flip_ms: u32,
-    /// The vanity's dates: a card for each girl.
+    /// The dates (the great hall's sofas): a card for each girl.
     pub dates: Vec<DateView>,
     /// One of the dates' memories shown big.
     pub show: Option<MemoryShow>,
@@ -2032,7 +2032,7 @@ fn fitted_size(font: &FontAtlas, face: Face, s: &str, size: f32, max: f32) -> f3
     }
 }
 
-// The vanity's dates, laid out as the shop is (the game's Persona pages): the lit girl cut out at the
+// The dates' page, laid out as the shop is (the game's Persona pages): the lit girl cut out at the
 // left with her name thrown across her (her sprite drawn sharp by `pictures`, her name in `draw_top`),
 // the girls on tilted rows, her memories on tiles under them, and her card at the right.
 const DATE_TILT: f32 = -0.025;

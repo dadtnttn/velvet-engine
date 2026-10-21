@@ -576,7 +576,8 @@ impl App {
             "nyxara" => self.open_lessons(),
             "catalejo" => self.open_telescope(),
             "estudio" => self.open_codex(),
-            "tocador" => self.open_dates(),
+            // the red sofas of the great hall: whom to date (the vanity keeps its mirror)
+            "sofa" => self.open_dates(),
             _ => false,
         }
     }

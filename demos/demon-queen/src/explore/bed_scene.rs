@@ -458,7 +458,7 @@ pub(super) const NINA: Spec = Spec {
         (
             0.30,
             Voice::ChiquitaJealous,
-            "—Trescientos años sin pisar este sitio. Y tú ya tienes tarjeta de clienta.",
+            "—Yo jamás pisé este sitio. Y tú ya tienes tarjeta de clienta.",
         ),
         (
             0.50,
@@ -572,7 +572,7 @@ pub(super) const NINA_FUTA: Spec = Spec {
         (
             0.30,
             Voice::ChiquitaJealous,
-            "—Trescientos años sin crecerte nada, y te crece ESO. Felicidades, supongo.",
+            "—Nunca le había crecido nada a este cuerpo, y ahora le crece ESO. Felicidades, supongo.",
         ),
         (
             0.44,
