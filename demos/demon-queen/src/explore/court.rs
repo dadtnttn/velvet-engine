@@ -102,6 +102,9 @@ pub(crate) struct Leccion {
     pub repaso: String,
     /// How many runes the first round shows (3 if unset).
     pub runas: usize,
+    /// The scene that plays the first time it is learned (Nyxara takes her down to the seal; its
+    /// shot is a memory), if any.
+    pub escena: String,
 }
 
 /// A line said in a lesson: who says it and what.
@@ -1181,8 +1184,23 @@ impl App {
                 }
             }
             Page::Runes { .. } => self.press_rune(pick as u8),
-            Page::LessonEnd { learned, index, .. } => {
-                if learned {
+            Page::LessonEnd {
+                learned,
+                index,
+                first,
+            } => {
+                let scene = lecciones()
+                    .lecciones
+                    .get(index)
+                    .map(|l| l.escena.clone())
+                    .unwrap_or_default();
+                if learned && first && !scene.is_empty() {
+                    // learned for the first time: down to the seal to try it for real
+                    self.close_court();
+                    if !self.start_talk_at(&scene) {
+                        eprintln!("[corte] no hay escena {scene}");
+                    }
+                } else if learned {
                     self.court_show(Page::Lessons);
                 } else {
                     // Again, straight away.

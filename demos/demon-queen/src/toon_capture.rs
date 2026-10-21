@@ -6696,6 +6696,46 @@ pub(super) fn capture(out: &Path) -> Result<()> {
                 app.story.get(court::DON_CHISPA),
                 app.story.get("afecto_nyxara")
             );
+            // learned for the first time: on to the seal, its shot a memory
+            app.court_key(KeyCode::Enter);
+            wait(&mut app, 0.5);
+            eprintln!(
+                "[court-qa] lesson scene: talk {} stage {}",
+                app.talk.is_some(),
+                app.stage.is_some()
+            );
+            for _ in 0..40 {
+                if app.talk.is_none() {
+                    break;
+                }
+                app.elapsed += 5.0;
+                app.talk_confirm();
+                wait(&mut app, 0.05);
+                if app
+                    .stage
+                    .as_ref()
+                    .and_then(|s| s.bg.as_deref())
+                    .is_some_and(|b| b == "castillo/leccion_nyxara")
+                {
+                    wait(&mut app, 0.8);
+                    save(&mut app, out, "court-12b-lesson-memory")?;
+                    break;
+                }
+            }
+            for _ in 0..40 {
+                if app.talk.is_none() {
+                    break;
+                }
+                app.elapsed += 5.0;
+                app.talk_confirm();
+                wait(&mut app, 0.05);
+            }
+            wait(&mut app, 1.2);
+            save(&mut app, out, "court-12c-lesson-outro")?;
+            if let Some(stage) = app.stage.as_mut() {
+                stage.unlocks.clear();
+            }
+            app.end_talk();
             app.close_court();
         }
         if shots.contains(&"entreno") {
