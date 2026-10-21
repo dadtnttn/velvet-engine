@@ -342,6 +342,13 @@ impl BattleAi {
         let attacking = s.attacker(side);
         let openings = s.openings.clone();
         let keep = s.hold_at.map(|(x, z, _)| (x, z));
+        // the gates still shut (a keep's yard is often behind one of its own)
+        let gates: Vec<(f32, f32)> = s
+            .works
+            .iter()
+            .filter(|w| w.kind == crate::baked::WorkKind::Gate && !w.broken)
+            .map(|w| (w.x, w.z))
+            .collect();
         let map = sim.field.baked.clone();
         let inside = |x: f32, z: f32| map.as_ref().is_some_and(|m| m.inside(x, z));
         let time = sim.time;
@@ -381,8 +388,10 @@ impl BattleAi {
                 }
                 continue;
             }
+            // (only those it can walk to: a wall between is not charged through)
+            let reach = |f: &Regiment| sim.field.reachable(me.0, me.1, f.cx, f.cz);
             if attacking {
-                if let Some((t, d)) = nearest(me, &|f| !inside(f.cx, f.cz)) {
+                if let Some((t, d)) = nearest(me, &|f| !inside(f.cx, f.cz) && reach(f)) {
                     if d < 70.0 {
                         attack(m, t, d < 40.0, &mut todo);
                         continue;
@@ -391,7 +400,7 @@ impl BattleAi {
                 if openings.is_empty() {
                     continue;
                 }
-                if let Some((t, d)) = nearest(me, &|_| true) {
+                if let Some((t, d)) = nearest(me, &|f| reach(f)) {
                     if d < 45.0 {
                         attack(m, t, true, &mut todo);
                         continue;
@@ -401,7 +410,33 @@ impl BattleAi {
                     if time - m.at > 6.0 || !r.is_moving_order() {
                         m.at = time;
                         m.target = None;
-                        todo.push(Do::Move(ri, kx, kz, (kx - me.0).hypot(kz - me.1) < 90.0));
+                        // shut out of the keep's yard: to the shut gate nearest the keep, at its
+                        // doors on this side (those pressing at them break them)
+                        let field = &sim.field;
+                        let (gx, gz) = if field.reachable(me.0, me.1, kx, kz) {
+                            (kx, kz)
+                        } else {
+                            gates
+                                .iter()
+                                .copied()
+                                .filter_map(|(x, z)| {
+                                    (0..8)
+                                        .map(|k| {
+                                            let a = k as f32 * std::f32::consts::FRAC_PI_4;
+                                            (x + a.cos() * 5.5, z + a.sin() * 5.5)
+                                        })
+                                        .filter(|&(x, z)| field.reachable(me.0, me.1, x, z))
+                                        .min_by(|a, b| {
+                                            (a.0 - me.0)
+                                                .hypot(a.1 - me.1)
+                                                .total_cmp(&(b.0 - me.0).hypot(b.1 - me.1))
+                                        })
+                                        .map(|spot| (spot, (x - kx).hypot(z - kz)))
+                                })
+                                .min_by(|a, b| a.1.total_cmp(&b.1))
+                                .map_or((kx, kz), |(spot, _)| spot)
+                        };
+                        todo.push(Do::Move(ri, gx, gz, (gx - me.0).hypot(gz - me.1) < 90.0));
                     }
                 }
             } else {

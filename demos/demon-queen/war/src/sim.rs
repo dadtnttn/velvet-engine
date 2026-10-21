@@ -332,6 +332,8 @@ pub struct Sim {
     /// A soldier's own way round something, and when to look for it again.
     detour: Vec<Vec<Point>>,
     detour_t: Vec<f32>,
+    /// When a soldier last ran into something solid (it looks for its own way round then).
+    bump_t: Vec<f32>,
     pub regiments: Vec<Regiment>,
     pub missiles: Vec<Missile>,
     pub events: Vec<Event>,
@@ -395,6 +397,7 @@ impl Sim {
             slot: Vec::new(),
             detour: Vec::new(),
             detour_t: Vec::new(),
+            bump_t: Vec::new(),
             regiments: Vec::new(),
             missiles: Vec::new(),
             events: Vec::new(),
@@ -575,12 +578,19 @@ impl Sim {
             self.slot.push(k);
             self.detour.push(Vec::new());
             self.detour_t.push(0.0);
+            self.bump_t.push(-9.0);
             self.next.push(-1);
             self.regiments[index].soldiers.push(i);
         }
         for k in 0..men as usize {
             let i = self.regiments[index].soldiers[k];
             let (sx, sz) = self.slot_pos(index, k, x, z, facing, files);
+            // (never inside something solid: on the free ground nearest its place)
+            let (sx, sz) = if ty.flyer {
+                (sx, sz)
+            } else {
+                self.free_place(x, z, sx, sz)
+            };
             self.px[i] = sx;
             self.pz[i] = sz;
             self.py[i] = self.field.walk_height(sx, sz) + self.alt[i];
@@ -1578,6 +1588,36 @@ impl Sim {
         r.az += dz / d * pace * dt;
     }
 
+    /// Where a soldier stands whose place (sx, sz) in a formation anchored at (ax, az) is inside
+    /// something solid: the free ground nearest it toward the anchor, else the nearest at all.
+    pub(crate) fn free_place(&self, ax: f32, az: f32, sx: f32, sz: f32) -> (f32, f32) {
+        if !self.field.blocked(sx, sz) {
+            return (sx, sz);
+        }
+        let (x, z) = self.free_toward(ax, az, sx, sz);
+        if !self.field.blocked(x, z) {
+            return (x, z);
+        }
+        let p = self.field.nearest_free(x, z);
+        (p.x, p.z)
+    }
+
+    /// The free ground nearest (sx, sz) on the line from the anchor (ax, az) out to it, a metre at
+    /// a time; the anchor itself if there is none.
+    fn free_toward(&self, ax: f32, az: f32, sx: f32, sz: f32) -> (f32, f32) {
+        let (dx, dz) = (sx - ax, sz - az);
+        let l = dx.hypot(dz);
+        let steps = l.ceil().clamp(1.0, 30.0) as i32;
+        for k in 1..=steps {
+            let s = 1.0 - k as f32 / steps as f32;
+            let (x, z) = (ax + dx * s, az + dz * s);
+            if !self.field.blocked(x, z) {
+                return (x, z);
+            }
+        }
+        (ax, az)
+    }
+
     /// How many files fit where the anchor is going: the gap's clearance either side of it.
     fn narrow_files(&self, ri: usize, toward: Option<Point>) -> u32 {
         let r = &self.regiments[ri];
@@ -2158,12 +2198,21 @@ impl Sim {
             let attack = r.order_target().is_some();
             let base = if r.run || attack { t.run } else { t.walk };
             let (sx, sz) = self.slot_pos(ri, k, ax, az, heading, files);
+            // A place that falls inside something solid (the formation wider than a lane, a
+            // courtyard, the rock): the nearest free ground on the way out to it from the anchor.
+            let (sx, sz) = if !t.flyer && self.field.blocked(sx, sz) {
+                self.free_toward(ax, az, sx, sz)
+            } else {
+                (sx, sz)
+            };
             let (mut wx, mut wz) = (sx, sz);
-            // Far from its place with something in the way (a wall left behind, a rock): it finds
-            // its own way round, every few seconds.
+            // Far from its place with something in the way (a wall left behind, a rock), or just
+            // run into something on the way to it (a corner, a lane between houses): it finds its
+            // own way round, every few seconds.
             let (px, pz) = (self.px[i], self.pz[i]);
-            if !t.flyer && (sx - px).hypot(sz - pz) > 14.0 && !self.field.line_clear(px, pz, sx, sz)
-            {
+            let far = (sx - px).hypot(sz - pz);
+            let bumped = self.time - self.bump_t[i] < 0.6 && far > 2.5;
+            if !t.flyer && (far > 14.0 || bumped) && !self.field.line_clear(px, pz, sx, sz) {
                 if self.detour_t[i] <= self.time {
                     let wait = 2.0 + self.r();
                     self.detour_t[i] = self.time + wait;
@@ -2250,8 +2299,16 @@ impl Sim {
             vx *= ground;
             vz *= ground;
         }
+        // pushed into something solid (a press of bodies, a charge's knock): out onto the free
+        // ground nearest, or it would stand inside the wall for the rest of the battle
+        if !t.flyer && !routing && self.field.blocked(self.px[i], self.pz[i]) {
+            let p = self.field.nearest_free(self.px[i], self.pz[i]);
+            self.px[i] = p.x;
+            self.pz[i] = p.z;
+        }
         let (mut nx, mut nz) = (self.px[i] + vx * dt, self.pz[i] + vz * dt);
         if !t.flyer && self.field.blocked(nx, nz) {
+            self.bump_t[i] = self.time;
             // slide along the bank
             if !self.field.blocked(nx, self.pz[i]) {
                 nz = self.pz[i];

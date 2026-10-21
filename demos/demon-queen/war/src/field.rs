@@ -14,7 +14,7 @@ pub const WATER_Y: f32 = -0.55;
 const DEEP: f32 = 0.72;
 /// On the war map 2.0's battle maps (their wide shallow rivers are waded waist-deep; the deep
 /// ones, the harbours and the sea are well past it).
-const DEEP_BAKED: f32 = 1.2;
+pub(crate) const DEEP_BAKED: f32 = 1.2;
 
 /// How wide each set piece stands in the way (0: walk through or round by its walls).
 pub fn prop_footprint(kind: &str) -> f32 {
@@ -134,6 +134,9 @@ struct RidgeLine {
 pub struct Passability {
     pub pass: Vec<u8>,
     pub clear: Vec<f32>,
+    /// Which connected stretch of open ground each cell is on (`u32::MAX`: not open): two places
+    /// are reachable from each other when they share it.
+    pub region: Vec<u32>,
     pub pw: usize,
     pub ph: usize,
     pub px0: f32,
@@ -489,6 +492,7 @@ impl Field {
             grid: Passability {
                 pass: Vec::new(),
                 clear: Vec::new(),
+                region: Vec::new(),
                 pw: 0,
                 ph: 0,
                 px0: 0.0,
@@ -559,7 +563,7 @@ impl Field {
             river_d: vec![1e3; nx * nz],
             road: l.road.clone(),
             marsh: l.marsh.clone(),
-            cliff: l.cliff.clone(),
+            cliff: whole_cliffs(&l.cliff, nx, nz),
             river: None,
             bridge: None,
             crossings: Vec::new(),
@@ -570,6 +574,7 @@ impl Field {
             grid: Passability {
                 pass: Vec::new(),
                 clear: Vec::new(),
+                region: Vec::new(),
                 pw: 0,
                 ph: 0,
                 px0: 0.0,
@@ -921,9 +926,37 @@ impl Field {
                 }
             }
         }
+        // the connected stretches of open ground (as the path search steps: eight ways)
+        let mut region = vec![u32::MAX; pw * ph];
+        let mut next = 0u32;
+        for start in 0..pw * ph {
+            if pass[start] == 0 || region[start] != u32::MAX {
+                continue;
+            }
+            region[start] = next;
+            let mut stack = vec![start];
+            while let Some(k) = stack.pop() {
+                let (i, j) = ((k % pw) as i32, (k / pw) as i32);
+                for dj in -1..=1i32 {
+                    for di in -1..=1i32 {
+                        let (ii, jj) = (i + di, j + dj);
+                        if ii < 0 || jj < 0 || ii >= pw as i32 || jj >= ph as i32 {
+                            continue;
+                        }
+                        let kk = jj as usize * pw + ii as usize;
+                        if pass[kk] == 1 && region[kk] == u32::MAX {
+                            region[kk] = next;
+                            stack.push(kk);
+                        }
+                    }
+                }
+            }
+            next += 1;
+        }
         self.grid = Passability {
             pass,
             clear,
+            region,
             pw,
             ph,
             px0,
@@ -944,6 +977,30 @@ impl Field {
     pub fn clearance_at(&self, x: f32, z: f32) -> f32 {
         let (i, j) = self.cell_of(x, z);
         self.grid.clear[j * self.grid.pw + i] * self.grid.pc
+    }
+
+    /// The stretch of open ground (x, z) is on, or the nearest one's.
+    fn region_at(&self, x: f32, z: f32) -> u32 {
+        let p = if self.pass_at(x, z) {
+            Point { x, z }
+        } else {
+            self.nearest_free(x, z)
+        };
+        let (i, j) = self.cell_of(p.x, p.z);
+        self.grid
+            .region
+            .get(j * self.grid.pw + i)
+            .copied()
+            .unwrap_or(u32::MAX)
+    }
+
+    /// Whether feet can get from a to b at all (round things, not through them).
+    pub fn reachable(&self, ax: f32, az: f32, bx: f32, bz: f32) -> bool {
+        if self.grid.region.is_empty() {
+            return true;
+        }
+        let (a, b) = (self.region_at(ax, az), self.region_at(bx, bz));
+        a != u32::MAX && a == b
     }
 
     pub fn pass_at(&self, x: f32, z: f32) -> bool {
@@ -999,6 +1056,10 @@ impl Field {
         } else {
             self.nearest_free(ax, az)
         };
+        // no way there (a closed gate, the far side of a river): no search
+        if !self.reachable(start.x, start.z, goal.x, goal.z) {
+            return vec![Point { x: bx, z: bz }];
+        }
         let g = &self.grid;
         let (si, sj) = self.cell_of(start.x, start.z);
         let (gi, gj) = self.cell_of(goal.x, goal.z);
@@ -1112,6 +1173,80 @@ impl Field {
             d * 1.5 + 30.0
         }
     }
+}
+
+/// A baked map's cliffs as rock faces, not a maze: where a slope's steep patches (flagged node by
+/// node, they come out as hundreds of specks with gaps a soldier fits through but a formation
+/// does not) are dense, at least two in five of the 5×5 nodes round a node, the node is rock; the
+/// small pockets of open ground left inside a face are filled. Thin ledges and the ramps between
+/// them (a quarry's steps) keep their gaps.
+pub(crate) fn whole_cliffs(cliff: &[f32], nx: usize, nz: usize) -> Vec<f32> {
+    let n = nx * nz;
+    let src: Vec<bool> = cliff.iter().map(|&c| c > 0.5).collect();
+    if !src.iter().any(|&c| c) {
+        return cliff.to_vec();
+    }
+    let at = |i: i32, j: i32| -> bool {
+        let (i, j) = (i.clamp(0, nx as i32 - 1), j.clamp(0, nz as i32 - 1));
+        src[j as usize * nx + i as usize]
+    };
+    let mut on = src.clone();
+    for j in 0..nz as i32 {
+        for i in 0..nx as i32 {
+            if on[j as usize * nx + i as usize] {
+                continue;
+            }
+            let mut count = 0;
+            for dj in -2..=2 {
+                for di in -2..=2 {
+                    count += at(i + di, j + dj) as u32;
+                }
+            }
+            if count >= 10 {
+                on[j as usize * nx + i as usize] = true;
+            }
+        }
+    }
+    // the pockets of open ground shut inside rock (small, off the map's edge)
+    let mut label = vec![-1i32; n];
+    let mut pockets: Vec<(usize, bool)> = Vec::new();
+    for start in 0..n {
+        if on[start] || label[start] >= 0 {
+            continue;
+        }
+        let id = pockets.len() as i32;
+        let (mut size, mut edge) = (0usize, false);
+        let mut stack = vec![start];
+        label[start] = id;
+        while let Some(k) = stack.pop() {
+            size += 1;
+            let (i, j) = ((k % nx) as i32, (k / nx) as i32);
+            if i == 0 || j == 0 || i == nx as i32 - 1 || j == nz as i32 - 1 {
+                edge = true;
+            }
+            for (di, dj) in [(-1i32, 0i32), (1, 0), (0, -1), (0, 1)] {
+                let (ii, jj) = (i + di, j + dj);
+                if ii < 0 || jj < 0 || ii >= nx as i32 || jj >= nz as i32 {
+                    continue;
+                }
+                let kk = jj as usize * nx + ii as usize;
+                if !on[kk] && label[kk] < 0 {
+                    label[kk] = id;
+                    stack.push(kk);
+                }
+            }
+        }
+        pockets.push((size, edge));
+    }
+    for k in 0..n {
+        if !on[k] {
+            let (size, edge) = pockets[label[k] as usize];
+            if !edge && size < 40 {
+                on[k] = true;
+            }
+        }
+    }
+    on.into_iter().map(|c| if c { 1.0 } else { 0.0 }).collect()
 }
 
 /// A battle map's kind, title and blurb.

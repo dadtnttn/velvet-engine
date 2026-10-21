@@ -402,6 +402,11 @@ impl Battle {
         let soldiers = self.sim.regiments[ri].soldiers.clone();
         for (k, i) in soldiers.into_iter().enumerate() {
             let (sx, sz) = self.sim.slot_pos(ri, k, x, z, heading, files);
+            let (sx, sz) = if self.sim.regiments[ri].ty.flyer {
+                (sx, sz)
+            } else {
+                self.sim.free_place(x, z, sx, sz)
+            };
             self.sim.px[i] = sx;
             self.sim.pz[i] = sz;
             self.sim.vx[i] = 0.0;

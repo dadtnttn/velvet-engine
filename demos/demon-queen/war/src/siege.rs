@@ -1100,9 +1100,15 @@ impl Siege {
                 self.hurt_engine(j, n as f32 * 1.1 * dt);
             }
         }
-        let Some(defender) = self.defender else {
-            self.drop_barriers(sim);
-            return;
+        // Who breaks a work: in a siege, its attackers; in the open (a palisade round a village),
+        // whoever presses on it to get through, not those holding behind it.
+        let defender = self.defender;
+        let breaks = |r: &crate::sim::Regiment| {
+            r.alive > 0
+                && match defender {
+                    Some(d) => r.side != d,
+                    None => !r.is_hold(),
+                }
         };
         for w in 0..self.works.len() {
             let (kind, broken, x, z) = {
@@ -1119,7 +1125,7 @@ impl Siege {
                     let near = sim
                         .regiments
                         .iter()
-                        .filter(|r| r.side != defender && r.alive > 0)
+                        .filter(|r| breaks(r))
                         .map(|r| m.works[w].nearest(r.cx, r.cz))
                         .min_by(|a, b| {
                             (a[0] - x)
@@ -1133,7 +1139,7 @@ impl Siege {
             let n = sim
                 .soldiers_near(px, pz, reach)
                 .into_iter()
-                .filter(|&i| sim.regiments[sim.reg[i]].side != defender)
+                .filter(|&i| breaks(&sim.regiments[sim.reg[i]]))
                 .count();
             if n > 0 {
                 self.hurt_work(sim, w, n as f32 * 0.8 * dt, px, pz);

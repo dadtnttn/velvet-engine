@@ -2425,6 +2425,12 @@ pub(super) fn capture(out: &Path) -> Result<()> {
             });
         let mut shots = 0;
         for k in 0..5400 {
+            // (the war's scenes, if one comes up, read through: the war waits while they talk)
+            if app.talk.is_some() {
+                app.talk_pick(0);
+                app.talk_confirm();
+                app.talk_confirm();
+            }
             app.tick(1.0 / 30.0);
             if k % 6 == 0 {
                 if let (Some((gx, gz)), Some(w)) = (gate, app.war.as_mut()) {
