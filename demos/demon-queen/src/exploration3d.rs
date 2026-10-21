@@ -1002,6 +1002,8 @@ pub(crate) struct App {
     alcove: Option<alcove::Alcove>,
     /// The court: audiences, works, lessons, training (`court.rs`).
     court: Option<court::Court>,
+    /// A date on the stage: the dates' page comes back after it, with what it brought.
+    date_after: Option<dates::DateAfter>,
     /// What each of the court told this morning, and whether its page is still to be seen.
     court_report: Vec<court_days::Report>,
     court_morning_pending: bool,
@@ -1172,6 +1174,7 @@ impl App {
             floats: Vec::new(),
             alcove: None,
             court: None,
+            date_after: None,
             court_report: Vec::new(),
             court_morning_pending: false,
             court_letter: false,

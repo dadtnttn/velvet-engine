@@ -267,6 +267,8 @@ impl App {
             self.stage = None;
             self.persist_3d_state(true);
         }
+        // A date had: the vanity's page comes back on her (unless the scene asked for more).
+        let date_after = self.date_after.take();
         // The springs' welcome gives her the house's bikini (`@var termas_bikini`): she puts it
         // on there and then, and at the springs from then on (her clothes wait for the way out).
         if self.story.get("termas_bikini") > 0 && self.achievements.grant_outfit("bikini") {
@@ -337,6 +339,9 @@ impl App {
             self.story.values.insert("cita_sello".to_owned(), 0);
             self.venue.progress.elixir_active = false;
             self.open_scene(&bed_scene::NINA_FUTA, false);
+        }
+        if let Some(after) = date_after {
+            self.dates_back(after);
         }
         self.persist_3d_state(true);
     }

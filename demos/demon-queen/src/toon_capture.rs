@@ -6431,6 +6431,31 @@ pub(super) fn capture(out: &Path) -> Result<()> {
                 app.story.get("afecto_lira"),
                 app.story.get("cita_hoy")
             );
+            // back from the date: the page comes up on her, the hearts and the memory coming in
+            eprintln!("[court-qa] citas: page back after the date {}", app.court_open());
+            wait(&mut app, 0.75);
+            save(&mut app, out, "court-51b-back-hearts")?;
+            wait(&mut app, 0.75);
+            save(&mut app, out, "court-51c-back-memory")?;
+            wait(&mut app, 1.5);
+            save(&mut app, out, "court-51d-back-settled")?;
+            // her memories: the row, then the one she has shown big
+            app.court_key(KeyCode::KeyS);
+            wait(&mut app, 0.4);
+            save(&mut app, out, "court-51e-memories")?;
+            app.court_key(KeyCode::Enter);
+            wait(&mut app, 0.15);
+            save(&mut app, out, "court-51f-memory-opening")?;
+            wait(&mut app, 1.4);
+            save(&mut app, out, "court-51g-memory-open")?;
+            app.court_key(KeyCode::Escape);
+            app.court_key(KeyCode::KeyD);
+            app.court_key(KeyCode::Enter);
+            wait(&mut app, 0.4);
+            save(&mut app, out, "court-51h-memory-locked")?;
+            app.court_key(KeyCode::Escape);
+            app.court_key(KeyCode::Escape);
+            eprintln!("[court-qa] citas: still open after Esc ×2 {}", app.court_open());
             app.open_dates();
             wait(&mut app, 1.2);
             save(&mut app, out, "court-52-dates-after")?;
@@ -6459,6 +6484,15 @@ pub(super) fn capture(out: &Path) -> Result<()> {
                 app.story.get("cita_nyxara"),
                 app.story.get("noche_hoy")
             );
+            // back from her first night: two memories come in; then the second shown big
+            wait(&mut app, 1.6);
+            save(&mut app, out, "court-54b-back-night")?;
+            app.court_key(KeyCode::KeyS);
+            app.court_key(KeyCode::Enter);
+            app.court_key(KeyCode::KeyA);
+            wait(&mut app, 1.5);
+            save(&mut app, out, "court-54c-memory-last")?;
+            app.close_court();
             // Nemi: her first date by day, then her first night
             app.environment_cycle.set_phase(0.35);
             for (k, v) in [("cita_hoy", 0), ("cita_nemi", 0), ("afecto_nemi", 0)] {

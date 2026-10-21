@@ -495,8 +495,8 @@ pub(crate) enum Page {
     Telescope { look: Option<usize> },
     /// The library's book of lore.
     Codex,
-    /// The vanity: whom to date (`dates.rs`).
-    Dates,
+    /// The vanity: whom to date, and her memories (`dates.rs`).
+    Dates(super::dates::DatesPage),
 }
 
 /// The court's screen while it is up.
@@ -1140,7 +1140,7 @@ impl App {
             Some(Page::Morning) => self.routine_cards().len(),
             Some(Page::Telescope { look: None }) => court_days::catalejo().direcciones.len(),
             Some(Page::Codex) => court_days::codice().entradas.len() + 1,
-            Some(Page::Dates) => dates::citas().chicas.len(),
+            Some(Page::Dates(_)) => dates::citas().chicas.len(),
             _ => 0,
         }
     }
@@ -1204,7 +1204,7 @@ impl App {
                 }
             }
             Page::Codex => self.codex_pick(pick),
-            Page::Dates => self.dates_pick(pick),
+            Page::Dates(_) => self.dates_pick(pick),
         }
     }
 
@@ -1241,6 +1241,9 @@ impl App {
                     c.choice = d;
                 }
             }
+            Some(Page::Dates(d)) if d.memory.is_some() => {
+                self.dates_key(KeyCode::Escape);
+            }
             Some(Page::Training(d)) if d.over.is_none() => {
                 // Leaving mid-training counts as a session lost (Nemi is not offended).
                 ui_sfx::play(UiSfx::Back);
@@ -1273,6 +1276,10 @@ impl App {
                 }
                 _ => {}
             }
+            return;
+        }
+        // The dates' page: her memories' row and a memory shown big take their own keys.
+        if self.dates_key(code) {
             return;
         }
         let digit = match code {
@@ -1368,7 +1375,12 @@ impl App {
         let Some(view) = self.court_view() else {
             return;
         };
-        match map_overlay::court_hit(WINDOW_WIDTH as f32, WINDOW_HEIGHT as f32, &view, x, y) {
+        let hit = map_overlay::court_hit(WINDOW_WIDTH as f32, WINDOW_HEIGHT as f32, &view, x, y);
+        if matches!(self.court.as_ref().map(|c| &c.page), Some(Page::Dates(_))) {
+            self.dates_click(hit);
+            return;
+        }
+        match hit {
             Some(i) => {
                 let runes = matches!(
                     self.court.as_ref().map(|c| &c.page),
@@ -1406,9 +1418,14 @@ impl App {
         ) {
             return;
         }
-        if let Some(i) =
-            map_overlay::court_hit(WINDOW_WIDTH as f32, WINDOW_HEIGHT as f32, &view, x, y)
-        {
+        let hit = map_overlay::court_hit(WINDOW_WIDTH as f32, WINDOW_HEIGHT as f32, &view, x, y);
+        if matches!(self.court.as_ref().map(|c| &c.page), Some(Page::Dates(_))) {
+            if let Some(i) = hit {
+                self.dates_hover(i);
+            }
+            return;
+        }
+        if let Some(i) = hit {
             let now = self.elapsed;
             if let Some(c) = self.court.as_mut() {
                 if c.choice != i {
@@ -1896,7 +1913,7 @@ impl App {
             Page::Morning => self.routine_view(&mut view),
             Page::Telescope { look } => self.telescope_view(&mut view, *look),
             Page::Codex => self.codex_view(&mut view, c.choice),
-            Page::Dates => self.dates_view(&mut view),
+            Page::Dates(d) => self.dates_view(d, &mut view),
         }
         Some(view)
     }

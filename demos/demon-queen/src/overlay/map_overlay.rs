@@ -39,7 +39,8 @@ mod caricias_overlay;
 mod court_overlay;
 pub(crate) use caricias_overlay::{CariciasCard, CariciasView};
 pub(crate) use court_overlay::{
-    hit as court_hit, CourtCard, CourtChip, CourtRow, CourtView, DateView, DuelView, RuneView,
+    hit as court_hit, CourtCard, CourtChip, CourtRow, CourtView, DateView, DuelView, MemoryShow,
+    RuneView, DATE_GO_HIT, DATE_MEMORIES_HIT, MEMORY_SHOWN,
 };
 mod float_overlay;
 pub(crate) use float_overlay::FloatLine;
@@ -2773,6 +2774,24 @@ impl MapOverlay {
                         stage_vertices.len() as u32 - start,
                     ));
                 }
+            } else if let Some(view) = self.court.as_ref() {
+                // The dates' page: the lit girl's memories loaded ahead, one shown big, sharp.
+                self.stage_pictures.prefetch(&view.preload);
+                self.stage_pictures.pump(device, queue);
+                for name in court_overlay::shown(view) {
+                    self.stage_pictures.ensure(device, queue, name);
+                }
+                let pictures = &self.stage_pictures;
+                for run in court_overlay::pictures(view, &|n| pictures.info(n), width, height) {
+                    let start = stage_vertices.len() as u32;
+                    stage_vertices.extend(run.vertices);
+                    self.stage_runs.push((
+                        run.image,
+                        run.over,
+                        start,
+                        stage_vertices.len() as u32 - start,
+                    ));
+                }
             }
             if let Some(view) = &self.stage {
                 // The stage looks as the web scenes do: its own box, cards and flourishes.
@@ -3376,6 +3395,10 @@ impl MapOverlay {
                     v.height as f32 * v.squash[1] as f32 / 1000.0,
                 )
             });
+            // The dates' page: the lit girl's name over her figure, and its keys.
+            if let Some(view) = self.court.as_ref() {
+                court_overlay::draw_top(font, &mut top, view, ui_time);
+            }
             float_overlay::draw(
                 font,
                 &mut top,
@@ -3384,10 +3407,12 @@ impl MapOverlay {
                 &self.floats,
                 &float_faces,
                 anchor,
-                // Over the court's pages: in the strip between the title and the stats.
-                self.court
-                    .as_ref()
-                    .map(|_| [1380.0 * width / 1920.0, 34.0 * height / 1080.0]),
+                // Over the court's pages: in the strip between the title and the stats (the
+                // dates' page has no stats: at its right).
+                self.court.as_ref().map(|c| {
+                    let x = if c.kind == 11 { 1880.0 } else { 1380.0 };
+                    [x * width / 1920.0, 34.0 * height / 1080.0]
+                }),
                 ui_time,
             );
             // The blow shakes the screen for a moment.
