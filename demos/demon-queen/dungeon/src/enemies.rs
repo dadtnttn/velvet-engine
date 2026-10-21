@@ -106,13 +106,34 @@ struct Weapon {
     triangles: usize,
 }
 
-/// The weapon models the skeletons carry (web `WEAPON_PATHS`).
-const WEAPON_FILES: [(&str, &str); 5] = [
-    ("staff", "weapons/Skeleton_Staff.gltf"),
-    ("crossbow", "weapons/Skeleton_Crossbow.gltf"),
-    ("axe", "weapons/Skeleton_Axe.gltf"),
-    ("blade", "weapons/Skeleton_Blade.gltf"),
-    ("shield", "weapons/Skeleton_Shield_Large_A.gltf"),
+/// The weapon models the skeletons carry (web `WEAPON_PATHS`): the skeletons' own (tools/armas_blender.py,
+/// real weapons in KayKit's frame and reach) when they are there, else KayKit's.
+const WEAPON_FILES: [(&str, &str, &str); 5] = [
+    (
+        "staff",
+        "../esqueletos/armas/staff.glb",
+        "weapons/Skeleton_Staff.gltf",
+    ),
+    (
+        "crossbow",
+        "../esqueletos/armas/crossbow.glb",
+        "weapons/Skeleton_Crossbow.gltf",
+    ),
+    (
+        "axe",
+        "../esqueletos/armas/axe.glb",
+        "weapons/Skeleton_Axe.gltf",
+    ),
+    (
+        "blade",
+        "../esqueletos/armas/blade.glb",
+        "weapons/Skeleton_Blade.gltf",
+    ),
+    (
+        "shield",
+        "../esqueletos/armas/shield.glb",
+        "weapons/Skeleton_Shield_Large_A.gltf",
+    ),
 ];
 
 /// Every loadout each model is dressed in (web `enemyLoadout`), with
@@ -125,6 +146,48 @@ const MODEL_LOADOUTS: [(&str, &str, Option<&str>, bool); 6] = [
     ("mage", "staff", None, false),
     ("mage", "staff", None, true),
 ];
+
+/// KayKit's shared clips hold a chibi's arms well out from its wide body; a body of human build
+/// keeps them by its sides. Each key of an upper arm has its reach out to the side cut (its swing
+/// forward and back kept); an arm raised over the shoulder stays as it is. The bone runs along its
+/// local +y; `q` turns it in its parent's (the chest's) frame.
+fn arm_closer(q: [f32; 4]) -> [f32; 4] {
+    let along = quat_rotate(q, [0.0, 1.0, 0.0]);
+    let raised = ((along[1] + 0.1) / 0.4).clamp(0.0, 1.0);
+    let keep = 0.4 + 0.6 * raised * raised * (3.0 - 2.0 * raised);
+    let side = along[0] * keep;
+    let rest = (1.0 - side * side - along[2] * along[2]).max(0.0).sqrt();
+    let to = [side, if along[1] < 0.0 { -rest } else { rest }, along[2]];
+    quat_mul(quat_arc(along, to), q)
+}
+
+fn quat_rotate(q: [f32; 4], v: [f32; 3]) -> [f32; 3] {
+    let u = Vec3::new(q[0], q[1], q[2]);
+    let v = Vec3::new(v[0], v[1], v[2]);
+    let r = u * (2.0 * u.dot(v)) + v * (q[3] * q[3] - u.dot(u)) + u.cross(v) * (2.0 * q[3]);
+    [r.x, r.y, r.z]
+}
+
+fn quat_mul(a: [f32; 4], b: [f32; 4]) -> [f32; 4] {
+    [
+        a[3] * b[0] + a[0] * b[3] + a[1] * b[2] - a[2] * b[1],
+        a[3] * b[1] - a[0] * b[2] + a[1] * b[3] + a[2] * b[0],
+        a[3] * b[2] + a[0] * b[1] - a[1] * b[0] + a[2] * b[3],
+        a[3] * b[3] - a[0] * b[0] - a[1] * b[1] - a[2] * b[2],
+    ]
+}
+
+/// The shortest turn taking unit vector `a` to unit vector `b`.
+fn quat_arc(a: [f32; 3], b: [f32; 3]) -> [f32; 4] {
+    let (a, b) = (Vec3::new(a[0], a[1], a[2]), Vec3::new(b[0], b[1], b[2]));
+    let c = a.cross(b);
+    let w = 1.0 + a.dot(b);
+    if w < 1.0e-5 {
+        return [0.0, 0.0, 1.0, 0.0];
+    }
+    let n = (c.x * c.x + c.y * c.y + c.z * c.z + w * w).sqrt();
+    [c.x / n, c.y / n, c.z / n, w / n]
+}
 
 /// A weapon's pose in its hand slot (web `cloneEnemy`).
 fn weapon_attach(weapon: &str, left: bool) -> Mat4 {
@@ -219,11 +282,17 @@ impl Enemies {
             let path = directory.join(&definition.path);
             let result = (|| -> anyhow::Result<Model> {
                 let mut source = GltfModel::load(&path)?;
+                let first = source.animation_clips.len();
                 for animations in &animation_sets {
                     if definition.own_proportions {
                         source.append_rotations_from(animations, &["root", "hips"])?;
                     } else {
                         source.append_animations_from(animations)?;
+                    }
+                }
+                if definition.own_proportions {
+                    for arm in ["upperarm.l", "upperarm.r"] {
+                        source.map_rotation_keys(first, arm, arm_closer);
                     }
                 }
                 anyhow::ensure!(!source.meshes.is_empty(), "model contains no meshes");
@@ -232,7 +301,11 @@ impl Enemies {
                         && source.animation_index("Walking_A").is_some(),
                     "shared rig has no idle or walk clip"
                 );
-                bake_combat_clips(&mut source, &definition.id)?;
+                // a model standing in for another fights with that one's loadouts
+                bake_combat_clips(
+                    &mut source,
+                    definition.replaces.as_deref().unwrap_or(&definition.id),
+                )?;
 
                 let mut low = Vec3::new(f32::INFINITY, f32::INFINITY, f32::INFINITY);
                 let mut high = -low;
@@ -383,7 +456,12 @@ impl Enemies {
             .collect::<BTreeMap<_, _>>();
 
         let mut weapons = BTreeMap::new();
-        for (name, path) in WEAPON_FILES {
+        for (name, own, kaykit) in WEAPON_FILES {
+            let path = if directory.join(own).is_file() {
+                own
+            } else {
+                kaykit
+            };
             let result = (|| -> anyhow::Result<Weapon> {
                 let source = GltfModel::load(directory.join(path))?;
                 let mut meshes = Vec::with_capacity(source.meshes.len());

@@ -7110,6 +7110,78 @@ pub(super) fn capture(out: &Path) -> Result<()> {
                 app.dungeon.heart = Default::default();
             }
         }
+        // One foe of each kind in a row before her in the loading hall, frozen in the clip
+        // VELVET_FOE_POSE names (their look, their weapons, their stance).
+        if only
+            .as_deref()
+            .is_some_and(|o| o.split(',').any(|v| v == "poses"))
+        {
+            let eye = Vec3::new(0.0, -3.0, -45.5);
+            let y = app
+                .dungeon
+                .map
+                .capsule_floor(eye + Vec3::Y * 0.4, 0.28)
+                .unwrap_or(eye.y);
+            app.dungeon.controller.position = Vec3::new(eye.x, y, eye.z);
+            app.dungeon.controller.yaw = 0.0;
+            app.dungeon.controller.pitch = -0.12;
+            app.player = app.dungeon.controller.position;
+            let kinds = ["lurker", "bone_scout", "bone_guard", "grave_mage"];
+            for (k, kind) in kinds.iter().enumerate() {
+                let Some(index) = app.dungeon.actors.iter().position(|a| {
+                    let s = &app.dungeon.map.spawns[a.spawn];
+                    s.definition == *kind && s.kind == velvet_dungeon::gameplay::SpawnKind::Enemy
+                }) else {
+                    continue;
+                };
+                let at = Vec3::new(-2.4 + k as f32 * 1.6, y, eye.z - 3.8);
+                let y = app
+                    .dungeon
+                    .map
+                    .capsule_floor(at + Vec3::Y * 0.4, 0.4)
+                    .unwrap_or(y);
+                let actor = &mut app.dungeon.actors[index];
+                actor.position = Vec3::new(at.x, y, at.z);
+                actor.yaw = 0.0;
+                dungeon::combat::turn_toward(
+                    &mut actor.yaw,
+                    Vec3::new(eye.x - at.x, 0.0, eye.z - at.z),
+                    10.0,
+                    10.0,
+                );
+                actor.gait = dungeon::combat::Gait::Idle;
+            }
+            let tag = std::env::var("VELVET_FOE_POSE")
+                .unwrap_or_else(|_| "Idle_A".into())
+                .replace(['@', '.'], "_");
+            save(&mut app, out, &format!("mina-poses-{tag}"))?;
+        }
+        // A fight in the guard room: she waits by the door, the room's foes come round the table
+        // and strike — a frame every 0.4 s (their gait, their feet, their weapons, their way).
+        if only
+            .as_deref()
+            .is_some_and(|o| o.split(',').any(|v| v == "horda"))
+        {
+            use velvet_dungeon::controller::Input;
+            let at = Vec3::new(-0.4, -1.7, -26.1);
+            let y = app
+                .dungeon
+                .map
+                .capsule_floor(at + Vec3::Y * 0.4, 0.28)
+                .unwrap_or(at.y);
+            app.dungeon.controller.position = Vec3::new(at.x, y, at.z);
+            let look = Vec3::new(-6.4, y, -26.1) - app.dungeon.controller.position;
+            app.dungeon.controller.yaw = (-look.x).atan2(-look.z);
+            app.dungeon.controller.pitch = -0.08;
+            for frame in 0..9 {
+                for _ in 0..24 {
+                    app.dungeon.update(Input::default(), 1.0 / 60.0);
+                    app.dungeon.health = 100.0;
+                }
+                app.player = app.dungeon.controller.position;
+                save(&mut app, out, &format!("mina-horda-{frame}"))?;
+            }
+        }
         // What a fallen foe leaves on the floor, and a named champion with its bar.
         if only
             .as_deref()

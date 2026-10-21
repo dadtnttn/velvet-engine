@@ -1757,6 +1757,19 @@ impl Scene {
                         super::combat::Gait::Idle => ("Idle_A", run.elapsed),
                     }
                 };
+                // QA: every foe frozen in one clip (`guard` and `attack` pick its own)
+                let (animation, animation_time) = match qa_pose() {
+                    Some((clip, t)) => (
+                        match clip.as_str() {
+                            "guard" => guard_clip(loadout.weapon),
+                            "attack" => moves[0].name,
+                            "attack2" => moves[moves.len().min(2) - 1].name,
+                            _ => clip.as_str(),
+                        },
+                        *t,
+                    ),
+                    None => (animation, animation_time),
+                };
                 let distance = (a.position - camera.position).length();
                 // A leaping champion is off the ground.
                 let lift = swing
@@ -4413,6 +4426,16 @@ impl Scene {
 }
 
 /// The guard-stance loop baked for a weapon (`Guard_<weapon>`).
+/// `VELVET_FOE_POSE=clip@seconds`: every foe drawn frozen in that clip (QA captures).
+fn qa_pose() -> &'static Option<(String, f32)> {
+    static POSE: std::sync::OnceLock<Option<(String, f32)>> = std::sync::OnceLock::new();
+    POSE.get_or_init(|| {
+        let v = std::env::var("VELVET_FOE_POSE").ok()?;
+        let (clip, t) = v.split_once('@').unwrap_or((v.as_str(), "0"));
+        Some((clip.to_string(), t.parse().unwrap_or(0.0)))
+    })
+}
+
 pub(super) fn guard_clip(weapon: &str) -> &'static str {
     match weapon {
         "axe" => "Guard_axe",

@@ -2079,6 +2079,34 @@ impl GltfModel {
         Ok(appended)
     }
 
+    /// Rewrites every rotation key of the joint `joint` in the clips from index `first_clip` on
+    /// (a retarget's correction: `turn` gets each key's local rotation, `[x, y, z, w]`, and returns
+    /// its new one). Returns how many keys it rewrote; none when no such joint.
+    pub fn map_rotation_keys(
+        &mut self,
+        first_clip: usize,
+        joint: &str,
+        mut turn: impl FnMut([f32; 4]) -> [f32; 4],
+    ) -> usize {
+        let Some(target) = self.node_names.iter().position(|name| name == joint) else {
+            return 0;
+        };
+        let mut count = 0;
+        for clip in self.animation_clips.iter_mut().skip(first_clip) {
+            for channel in &mut clip.channels {
+                if let AnimationChannel3D::Rotation { node, keys } = channel {
+                    if *node == target {
+                        for (_, value) in keys.iter_mut() {
+                            *value = turn(*value);
+                            count += 1;
+                        }
+                    }
+                }
+            }
+        }
+        count
+    }
+
     /// Bind-pose local-to-world transform for one imported mesh primitive.
     pub fn mesh_transform(&self, mesh_index: usize) -> Mat4 {
         self.mesh_transforms
