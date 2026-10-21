@@ -7096,6 +7096,9 @@ pub(super) fn capture(out: &Path) -> Result<()> {
             app.player = app.dungeon.controller.position;
             save(&mut app, out, &format!("mina-cofre-{tier}"))?;
         }
+        // The chart, as if she had walked it all, from the loading hall.
+        app.dungeon.visited = (0..app.dungeon.map.rooms.len()).collect();
+        app.dungeon.controller.position = Vec3::new(0.0, -3.0, -50.0);
         app.dungeon.map_open = true;
         save(&mut app, out, "mina-mapa")?;
         app.dungeon.map_open = false;

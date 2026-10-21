@@ -260,6 +260,17 @@ impl Hud {
             self.chart_shadows(&cx, v);
         }
 
+        if let Some(mine) = &run.authored {
+            // The hand-made mine: its real floor, metre by metre, where she has been.
+            self.chart_mine(&cx, mine, v);
+            if below {
+                self.chart_stage(&cx, v);
+            }
+            self.chart_badges(&cx, v);
+            self.chart_player(&cx, v);
+            self.chart_ruler(&cx, vp, v);
+            return;
+        }
         let mut items: Vec<(f32, Item)> = Vec::new();
         for room in &run.map.rooms {
             let d = view.depth(room.center.x, room.center.y, room.center.z);
@@ -293,6 +304,37 @@ impl Hud {
         self.chart_badges(&cx, v);
         self.chart_player(&cx, v);
         self.chart_ruler(&cx, vp, v);
+    }
+
+    /// The hand-made mine's floor: a tile per square metre of the rooms she has walked, at its
+    /// altitude and tinted by it, the room she is in brighter, drawn back to front.
+    fn chart_mine(&self, cx: &Ctx, mine: &crate::authored::Authored, v: &mut Vec<Vertex>) {
+        let view = cx.view;
+        let mut cells: Vec<(f32, &crate::authored::ChartCell)> = mine
+            .chart
+            .iter()
+            .filter(|c| cx.known.visited.get(c.room).copied().unwrap_or(false))
+            .map(|c| (view.depth(c.x, c.y, c.z), c))
+            .collect();
+        cells.sort_by(|a, b| a.0.total_cmp(&b.0));
+        for (_, c) in cells {
+            let mut color = lift(cx.alt(c.y), 0.9);
+            if c.room == cx.current {
+                color = lift(mix(color, [1.0, 0.9, 0.6, 1.0], 0.18), 1.1);
+            }
+            // a hint of relief: tiles facing the light a touch brighter
+            color = lift(
+                color,
+                0.94 + 0.06 * ((c.x * 0.7 + c.z * 0.4).sin() * 0.5 + 0.5),
+            );
+            let h = 0.52;
+            let a = view.at(c.x - h, c.y, c.z - h);
+            let b = view.at(c.x + h, c.y, c.z - h);
+            let d = view.at(c.x + h, c.y, c.z + h);
+            let e = view.at(c.x - h, c.y, c.z + h);
+            super::triangle(v, a, b, d, color);
+            super::triangle(v, a, d, e, color);
+        }
     }
 
     /// The floor the complex stands on: a world grid that only appears near

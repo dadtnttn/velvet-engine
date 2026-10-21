@@ -194,6 +194,15 @@ pub struct Pool {
     pub reflect: [f32; 3],
 }
 
+/// A square metre of the mine's floor on its chart.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ChartCell {
+    pub x: f32,
+    pub z: f32,
+    pub y: f32,
+    pub room: usize,
+}
+
 /// Someone standing in the mine (for now, a placeholder figure with a name over the head).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Npc {
@@ -221,6 +230,8 @@ pub struct Authored {
     pub lamps: Vec<Lamp>,
     pub npcs: Vec<Npc>,
     pub pools: Vec<Pool>,
+    /// The floor, metre by metre, for the map: every floor with room over it and a room.
+    pub chart: Vec<ChartCell>,
     /// Where the Queen comes in, and which way she looks.
     pub spawn: Vec3,
     pub spawn_yaw: f32,
@@ -353,6 +364,60 @@ fn kind(name: &str) -> Option<SpawnKind> {
     })
 }
 
+/// The chart's squares one can walk to from `start`: neighbours a metre or two apart (over a
+/// narrow crack) and at most a metre and a bit higher or lower.
+fn joined(cells: Vec<ChartCell>, start: Vec3) -> Vec<ChartCell> {
+    use std::collections::{HashMap, VecDeque};
+    let key = |x: f32, z: f32| ((x.floor()) as i32, (z.floor()) as i32);
+    let mut at: HashMap<(i32, i32), Vec<usize>> = HashMap::new();
+    for (i, c) in cells.iter().enumerate() {
+        at.entry(key(c.x, c.z)).or_default().push(i);
+    }
+    let Some(first) = at.get(&key(start.x, start.z)).and_then(|list| {
+        list.iter().copied().min_by(|&a, &b| {
+            (cells[a].y - start.y)
+                .abs()
+                .total_cmp(&(cells[b].y - start.y).abs())
+        })
+    }) else {
+        return cells;
+    };
+    let mut keep = vec![false; cells.len()];
+    keep[first] = true;
+    let mut queue = VecDeque::from([first]);
+    while let Some(i) = queue.pop_front() {
+        let (cx, cz) = key(cells[i].x, cells[i].z);
+        // the near squares, the diagonal ones, and over a missing one (a crack narrower than a metre)
+        for (dx, dz) in [
+            (1, 0),
+            (-1, 0),
+            (0, 1),
+            (0, -1),
+            (1, 1),
+            (1, -1),
+            (-1, 1),
+            (-1, -1),
+            (2, 0),
+            (-2, 0),
+            (0, 2),
+            (0, -2),
+        ] {
+            for &j in at.get(&(cx + dx, cz + dz)).into_iter().flatten() {
+                if !keep[j] && (cells[j].y - cells[i].y).abs() < 1.2 {
+                    keep[j] = true;
+                    queue.push_back(j);
+                }
+            }
+        }
+    }
+    cells
+        .into_iter()
+        .zip(keep)
+        .filter(|(_, k)| *k)
+        .map(|(c, _)| c)
+        .collect()
+}
+
 /// Reads the mine: its blueprint (with the floor map), what it adds to a run, and its slimes.
 pub fn load() -> Result<(Blueprint, Authored, Vec<Slime>), String> {
     let root = data_root();
@@ -365,6 +430,31 @@ pub fn load() -> Result<(Blueprint, Authored, Vec<Slime>), String> {
     let floors = std::fs::read(super::assets::root().join(&file.files.floors))
         .map_err(|e| format!("{}: {e}", file.files.floors))?;
     let floors = FloorGrid::from_bytes(&floors)?;
+    let mut chart = Vec::new();
+    let (w, h) = (
+        floors.width as f32 * floors.cell,
+        floors.height as f32 * floors.cell,
+    );
+    let mut z = floors.z0 + 0.5;
+    while z < floors.z0 + h {
+        let mut x = floors.x0 + 0.5;
+        while x < floors.x0 + w {
+            for (y, span) in floors.floors(x, z) {
+                if let Some(room) = span.room.filter(|_| span.ceiling - span.floor >= 1.6) {
+                    chart.push(ChartCell {
+                        x,
+                        z,
+                        y,
+                        room: usize::from(room),
+                    });
+                }
+            }
+            x += 1.0;
+        }
+        z += 1.0;
+    }
+    // Only the floor joined to the way in: the hill's slopes and the tops of things stay off the chart.
+    let chart = joined(chart, v3(file.spawn.p));
     if file.rooms.is_empty() {
         return Err("mina.json: no rooms".into());
     }
@@ -526,6 +616,7 @@ pub fn load() -> Result<(Blueprint, Authored, Vec<Slime>), String> {
             .filter_map(|w| pool(w, false))
             .chain(file.lake.as_ref().and_then(|w| pool(w, true)))
             .collect(),
+        chart,
         spawn: v3(file.spawn.p),
         spawn_yaw: file.spawn.yaw,
     };
@@ -767,5 +858,103 @@ mod tests {
             }
         }
         assert!(stuck.is_empty(), "{}", stuck.join("\n"));
+    }
+
+    /// The expedition in the hand-made mine: a foe comes for her and hits, a chest opens and gives
+    /// what it holds, the Heart's throat stays shut until the seal and the key are hers.
+    #[test]
+    fn the_mines_expedition_plays() {
+        use crate::Dungeon;
+        use velvet_dungeon::controller::Input;
+        if !available() {
+            return;
+        }
+        let mut run = Dungeon::mine().unwrap();
+        assert_eq!(run.seed(), MINE_SEED);
+        let idle = Input::default();
+        // a foe in the loading hall comes for her
+        let foe = run
+            .actors
+            .iter()
+            .position(|a| run.map.spawns[a.spawn].kind == SpawnKind::Enemy && a.position.y < -2.0)
+            .unwrap();
+        let home = run.actors[foe].position;
+        let (at, floor) = (0..16)
+            .find_map(|k| {
+                let a = k as f32 * std::f32::consts::TAU / 16.0;
+                let at = home + Vec3::new(a.cos(), 0.0, a.sin()) * 2.8;
+                run.map
+                    .capsule_floor(at + Vec3::Y * 0.3, 0.28)
+                    .filter(|y| (y - home.y).abs() < 0.5)
+                    .map(|y| (at, y))
+            })
+            .expect("room beside the foe");
+        run.controller.position = Vec3::new(at.x, floor, at.z);
+        let start = (run.actors[foe].position - run.controller.position).length();
+        for _ in 0..240 {
+            run.update(idle, 1.0 / 60.0);
+        }
+        let near = (run.actors[foe].position - run.controller.position).length();
+        assert!(
+            near < start || run.health < 100.0,
+            "the foe neither came nor hit ({start} -> {near})"
+        );
+        // a chest: open it, let the lid rise, take what it holds
+        let mut run = Dungeon::mine().unwrap();
+        let chest = run
+            .actors
+            .iter()
+            .position(|a| run.map.spawns[a.spawn].kind == SpawnKind::Chest)
+            .unwrap();
+        let spawn = run.actors[chest].spawn;
+        let loot = run.authored.as_ref().unwrap().loot[&spawn].clone();
+        let p = run.actors[chest].position;
+        let face = run
+            .authored
+            .as_ref()
+            .unwrap()
+            .face(spawn)
+            .unwrap_or(Vec3::Z);
+        let stand = p + face * 1.2;
+        let floor = run.map.capsule_floor(stand + Vec3::Y * 0.3, 0.28).unwrap();
+        run.controller.position = Vec3::new(stand.x, floor, stand.z);
+        for i in 0..run.actors.len() {
+            if run.map.spawns[run.actors[i].spawn].health > 0.0 {
+                run.actors[i].health = 0.0;
+                run.actors[i].death = 99.0;
+            }
+        }
+        assert_eq!(run.nearby_actor(), Some(chest));
+        let gold = run.gold;
+        run.interact();
+        for _ in 0..180 {
+            run.update(idle, 1.0 / 60.0);
+        }
+        run.interact();
+        assert!(run.actors[chest].used, "the chest was not emptied");
+        assert_eq!(run.gold, gold + loot.gold);
+        // the Heart's throat: shut, then open
+        let mine = run.authored.clone().unwrap();
+        let gate = &mine.gates[0];
+        let before = gate.center + Vec3::new(0.0, 0.0, gate.half[1] + 1.4);
+        let floor = run.map.capsule_floor(before + Vec3::Y * 0.3, 0.28).unwrap();
+        let walk = Input {
+            forward: 1.0,
+            ..Input::default()
+        };
+        for (seal, crest, through) in [(false, false, false), (true, true, true)] {
+            run.seal = seal;
+            run.crest = crest;
+            run.controller.position = Vec3::new(before.x, floor, before.z);
+            run.controller.yaw = 0.0;
+            for _ in 0..120 {
+                run.update(walk, 1.0 / 60.0);
+            }
+            let passed = run.controller.position.z < gate.center.z - gate.half[1];
+            assert_eq!(
+                passed, through,
+                "seal {seal}, key {crest}: through the gate {passed}"
+            );
+        }
     }
 }

@@ -323,10 +323,24 @@ impl Hud {
         } else {
             biome.name.as_str()
         };
-        let seed = run.seed().to_string();
+        let seed = if run.authored.is_some() {
+            "La Mina".to_string()
+        } else {
+            run.seed().to_string()
+        };
         let seed_w = self.width(&seed, 22.0).max(90.0);
         let sx = 1840.0 - seed_w;
-        self.kicker(v, "SEMILLA", sx, 46.0, tone.accent);
+        self.kicker(
+            v,
+            if run.authored.is_some() {
+                "LUGAR"
+            } else {
+                "SEMILLA"
+            },
+            sx,
+            46.0,
+            tone.accent,
+        );
         self.mid(v, &seed, sx, 92.0, 22.0, IVORY);
         let rx = sx - 60.0 - 250.0;
         self.kicker(v, "REGIÓN", rx, 46.0, tone.accent);
@@ -773,15 +787,12 @@ impl Hud {
                 12.0,
                 alpha(tone.accent, 0.95),
             );
-            self.serif(
-                v,
-                current.role.label(),
-                x + 28.0,
-                cy + 8.0,
-                22.0,
-                250.0,
-                IVORY,
-            );
+            let name = run
+                .authored
+                .as_ref()
+                .and_then(|mine| mine.names.get(current.id))
+                .map_or(current.role.label(), String::as_str);
+            self.serif(v, name, x + 28.0, cy + 8.0, 22.0, 250.0, IVORY);
             self.right(
                 v,
                 &format!("Altura {:+.0} m", run.controller.position.y),
