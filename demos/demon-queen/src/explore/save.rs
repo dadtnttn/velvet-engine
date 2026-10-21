@@ -181,16 +181,18 @@ pub(super) fn starting_point(
         .unwrap_or_default()
         .as_nanos()
         .hash(&mut seed_hasher);
-    // The mine is the hand-made one (Mina 2.0) when its data is there; a seed asked for, or a build
-    // without it, gets a generated cave.
-    let mut dungeon = match seed {
-        None if dungeon::authored::available() => {
-            dungeon::Dungeon::mine().unwrap_or_else(|error| {
-                eprintln!("[mina] {error}: a generated cave instead");
-                dungeon::Dungeon::generate(seed_hasher.finish())
-            })
-        }
-        _ => dungeon::Dungeon::generate(seed.unwrap_or_else(|| seed_hasher.finish())),
+    // The mine is the hand-made one (Mina 2.0) when its data is there; only a build without it gets
+    // a generated cave (from the seed the game rolls when it opens the world).
+    let generated = |seed_hasher: &DefaultHasher| {
+        dungeon::Dungeon::generate(seed.unwrap_or_else(|| seed_hasher.finish()))
+    };
+    let mut dungeon = if dungeon::authored::available() {
+        dungeon::Dungeon::mine().unwrap_or_else(|error| {
+            eprintln!("[mina] {error}: a generated cave instead");
+            generated(&seed_hasher)
+        })
+    } else {
+        generated(&seed_hasher)
     };
     let mut dungeon_resume = false;
     let (spawn_x, spawn_z) = exploration3d_state::default_spawn(spawn_id);
@@ -240,7 +242,6 @@ pub(super) fn starting_point(
             let outdated = saved.dungeon.as_ref().is_some_and(|snapshot| {
                 snapshot.seed != dungeon::authored::MINE_SEED
                     && !saved.dungeon_active
-                    && seed.is_none()
                     && dungeon::authored::available()
             });
             if let Some(snapshot) = saved.dungeon.as_ref().filter(|_| !outdated) {

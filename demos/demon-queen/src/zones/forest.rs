@@ -345,10 +345,12 @@ impl App {
             return Some(Prompt::new(Icon::Talk, "Hablar").detail("El mago hipnotista"));
         }
         if mine::entry_distance(self.player) <= mine::INTERACT_RADIUS {
-            let detail = if self.has_weapon() {
-                "Las Cavernas del Sello"
-            } else {
+            let detail = if !self.has_weapon() {
                 "Sin arma: no es seguro"
+            } else if self.dungeon.authored.is_some() {
+                "La Mina"
+            } else {
+                "Las Cavernas del Sello"
             };
             return Some(Prompt::new(Icon::Mine, "Bajar a la mina").detail(detail));
         }
