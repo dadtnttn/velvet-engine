@@ -458,7 +458,7 @@ pub(super) const NINA: Spec = Spec {
         (
             0.30,
             Voice::ChiquitaJealous,
-            "—Yo jamás pisé este sitio. Y tú ya tienes tarjeta de clienta.",
+            "—Mírate. Ya te saludan por tu nombre en la puerta. Por MI nombre.",
         ),
         (
             0.50,
