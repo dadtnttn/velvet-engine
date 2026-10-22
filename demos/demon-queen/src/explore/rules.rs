@@ -129,6 +129,32 @@ impl App {
         false
     }
 
+    /// The Queen at the mage's clearing in the bikini: once they have met (`mago_ultima`), his
+    /// ring again as a scene on the stage (`mago.md`, «El anillo, otra vez»); before, he stammers
+    /// and Chiquita sends her to meet him properly first. Whether it took the key.
+    pub(super) fn mage_in_bikini(&mut self) -> bool {
+        if !self.wearing(BIKINI_OUTFIT) {
+            return false;
+        }
+        if self.story.get("mago_ultima") > 0 && self.start_talk_at("mago.anillo") {
+            return true;
+        }
+        hud::mage_says(
+            "—¡¿B-b-bikini?! M-majestad, y-yo… n-no puedo… ¡no sé dónde mirar!",
+            self.elapsed + 4.5,
+        );
+        self.float_chiquita_after(
+            "—Ni os conocéis. Preséntate primero con el vestido verde; el bikini, para la segunda visita.",
+            Cue::Talk,
+            1.2,
+        );
+        self.notice_note(
+            "El mago no sabe dónde mirar\nHabla primero con él con el vestido verde; después, vuelve en bikini."
+                .to_owned(),
+        );
+        true
+    }
+
     /// Whether the bikini may be worn out of the springs yet.
     pub(super) fn bikini_may_go_out(&self) -> bool {
         self.lust_points() >= BIKINI_OUT_POINTS

@@ -119,11 +119,18 @@ const ALBUMS: [AlbumDef; 7] = [
         es: "Bosque Oscuro",
         en: "Dark Forest",
         icon: Icon::Forest,
-        scenes: &[SceneDef {
-            es: "No mires el anillo",
-            en: "Don't look at the ring",
-            dir: "hipno/escena",
-        }],
+        scenes: &[
+            SceneDef {
+                es: "No mires el anillo",
+                en: "Don't look at the ring",
+                dir: "hipno/escena",
+            },
+            SceneDef {
+                es: "El anillo, otra vez",
+                en: "The ring, again",
+                dir: "hipno/anillo",
+            },
+        ],
         memories: false,
     },
     AlbumDef {

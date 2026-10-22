@@ -591,7 +591,7 @@ pub(crate) struct Look {
 }
 
 /// The colours of each place's web scene: 0 the brothel's (rose), 1 the springs' (teal and red,
-/// with steam), 2 act one's (lilac).
+/// with steam), 2 act one's and the mage's (lilac).
 pub(crate) fn look(theme: u8) -> Look {
     match theme {
         1 => Look {

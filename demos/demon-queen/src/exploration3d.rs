@@ -2055,8 +2055,11 @@ mod dungeon_mode_tests {
         assert!(!app.mage_will_talk(), "he only stammers at the royal dress");
         app.outfit = 1;
         assert!(app.mage_will_talk());
+        assert!(!app.mage_in_bikini(), "the green dress gets his stall, not the ring scene");
         let bikini = rules::outfit_slot("bikini").expect("the bikini");
         app.outfit = bikini;
+        assert!(app.mage_in_bikini(), "in the bikini he stammers until they have met");
+        assert!(app.talk.is_none());
         app.left_baths_in_bikini();
         assert_eq!(app.outfit, 0, "out of the springs too soon: dressed again");
         assert!(!app.wardrobe_allows(bikini));

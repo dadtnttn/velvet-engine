@@ -4931,6 +4931,84 @@ pub(super) fn capture(out: &Path) -> Result<()> {
         app.penascal = None;
         return Ok(());
     }
+    if std::env::args().any(|a| a == "--mago-anillo") {
+        // The mage's clearing in the bikini: his stammer before they have met, then «El anillo,
+        // otra vez» on the stage with its clips, along the choices in VELVET_MIRILLA (`0,0,0,0,1`
+        // by default: play along, mouth, deeper, on top, inside).
+        app.nature_mode = true;
+        app.village_entered = false;
+        app.castle = None;
+        app.environment_cycle.set_phase(0.35);
+        let mage = mage_position();
+        app.player = Vec3::new(mage.x + 1.4, 0.0, mage.z + 1.2);
+        app.camera_focus = app.player;
+        app.story = guion::Vars::default();
+        app.outfit = crate::exploration3d::rules::outfit_slot("bikini").expect("the bikini");
+        let step = |app: &mut App, frames: usize| {
+            for _ in 0..frames {
+                app.tick(1.0 / 30.0);
+                app.render_frame();
+            }
+        };
+        step(&mut app, 60);
+        app.interact_forest();
+        step(&mut app, 30);
+        eprintln!("[anillo-qa] not met: talk {}", app.talk.is_some());
+        save(&mut app, out, "anillo-0-tartamudea")?;
+        app.story.values.insert("mago_ultima".into(), 1);
+        app.interact_forest();
+        let mut picks: Vec<usize> = std::env::var("VELVET_MIRILLA")
+            .unwrap_or_else(|_| "0,0,0,0,1".into())
+            .split(',')
+            .filter_map(|p| p.trim().parse().ok())
+            .collect();
+        let mut shots_seen: Vec<String> = Vec::new();
+        for _ in 0..400 {
+            if app.talk.is_none() {
+                if app.stage.as_ref().is_some_and(|s| s.outro_at.is_some()) {
+                    step(&mut app, 36);
+                    save(&mut app, out, "anillo-fin")?;
+                    if let Some(stage) = app.stage.as_mut() {
+                        stage.unlocks.clear();
+                    }
+                    app.end_talk();
+                }
+                break;
+            }
+            let clip = app
+                .stage
+                .as_ref()
+                .and_then(|s| s.clip.as_ref().map(|c| c.0.clone()));
+            if let Some(c) = clip.filter(|c| !shots_seen.contains(c)) {
+                step(&mut app, 30);
+                let name = c.rsplit('/').next().unwrap_or("").to_owned();
+                save(&mut app, out, &format!("anillo-{name}"))?;
+                shots_seen.push(c);
+            }
+            let lib = guion::library();
+            match app.talk.as_ref().map(|t| t.shown(lib, &app.story)) {
+                Some(guion::Shown::Choice { .. }) => {
+                    step(&mut app, 12);
+                    save(&mut app, out, &format!("anillo-eleccion-{}", picks.len()))?;
+                    let pick = if picks.is_empty() { 0 } else { picks.remove(0) };
+                    app.talk_pick(pick);
+                }
+                _ => {
+                    app.elapsed += 5.0;
+                    app.talk_confirm();
+                }
+            }
+            step(&mut app, 3);
+        }
+        eprintln!(
+            "[anillo-qa] scene: visto {} · fin {} · shots {} · {:?}",
+            app.story.get("mago_anillo"),
+            app.story.get("mago_anillo_fin"),
+            shots_seen.len(),
+            shots_seen
+        );
+        return Ok(());
+    }
     if std::env::args().any(|a| a == "--termas-privada") {
         // The springs' private room: its door shut, rented at the reception's counter (the guide
         // then leads there), the room empty, and its bath's knothole scene with its clips, along

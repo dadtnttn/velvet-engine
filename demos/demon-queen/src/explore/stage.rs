@@ -137,7 +137,7 @@ const DIM: f32 = 0.55;
 fn theme_of(scene: &str) -> u8 {
     if scene.starts_with("termas.") {
         1
-    } else if scene.starts_with("acto1.") {
+    } else if scene.starts_with("acto1.") || scene.starts_with("mago.") {
         2
     } else {
         0

@@ -379,6 +379,11 @@ impl App {
         if close_to_mage {
             self.map_open = false;
             self.clear_input();
+            // In the bikini, his ring again, on the stage (or his stammer, if they haven't met).
+            if self.mage_in_bikini() {
+                self.persist_3d_state(true);
+                return true;
+            }
             // Not to the Queen in her royal dress: he only stammers.
             if !self.mage_will_talk() {
                 return true;
