@@ -179,11 +179,7 @@ pub(super) fn draw(
             1.0,
         );
     }
-    let mut keys = vec![
-        ("W S", "elegir"),
-        ("Tab", "pestañas"),
-        ("Enter", "aceptar"),
-    ];
+    let mut keys = vec![("W S", "elegir"), ("Tab", "pestañas"), ("Enter", "aceptar")];
     if !buying {
         keys.insert(2, ("+ −", "cantidad"));
         keys.push(("T", "vender todo"));
@@ -245,7 +241,9 @@ fn backdrop(v: &mut Vec<MapVertex>, open: f32, time: f32) {
         });
         // ore in the rock, catching the lamp now and then
         for i in 0..22u32 {
-            let h = |k: u32| ((i.wrapping_mul(2654435761).wrapping_add(k * 40503)) % 1000) as f32 / 1000.0;
+            let h = |k: u32| {
+                ((i.wrapping_mul(2654435761).wrapping_add(k * 40503)) % 1000) as f32 / 1000.0
+            };
             let c = [640.0 + h(1) * 1240.0, 220.0 + h(2) * 760.0];
             let hue = [LAMP, 0xd94a5a, 0x5ab0ff, 0x4fd18b, 0xc9c9d6][(h(3) * 5.0) as usize % 5];
             let glint = ((time * (0.4 + h(4) * 0.5) + h(5) * 6.28).sin() * 0.5 + 0.5).powf(10.0);
@@ -263,16 +261,12 @@ fn backdrop(v: &mut Vec<MapVertex>, open: f32, time: f32) {
         timber(v, Rect::new(1898.0, 0.0, 24.0, 1080.0), 0.9);
         // his lantern's light over him, flickering
         let flicker = 0.85 + 0.15 * ((time * 7.3).sin() * 0.5 + (time * 3.1).sin() * 0.5);
-        halo(
-            v,
-            [330.0, 560.0],
-            300.0,
-            160.0,
-            rgba(LAMP, 0.07 * flicker),
-        );
+        halo(v, [330.0, 560.0], 300.0, 160.0, rgba(LAMP, 0.07 * flicker));
         // dust drifting down
         for i in 0..36u32 {
-            let h = |k: u32| ((i.wrapping_mul(2246822519).wrapping_add(k * 3266489917)) % 1000) as f32 / 1000.0;
+            let h = |k: u32| {
+                ((i.wrapping_mul(2246822519).wrapping_add(k * 3266489917)) % 1000) as f32 / 1000.0
+            };
             let fall = 14.0 + h(1) * 22.0;
             let y = (h(2) * 1080.0 + time * fall).rem_euclid(1080.0);
             let x = h(3) * 1920.0 + (time * 0.4 + h(4) * 6.0).sin() * 12.0;
@@ -462,7 +456,12 @@ fn plank(v: &mut Vec<MapVertex>, r: Rect, radius: f32, lit: bool, hover: bool, a
         rgba(SHADOW, 0.7 * alpha),
         false,
     );
-    panel(v, grow(r, 3.0), radius + 2.0, Panel::fill(EDGE, EDGE, alpha));
+    panel(
+        v,
+        grow(r, 3.0),
+        radius + 2.0,
+        Panel::fill(EDGE, EDGE, alpha),
+    );
     let (top, bottom, rim) = if lit {
         (mix(WOOD, LAMP, 0.42), mix(WOOD_DARK, EMBER, 0.22), LAMP)
     } else if hover {
@@ -474,7 +473,9 @@ fn plank(v: &mut Vec<MapVertex>, r: Rect, radius: f32, lit: bool, hover: bool, a
         v,
         r,
         radius,
-        Panel::fill(top, bottom, alpha).rim(rim, alpha, 2.0).bevel(0.7),
+        Panel::fill(top, bottom, alpha)
+            .rim(rim, alpha, 2.0)
+            .bevel(0.7),
     );
     for k in 1..4 {
         let y = r.y + r.h * k as f32 / 4.0 + ((k * 37) % 5) as f32 - 2.0;
@@ -519,7 +520,14 @@ fn button(
                 true,
             );
         }
-        plank(v, r, 7.0, lit && enabled, hover && enabled, if enabled { 1.0 } else { 0.55 });
+        plank(
+            v,
+            r,
+            7.0,
+            lit && enabled,
+            hover && enabled,
+            if enabled { 1.0 } else { 0.55 },
+        );
         let ink = if enabled { PAPER } else { 0x9a8a78 };
         let size = fit(font, Face::Title, label, size, r.w - 30.0);
         let w = text_width(font, Face::Title, label, size);
@@ -570,7 +578,14 @@ fn shelves(
             shifted(v, [(1.0 - a) * -60.0, 0.0], |v| {
                 turned(v, mid(r), TILT, |v| {
                     if lit {
-                        soft(v, r, 8.0, 16.0, rgba(LAMP, 0.3 + 0.08 * wave(f.time, 0.7)), true);
+                        soft(
+                            v,
+                            r,
+                            8.0,
+                            16.0,
+                            rgba(LAMP, 0.3 + 0.08 * wave(f.time, 0.7)),
+                            true,
+                        );
                     }
                     plank(v, r, 6.0, lit, over, 1.0);
                     // the crate's iron straps
@@ -592,9 +607,28 @@ fn shelves(
                     if let Some(n) = count {
                         let badge = format!("×{n}");
                         let w = text_width(font, Face::Ui, &badge, 18.0) + 14.0;
-                        let b = Rect::new(niche.x + niche.w - w + 6.0, niche.y + niche.h - 20.0, w, 24.0);
-                        panel(v, b, 10.0, Panel::fill(EMBER, 0x8a3a10, 1.0).rim(EDGE, 1.0, 1.5));
-                        text_shadow(font, v, Face::Ui, &badge, b.x + 7.0, b.y + 2.0, 18.0, rgba(PAPER, 1.0));
+                        let b = Rect::new(
+                            niche.x + niche.w - w + 6.0,
+                            niche.y + niche.h - 20.0,
+                            w,
+                            24.0,
+                        );
+                        panel(
+                            v,
+                            b,
+                            10.0,
+                            Panel::fill(EMBER, 0x8a3a10, 1.0).rim(EDGE, 1.0, 1.5),
+                        );
+                        text_shadow(
+                            font,
+                            v,
+                            Face::Ui,
+                            &badge,
+                            b.x + 7.0,
+                            b.y + 2.0,
+                            18.0,
+                            rgba(PAPER, 1.0),
+                        );
                     }
                     let name_size = fit(font, Face::Title, &p.name, 28.0, 300.0);
                     text_outline(
@@ -661,7 +695,16 @@ fn shelves(
             rgba(PAPER, 1.0),
             rgba(EDGE, 0.8),
         );
-        text_shadow(font, v, Face::Italic, line, r.x + 30.0, r.y + 70.0, 21.0, rgba(DUST, 0.95));
+        text_shadow(
+            font,
+            v,
+            Face::Italic,
+            line,
+            r.x + 30.0,
+            r.y + 70.0,
+            21.0,
+            rgba(DUST, 0.95),
+        );
     }
     // the pages, when there are more than fit
     let pages = indices.len().div_ceil(PAGE_SIZE).max(1);
@@ -671,7 +714,14 @@ fn shelves(
             (Layout::PREVIOUS, page > 0, ShopHit::PagePrevious),
             (Layout::NEXT, page + 1 < pages, ShopHit::PageNext),
         ] {
-            plank(v, r, 6.0, false, f.hover == Some(hit) && enabled, if enabled { 1.0 } else { 0.4 });
+            plank(
+                v,
+                r,
+                6.0,
+                false,
+                f.hover == Some(hit) && enabled,
+                if enabled { 1.0 } else { 0.4 },
+            );
             // (the chevron points down: turned to point back or on)
             let turn = if hit == ShopHit::PagePrevious {
                 std::f32::consts::FRAC_PI_2
@@ -803,7 +853,13 @@ fn card(
             .rim(0x000000, 1.0, 2.0)
             .bevel(0.9),
     );
-    halo(v, [n.x + n.w * 0.5, n.y + n.h * 0.42], 110.0, 60.0, rgba(LAMP, 0.22));
+    halo(
+        v,
+        [n.x + n.w * 0.5, n.y + n.h * 0.42],
+        110.0,
+        60.0,
+        rgba(LAMP, 0.22),
+    );
     item_icon(icons, v, &p.id, grow(n, -22.0), 1.0);
     let x = n.x + n.w + 26.0;
     let w = r.x + r.w - x - 26.0;
@@ -826,15 +882,38 @@ fn card(
     } else {
         "Del Pozo del Minero"
     };
-    let chip = Rect::new(x, n.y + 58.0, text_width(font, Face::Ui, kind, 18.0) + 26.0, 30.0);
-    panel(v, chip, 12.0, Panel::fill(EMBER, 0x7a300c, 1.0).rim(EDGE, 1.0, 1.5));
-    text_shadow(font, v, Face::Ui, kind, chip.x + 13.0, chip.y + 4.0, 18.0, rgba(PAPER, 1.0));
+    let chip = Rect::new(
+        x,
+        n.y + 58.0,
+        text_width(font, Face::Ui, kind, 18.0) + 26.0,
+        30.0,
+    );
+    panel(
+        v,
+        chip,
+        12.0,
+        Panel::fill(EMBER, 0x7a300c, 1.0).rim(EDGE, 1.0, 1.5),
+    );
+    text_shadow(
+        font,
+        v,
+        Face::Ui,
+        kind,
+        chip.x + 13.0,
+        chip.y + 4.0,
+        18.0,
+        rgba(PAPER, 1.0),
+    );
     let words = if p.description.is_empty() {
         &p.summary
     } else {
         &p.description
     };
-    for (i, line) in wrap(font, Face::Body, words, 21.0, w).iter().take(5).enumerate() {
+    for (i, line) in wrap(font, Face::Body, words, 21.0, w)
+        .iter()
+        .take(5)
+        .enumerate()
+    {
         text(
             font,
             v,
@@ -853,7 +932,16 @@ fn card(
     } else {
         "En su báscula"
     };
-    text_shadow(font, v, Face::Title, label, r.x + 30.0, top, 26.0, rgba(LAMP, 1.0));
+    text_shadow(
+        font,
+        v,
+        Face::Title,
+        label,
+        r.x + 30.0,
+        top,
+        26.0,
+        rgba(LAMP, 1.0),
+    );
     push_rect(
         v,
         Rect::new(r.x + 30.0, top + 36.0, r.w - 60.0, 2.0),
@@ -877,7 +965,11 @@ fn card(
         ));
         rows.push((
             "Golpes al granito".into(),
-            format!("{} » {}", granite_blows(now.damage), granite_blows(new.damage)),
+            format!(
+                "{} » {}",
+                granite_blows(now.damage),
+                granite_blows(new.damage)
+            ),
             None,
         ));
         rows.push((
@@ -904,7 +996,11 @@ fn card(
         rows.push(("Aquí te paga".into(), format!("{here} oro cada uno"), None));
         rows.push((
             "En la villa".into(),
-            format!("{} oro (él se queda {})", p.sell_price, p.sell_price.saturating_sub(here)),
+            format!(
+                "{} oro (él se queda {})",
+                p.sell_price,
+                p.sell_price.saturating_sub(here)
+            ),
             None,
         ));
         rows.push((
@@ -916,14 +1012,40 @@ fn card(
     }
     for (i, (what, how, bars)) in rows.iter().enumerate() {
         let y = top + 52.0 + i as f32 * 46.0;
-        text_shadow(font, v, Face::Body, what, r.x + 30.0, y, 22.0, rgba(DUST, 1.0));
+        text_shadow(
+            font,
+            v,
+            Face::Body,
+            what,
+            r.x + 30.0,
+            y,
+            22.0,
+            rgba(DUST, 1.0),
+        );
         let bx = r.x + 250.0;
         if let Some((now, new)) = bars {
             let full = 170.0;
             push_rect(v, Rect::new(bx, y + 4.0, full, 18.0), rgba(0x000000, 0.5));
-            push_rect(v, Rect::new(bx, y + 4.0, full * new.min(1.0), 18.0), rgba(LAMP, 0.9));
-            push_rect(v, Rect::new(bx, y + 4.0, full * now.min(1.0), 18.0), rgba(IRON_HI, 0.85));
-            text_shadow(font, v, Face::Ui, how, bx + full + 16.0, y, 22.0, rgba(PAPER, 1.0));
+            push_rect(
+                v,
+                Rect::new(bx, y + 4.0, full * new.min(1.0), 18.0),
+                rgba(LAMP, 0.9),
+            );
+            push_rect(
+                v,
+                Rect::new(bx, y + 4.0, full * now.min(1.0), 18.0),
+                rgba(IRON_HI, 0.85),
+            );
+            text_shadow(
+                font,
+                v,
+                Face::Ui,
+                how,
+                bx + full + 16.0,
+                y,
+                22.0,
+                rgba(PAPER, 1.0),
+            );
         } else {
             text_shadow(font, v, Face::Ui, how, bx, y, 22.0, rgba(PAPER, 1.0));
         }
@@ -935,10 +1057,33 @@ fn card(
         let h = 26.0 + lines.len().min(2) as f32 * 24.0;
         if y + h < Layout::MINUS.y - 8.0 {
             let note = Rect::new(r.x + 30.0, y, r.w - 60.0, h);
-            panel(v, note, 6.0, Panel::fill(PAPER, 0xd8c39c, 0.96).rim(0x8a6a3a, 1.0, 1.5));
-            text_shadow(font, v, Face::Title, "Reina", note.x + 14.0, note.y + 8.0, 18.0, rgba(0xc2386a, 1.0));
+            panel(
+                v,
+                note,
+                6.0,
+                Panel::fill(PAPER, 0xd8c39c, 0.96).rim(0x8a6a3a, 1.0, 1.5),
+            );
+            text_shadow(
+                font,
+                v,
+                Face::Title,
+                "Reina",
+                note.x + 14.0,
+                note.y + 8.0,
+                18.0,
+                rgba(0xc2386a, 1.0),
+            );
             for (i, line) in lines.iter().take(2).enumerate() {
-                text(font, v, Face::Body, line, note.x + 84.0, note.y + 8.0 + i as f32 * 24.0, 19.0, rgba(0x3a2614, 1.0));
+                text(
+                    font,
+                    v,
+                    Face::Body,
+                    line,
+                    note.x + 84.0,
+                    note.y + 8.0 + i as f32 * 24.0,
+                    19.0,
+                    rgba(0x3a2614, 1.0),
+                );
             }
         }
     }
@@ -951,17 +1096,49 @@ fn card(
     let quantity = if buying { 1 } else { f.quantity.max(1) };
     let total = unit.saturating_mul(quantity);
     if !buying {
-        text_shadow(font, v, Face::Body, "Cantidad", r.x + 30.0, Layout::MINUS.y + 12.0, 22.0, rgba(DUST, 1.0));
+        text_shadow(
+            font,
+            v,
+            Face::Body,
+            "Cantidad",
+            r.x + 30.0,
+            Layout::MINUS.y + 12.0,
+            22.0,
+            rgba(DUST, 1.0),
+        );
         for (rect, label, hit) in [
             (Layout::MINUS, "−", ShopHit::QuantityMinus),
             (Layout::PLUS, "+", ShopHit::QuantityPlus),
         ] {
             plank(v, rect, 6.0, false, f.hover == Some(hit), 1.0);
-            text_centered(font, v, Face::Title, label, mid(rect)[0], rect.y + 8.0, 28.0, rgba(PAPER, 1.0));
+            text_centered(
+                font,
+                v,
+                Face::Title,
+                label,
+                mid(rect)[0],
+                rect.y + 8.0,
+                28.0,
+                rgba(PAPER, 1.0),
+            );
         }
         let q = Rect::new(1452.0, Layout::MINUS.y, 76.0, 50.0);
-        panel(v, q, 6.0, Panel::fill(PAPER, 0xd8c39c, 1.0).rim(EDGE, 1.0, 2.0));
-        text_centered(font, v, Face::Ui, &quantity.to_string(), mid(q)[0], q.y + 11.0, 26.0, rgba(0x2a1a0c, 1.0));
+        panel(
+            v,
+            q,
+            6.0,
+            Panel::fill(PAPER, 0xd8c39c, 1.0).rim(EDGE, 1.0, 2.0),
+        );
+        text_centered(
+            font,
+            v,
+            Face::Ui,
+            &quantity.to_string(),
+            mid(q)[0],
+            q.y + 11.0,
+            26.0,
+            rgba(0x2a1a0c, 1.0),
+        );
     }
     let can = buying.then_some(f.gold >= total).unwrap_or(true);
     let status = f.notice.map(str::to_owned).unwrap_or_else(|| {
@@ -1068,7 +1245,10 @@ mod tests {
         let tab = mid(Layout::TABS[1]);
         assert_eq!(Layout::hit(tab[0], tab[1], &buying), Some(ShopHit::TabSell));
         let close = mid(Layout::CLOSE);
-        assert_eq!(Layout::hit(close[0], close[1], &buying), Some(ShopHit::Close));
+        assert_eq!(
+            Layout::hit(close[0], close[1], &buying),
+            Some(ShopHit::Close)
+        );
         // the shaft's rock: the worn pick breaks all down to basalt, the Heart's only the best
         assert_eq!(breaks(0), Rock::Basalto);
         assert_eq!(breaks(5), Rock::Corazon);

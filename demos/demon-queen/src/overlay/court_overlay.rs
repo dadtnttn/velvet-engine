@@ -2061,7 +2061,12 @@ fn memory_tile(m: usize, count: usize) -> Rect {
     let side = ((316.0 - 14.0 * (rows - 1.0)) / rows).min(150.0);
     let (c, r) = ((m % 3) as f32, (m / 3) as f32);
     let x0 = DATE_X + (DATE_ROW_W - (side * 3.0 + 20.0 * 2.0)) * 0.5;
-    Rect::new(x0 + c * (side + 20.0), 662.0 + r * (side + 14.0), side, side)
+    Rect::new(
+        x0 + c * (side + 20.0),
+        662.0 + r * (side + 14.0),
+        side,
+        side,
+    )
 }
 
 fn date_colour(d: &DateView) -> u32 {
@@ -2106,7 +2111,15 @@ fn row_cursor(v: &mut Vec<MapVertex>, r: Rect, angle: f32, time: f32) {
 }
 
 /// A pill of words on a colour.
-fn pill(font: &FontAtlas, v: &mut Vec<MapVertex>, x: f32, y: f32, words: &str, back: u32, ink: u32) -> f32 {
+fn pill(
+    font: &FontAtlas,
+    v: &mut Vec<MapVertex>,
+    x: f32,
+    y: f32,
+    words: &str,
+    back: u32,
+    ink: u32,
+) -> f32 {
     // (signs read better in the titles' face than in the shouting one)
     let face = if words.starts_with('+') {
         Face::Title
@@ -2126,7 +2139,16 @@ fn pill(font: &FontAtlas, v: &mut Vec<MapVertex>, x: f32, y: f32, words: &str, b
         15.0,
         Panel::fill(back, mix(back, 0x000000, 0.25), 1.0),
     );
-    text(font, v, face, words, x + 14.0, y + 3.0, 18.0, rgba(ink, 1.0));
+    text(
+        font,
+        v,
+        face,
+        words,
+        x + 14.0,
+        y + 3.0,
+        18.0,
+        rgba(ink, 1.0),
+    );
     w
 }
 
@@ -2152,11 +2174,20 @@ fn date_button(
         let (top, bottom, rim) = if !enabled {
             (0x241c2a, 0x120e16, 0x5a4e62)
         } else if lit {
-            (mix(color, 0xffffff, 0.1), mix(color, 0x000000, 0.45), GOLD_HI)
+            (
+                mix(color, 0xffffff, 0.1),
+                mix(color, 0x000000, 0.45),
+                GOLD_HI,
+            )
         } else {
             (0x2a1a36, 0x100a16, GOLD_DEEP)
         };
-        panel(v, r, 7.0, Panel::fill(top, bottom, 0.98).rim(rim, 1.0, 2.0).bevel(0.6));
+        panel(
+            v,
+            r,
+            7.0,
+            Panel::fill(top, bottom, 0.98).rim(rim, 1.0, 2.0).bevel(0.6),
+        );
         let size = fitted_size(font, Face::Title, label, 28.0, r.w - 24.0);
         let w = text_width(font, Face::Title, label, size);
         text_outline(
@@ -2250,7 +2281,12 @@ fn draw_dates(
                     // her face
                     let side = r.h - 20.0;
                     let face = Rect::new(r.x + 24.0, r.y + 10.0, side, side);
-                    panel(v, grow(face, 3.0), 5.0, Panel::fill(INK_DARK, INK_DARK, 1.0));
+                    panel(
+                        v,
+                        grow(face, 3.0),
+                        5.0,
+                        Panel::fill(INK_DARK, INK_DARK, 1.0),
+                    );
                     match faces.cards.get(i).copied().flatten() {
                         Some(uv) => cutout(v, face, uv, [1.0; 4]),
                         None => panel(v, face, 4.0, Panel::fill(gc, mix(gc, 0x000000, 0.6), 1.0)),
@@ -2334,7 +2370,12 @@ fn draw_dates(
     for (m, (_, open)) in d.memories.iter().take(count).enumerate() {
         let q = memory_tile(m, count);
         let focused = d.focus == Some(m as u8);
-        let uv = faces.dates.get(lit).and_then(|row| row.get(m)).copied().flatten();
+        let uv = faces
+            .dates
+            .get(lit)
+            .and_then(|row| row.get(m))
+            .copied()
+            .flatten();
         faded(v, k, |v| {
             shifted(v, [0.0, (1.0 - k) * 40.0], |v| {
                 turned(v, [q.x + q.w * 0.5, q.y + q.h * 0.5], DATE_TILT, |v| {
@@ -2443,20 +2484,30 @@ fn date_card(font: &FontAtlas, v: &mut Vec<MapVertex>, d: &DateView, state: u8, 
     let size = fitted_size(font, Face::Title, &d.next, 40.0, 580.0);
     let w = (text_width(font, Face::Title, &d.next, size) + 44.0).min(620.0);
     let plate = Rect::new(x - 6.0, r.y + 54.0, w, 62.0);
-    turned(v, [plate.x + plate.w * 0.5, plate.y + plate.h * 0.5], -0.03, |v| {
-        panel(v, grow(plate, 3.0), 8.0, Panel::fill(INK_DARK, INK_DARK, 1.0));
-        panel(v, plate, 6.0, Panel::fill(0xfffaf4, 0xe8e0d2, 1.0));
-        text(
-            font,
-            v,
-            Face::Title,
-            &d.next,
-            plate.x + 22.0,
-            plate.y + (plate.h - size) * 0.5 - 2.0,
-            size,
-            rgba(0x1a0c16, 1.0),
-        );
-    });
+    turned(
+        v,
+        [plate.x + plate.w * 0.5, plate.y + plate.h * 0.5],
+        -0.03,
+        |v| {
+            panel(
+                v,
+                grow(plate, 3.0),
+                8.0,
+                Panel::fill(INK_DARK, INK_DARK, 1.0),
+            );
+            panel(v, plate, 6.0, Panel::fill(0xfffaf4, 0xe8e0d2, 1.0));
+            text(
+                font,
+                v,
+                Face::Title,
+                &d.next,
+                plate.x + 22.0,
+                plate.y + (plate.h - size) * 0.5 - 2.0,
+                size,
+                rgba(0x1a0c16, 1.0),
+            );
+        },
+    );
     // where and when
     let size = fitted_size(font, Face::Italic, &d.place, 24.0, 610.0);
     text_shadow(
@@ -2470,7 +2521,16 @@ fn date_card(font: &FontAtlas, v: &mut Vec<MapVertex>, d: &DateView, state: u8, 
         rgba(CREAM, 0.95),
     );
     // her route: a block for each date (had, the next, still to come; a night's with a moon)
-    text_shadow(font, v, Face::Title, "La ruta", x, r.y + 186.0, 24.0, rgba(GOLD_HI, 1.0));
+    text_shadow(
+        font,
+        v,
+        Face::Title,
+        "La ruta",
+        x,
+        r.y + 186.0,
+        24.0,
+        rgba(GOLD_HI, 1.0),
+    );
     let total = d.total.max(1) as usize;
     let fresh_at = d.fresh.map(|(_, before, _)| before as usize);
     for k in 0..total {
@@ -2495,34 +2555,39 @@ fn date_card(font: &FontAtlas, v: &mut Vec<MapVertex>, d: &DateView, state: u8, 
             b.w * pop,
             b.h * pop,
         );
-        turned(v, [b.x + b.w * 0.5, b.y + b.h * 0.5], DATE_TILT * 2.0, |v| {
-            panel(v, grow(b, 3.0), 5.0, Panel::fill(INK_DARK, INK_DARK, 1.0));
-            panel(v, b, 4.0, Panel::fill(back, mix(back, 0x000000, 0.3), 1.0));
-            let night = d.route.get(k).copied().unwrap_or(false);
-            let words = format!("{}", k + 1);
-            let tw = text_width(font, Face::Display, &words, 22.0);
-            // a night's date: its number beside a moon
-            let tx = if night {
-                b.x + b.w * 0.5 - tw - 4.0
-            } else {
-                b.x + (b.w - tw) * 0.5
-            };
-            text(
-                font,
-                v,
-                Face::Display,
-                &words,
-                tx,
-                b.y + (b.h - 22.0) * 0.5 - 2.0,
-                22.0,
-                rgba(ink, 1.0),
-            );
-            if night {
-                let c = [b.x + b.w * 0.5 + 12.0, b.y + b.h * 0.5];
-                disc(v, c, 9.0, rgba(ink, 1.0));
-                disc(v, [c[0] + 4.0, c[1] - 3.5], 8.0, rgba(back, 1.0));
-            }
-        });
+        turned(
+            v,
+            [b.x + b.w * 0.5, b.y + b.h * 0.5],
+            DATE_TILT * 2.0,
+            |v| {
+                panel(v, grow(b, 3.0), 5.0, Panel::fill(INK_DARK, INK_DARK, 1.0));
+                panel(v, b, 4.0, Panel::fill(back, mix(back, 0x000000, 0.3), 1.0));
+                let night = d.route.get(k).copied().unwrap_or(false);
+                let words = format!("{}", k + 1);
+                let tw = text_width(font, Face::Display, &words, 22.0);
+                // a night's date: its number beside a moon
+                let tx = if night {
+                    b.x + b.w * 0.5 - tw - 4.0
+                } else {
+                    b.x + (b.w - tw) * 0.5
+                };
+                text(
+                    font,
+                    v,
+                    Face::Display,
+                    &words,
+                    tx,
+                    b.y + (b.h - 22.0) * 0.5 - 2.0,
+                    22.0,
+                    rgba(ink, 1.0),
+                );
+                if night {
+                    let c = [b.x + b.w * 0.5 + 12.0, b.y + b.h * 0.5];
+                    disc(v, c, 9.0, rgba(ink, 1.0));
+                    disc(v, [c[0] + 4.0, c[1] - 3.5], 8.0, rgba(back, 1.0));
+                }
+            },
+        );
     }
     if d.night && !complete {
         pill(font, v, x, r.y + 236.0, "DE NOCHE", 0x2a1a44, 0xe8d8ff);
@@ -2540,11 +2605,28 @@ fn date_card(font: &FontAtlas, v: &mut Vec<MapVertex>, d: &DateView, state: u8, 
         0.0,
         false,
     );
-    text_shadow(font, v, Face::Title, "Afecto", x, ay, 24.0, rgba(GOLD_HI, 1.0));
+    text_shadow(
+        font,
+        v,
+        Face::Title,
+        "Afecto",
+        x,
+        ay,
+        24.0,
+        rgba(GOLD_HI, 1.0),
+    );
     let gained = d.fresh.map_or(0, |(before, _, _)| d.hearts - before.max(0));
     if gained > 0 && age > 0.5 {
         let lw = text_width(font, Face::Title, "Afecto", 24.0);
-        pill(font, v, x + lw + 14.0, ay - 2.0, &format!("+{gained}"), GOLD_HI, INK_DARK);
+        pill(
+            font,
+            v,
+            x + lw + 14.0,
+            ay - 2.0,
+            &format!("+{gained}"),
+            GOLD_HI,
+            INK_DARK,
+        );
     }
     let mark = if complete || d.need <= 0 {
         None
@@ -2614,29 +2696,43 @@ fn date_card(font: &FontAtlas, v: &mut Vec<MapVertex>, d: &DateView, state: u8, 
             0.0,
             false,
         );
-        text_shadow(font, v, Face::Title, "Recompensa", x, ry, 24.0, rgba(GOLD_HI, 1.0));
+        text_shadow(
+            font,
+            v,
+            Face::Title,
+            "Recompensa",
+            x,
+            ry,
+            24.0,
+            rgba(GOLD_HI, 1.0),
+        );
         for k in 0..d.reward as usize {
             let q = Rect::new(x + 4.0 + k as f32 * 96.0, ry + 40.0, 82.0, 82.0);
-            turned(v, [q.x + q.w * 0.5, q.y + q.h * 0.5], DATE_TILT * 2.0, |v| {
-                panel(v, grow(q, 3.0), 6.0, Panel::fill(INK_DARK, INK_DARK, 1.0));
-                panel(
-                    v,
-                    q,
-                    5.0,
-                    Panel::fill(0x24182e, 0x0c0712, 1.0).rim(GOLD_DEEP, 1.0, 2.0),
-                );
-                let w = text_width(font, Face::Title, "?", 40.0);
-                text(
-                    font,
-                    v,
-                    Face::Title,
-                    "?",
-                    q.x + (q.w - w) * 0.5,
-                    q.y + 16.0,
-                    40.0,
-                    rgba(mix(color, 0x000000, 0.2), 1.0),
-                );
-            });
+            turned(
+                v,
+                [q.x + q.w * 0.5, q.y + q.h * 0.5],
+                DATE_TILT * 2.0,
+                |v| {
+                    panel(v, grow(q, 3.0), 6.0, Panel::fill(INK_DARK, INK_DARK, 1.0));
+                    panel(
+                        v,
+                        q,
+                        5.0,
+                        Panel::fill(0x24182e, 0x0c0712, 1.0).rim(GOLD_DEEP, 1.0, 2.0),
+                    );
+                    let w = text_width(font, Face::Title, "?", 40.0);
+                    text(
+                        font,
+                        v,
+                        Face::Title,
+                        "?",
+                        q.x + (q.w - w) * 0.5,
+                        q.y + 16.0,
+                        40.0,
+                        rgba(mix(color, 0x000000, 0.2), 1.0),
+                    );
+                },
+            );
         }
         let words = if d.reward == 1 {
             "1 recuerdo para tu galería".to_owned()
@@ -2656,7 +2752,11 @@ fn date_card(font: &FontAtlas, v: &mut Vec<MapVertex>, d: &DateView, state: u8, 
     }
 
     // Chiquita's word on it (why it waits and how her affection rises, or what to do now)
-    let words = if d.say.is_empty() { d.why.clone() } else { d.say.clone() };
+    let words = if d.say.is_empty() {
+        d.why.clone()
+    } else {
+        d.say.clone()
+    };
     if !words.is_empty() {
         speech_box(
             font,

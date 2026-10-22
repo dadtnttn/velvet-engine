@@ -3259,7 +3259,9 @@ mod tests {
         shop::set_counter(shop::Counter::Villa);
         // no step back, nothing twice: the picks after steel, the bags after leather
         assert_eq!(buy[0], "pico_templado");
-        assert!(!buy.iter().any(|id| id == "pico_hierro" || id == "pico_acero"));
+        assert!(!buy
+            .iter()
+            .any(|id| id == "pico_hierro" || id == "pico_acero"));
         assert!(buy.iter().any(|id| id == "mochila_reforzada"));
         assert!(!buy.iter().any(|id| id == "mochila_cuero"));
         // he buys what comes out of the shaft, and only that, for 80 %

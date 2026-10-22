@@ -110,7 +110,12 @@ pub(crate) fn gallery_memories() -> Vec<(&'static str, &'static Recuerdo)> {
     memories()
         .into_iter()
         .map(|(g, r)| (g.nombre.as_str(), r))
-        .chain(citas().sueltos.iter().map(|s| (s.quien.as_str(), &s.recuerdo)))
+        .chain(
+            citas()
+                .sueltos
+                .iter()
+                .map(|s| (s.quien.as_str(), &s.recuerdo)),
+        )
         .collect()
 }
 
@@ -459,7 +464,8 @@ impl App {
             (hit, None)
         };
         let now = self.elapsed;
-        let changed = self.court.as_ref().is_some_and(|c| c.choice != girl) || page.memory != memory;
+        let changed =
+            self.court.as_ref().is_some_and(|c| c.choice != girl) || page.memory != memory;
         if changed {
             ui_sfx::play(UiSfx::Move);
             if let Some(c) = self.court.as_mut() {
@@ -582,7 +588,11 @@ impl App {
                     DateState::Waiting(_, why) => why,
                     _ => String::new(),
                 },
-                sprite: g.busto.as_ref().map(|b| b.imagen.clone()).unwrap_or_default(),
+                sprite: g
+                    .busto
+                    .as_ref()
+                    .map(|b| b.imagen.clone())
+                    .unwrap_or_default(),
                 reward: next.map_or(0, |c| c.recuerdos.len() as u8),
                 night: next.is_some_and(|c| c.noche),
                 route: g.citas.iter().map(|c| c.noche).collect(),
@@ -714,7 +724,10 @@ mod tests {
         let g = &citas().chicas[0];
         assert!(memories_of(g, 0).iter().all(|(_, had)| !had));
         let one = memories_of(g, 1);
-        assert_eq!(one.iter().filter(|(_, had)| *had).count(), g.citas[0].recuerdos.len());
+        assert_eq!(
+            one.iter().filter(|(_, had)| *had).count(),
+            g.citas[0].recuerdos.len()
+        );
         assert!(one[0].1 && !one[one.len() - 1].1);
         assert_eq!(memories_before(g, 0), 0);
         assert_eq!(memories_before(g, g.citas.len()), memories_of(g, 0).len());
