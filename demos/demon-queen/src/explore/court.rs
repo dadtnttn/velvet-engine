@@ -868,6 +868,10 @@ impl App {
         if self.story.get("obra_barracones") == 0 {
             return false;
         }
+        // the first visit once restored: Nemi presents the new guard
+        if self.story.get("barracones_vista") == 0 && self.start_talk_at("corte.barracones") {
+            return true;
+        }
         self.float_chiquita_cue(
             "—Una guardia de verdad. La villa duerme más tranquila, y te quiere un poco más cada mañana.",
             mascot::Cue::Talk,

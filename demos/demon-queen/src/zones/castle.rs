@@ -554,6 +554,10 @@ impl App {
             "despensa" => self.open_works(),
             "armero" => {
                 if self.story.get("obra_armeria") > 0 {
+                    // the first visit once restored: Nemi and the new swords (the shop after it)
+                    if self.story.get("armeria_vista") == 0 && self.start_talk_at("corte.armeria") {
+                        return true;
+                    }
                     self.open_armory();
                     true
                 } else {
@@ -575,6 +579,14 @@ impl App {
             "arena" => self.open_training(),
             "nyxara" => self.open_lessons(),
             "catalejo" => self.open_telescope(),
+            // the first afternoon in the restored library: reading under the stained glass
+            "estudio"
+                if self.story.get("obra_biblioteca") > 0
+                    && self.story.get("biblioteca_leida") == 0
+                    && self.start_talk_at("corte.vidriera") =>
+            {
+                true
+            }
             "estudio" => self.open_codex(),
             // the red sofas of the great hall: whom to date (the vanity keeps its mirror)
             "sofa" => self.open_dates(),

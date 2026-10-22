@@ -312,6 +312,12 @@ impl App {
                 return;
             }
         }
+        // Nemi's first visit to the restored armoury ends at its counter (`@var armeria_abrir`).
+        if self.story.get("armeria_abrir") > 0 {
+            self.story.values.insert("armeria_abrir".to_owned(), 0);
+            self.open_armory();
+            return;
+        }
         // The bed's guion says «Descansar» with `@var dormir`.
         if self.story.get("dormir") > 0 {
             self.story.values.insert("dormir".to_owned(), 0);
