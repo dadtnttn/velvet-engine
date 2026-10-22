@@ -107,6 +107,11 @@ pub(crate) struct StageView {
     pub theme: u8,
     /// Every picture the scene will show, to load before they come on.
     pub preload: Vec<String>,
+    /// A clip plays over the background (`@clip`): its frame's size (the frame is the scene
+    /// picture's texture).
+    pub clip: Option<[u32; 2]>,
+    /// Seen through a knothole (`@mirilla`): black round a round hole.
+    pub peephole: bool,
 }
 
 /// A picture's size and where its figure's head is (the first row with something solid), from the
@@ -736,6 +741,66 @@ fn typed(lines: &[String], shown: usize) -> Vec<String> {
 
 /// Under the box: the curtain opening, the vignette, the place's air (the candles' warm glow, or
 /// the springs' steam drifting), and the triptych's frames.
+/// The scene picture (a clip's frame) over the whole screen, cut to fill it.
+fn clip_cover(v: &mut Vec<MapVertex>, width: f32, height: f32, fw: f32, fh: f32) {
+    let k = (width / fw.max(1.0)).max(height / fh.max(1.0));
+    let (uw, uh) = (width / k / fw.max(1.0), height / k / fh.max(1.0));
+    let (u0, v0) = ((1.0 - uw) * 0.5, (1.0 - uh) * 0.5);
+    let (u1, v1) = (u0 + uw, v0 + uh);
+    let p = [[0.0, 0.0], [width, 0.0], [width, height], [0.0, height]];
+    let uv = [[u0, v0], [u1, v0], [u1, v1], [u0, v1]];
+    for i in [0usize, 1, 2, 0, 2, 3] {
+        v.push(MapVertex {
+            position: p[i],
+            uv: uv[i],
+            color: [1.0; 4],
+            text: 4.0,
+            ..MapVertex::BLANK
+        });
+    }
+}
+
+/// A knothole: black all round a round hole in the middle, its edge soft.
+fn peephole(v: &mut Vec<MapVertex>, width: f32, height: f32) {
+    let c = [width * 0.5, height * 0.47];
+    let r = height * 0.43;
+    let soft = height * 0.07;
+    let far = width.hypot(height);
+    let n = 96;
+    let at = |a: f32, rr: f32| [c[0] + a.cos() * rr, c[1] + a.sin() * rr];
+    let vertex = |p: [f32; 2], alpha: f32| MapVertex {
+        position: p,
+        color: [0.0, 0.0, 0.0, alpha],
+        ..MapVertex::BLANK
+    };
+    for k in 0..n {
+        let (a0, a1) = (
+            k as f32 / n as f32 * std::f32::consts::TAU,
+            (k + 1) as f32 / n as f32 * std::f32::consts::TAU,
+        );
+        // the soft edge, clear inside to black outside
+        let (i0, i1, o0, o1) = (at(a0, r - soft), at(a1, r - soft), at(a0, r), at(a1, r));
+        v.extend([
+            vertex(i0, 0.0),
+            vertex(o0, 1.0),
+            vertex(o1, 1.0),
+            vertex(i0, 0.0),
+            vertex(o1, 1.0),
+            vertex(i1, 0.0),
+        ]);
+        // and black out to the screen's corners
+        let (f0, f1) = (at(a0, far), at(a1, far));
+        v.extend([
+            vertex(o0, 1.0),
+            vertex(f0, 1.0),
+            vertex(f1, 1.0),
+            vertex(o0, 1.0),
+            vertex(f1, 1.0),
+            vertex(o1, 1.0),
+        ]);
+    }
+}
+
 pub(crate) fn draw_ui(
     _font: &FontAtlas,
     v: &mut Vec<MapVertex>,
@@ -746,6 +811,13 @@ pub(crate) fn draw_ui(
 ) {
     let s = height / 1080.0;
     let lk = look(view.theme);
+    // A clip over the background, covering the screen (cut to fill it, never stretched).
+    if let Some([fw, fh]) = view.clip {
+        clip_cover(v, width, height, fw as f32, fh as f32);
+    }
+    if view.peephole {
+        peephole(v, width, height);
+    }
     // The curtain opening: black lifting off the stage.
     if view.age < 0.6 {
         push_rect(

@@ -2,6 +2,9 @@
 use super::ui_sfx::{self, UiSfx};
 use super::*;
 
+/// What the springs' private room costs for a visit (`termas.md`, «recepcion»).
+const PRIVATE_ROOM_PRICE: u32 = 20;
+
 impl App {
     /// What a guion gave with `@var objeto_<id> = n` (Nemi's wooden sword in the first act): into
     /// the inventory and the pack, worn at once if its slot is empty. The variable goes back to 0,
@@ -283,6 +286,22 @@ impl App {
                 if self.open_caricias(girl) {
                     return;
                 }
+            }
+        }
+        // The springs' private room rented at the counter (`@var privada_pagar`): its price paid,
+        // and its mission followed (the guide leads her there).
+        if self.story.get("privada_pagar") > 0 {
+            self.story.values.insert("privada_pagar".to_owned(), 0);
+            self.gold = self.gold.saturating_sub(PRIVATE_ROOM_PRICE);
+            if let Some(order) = missions::catalog()
+                .iter()
+                .find(|m| m.id == "sala_privada")
+                .map(|m| m.order)
+            {
+                self.story
+                    .values
+                    .insert(missions::FOLLOWED.to_owned(), order);
+                self.route = None;
             }
         }
         // Lira prepares the royal bath (`@var corte_bano`): its scene, on the stage.

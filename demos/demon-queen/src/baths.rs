@@ -586,7 +586,13 @@ pub(crate) enum Action {
     Leave,
     /// Something to read: the Queen's thought.
     Say(&'static str),
+    /// A conversation of the springs' guion here (`termas.md`, by its place).
+    Talk(&'static str),
 }
+
+/// The private room is rented at the reception's counter (`termas_recepcion`), its bath plays the
+/// knothole scene (`termas_mirilla`).
+pub(crate) const PRIVATE_ROOM: &str = "privada";
 
 /// The springs as the Queen experiences them: out in the valley or in one of its rooms.
 #[derive(Clone, Debug)]
@@ -612,6 +618,8 @@ pub(crate) struct State {
     pub guide: Option<usize>,
     /// Where Mugo is (x, z) and whether he is at the spot, pointing (from the scene).
     pub mugo: Option<([f32; 2], bool)>,
+    /// The private room is hers (rented at the reception): its door opens, its bath is hers.
+    pub reserved: bool,
 }
 
 /// The Queen taking it easy.
@@ -655,6 +663,7 @@ impl State {
             relax_blend: 0.0,
             guide: None,
             mugo: None,
+            reserved: false,
         }
     }
 
@@ -781,6 +790,12 @@ impl State {
             ("Volver a la villa", "El portón".to_owned())
         } else if h.exit {
             ("Salir", "A las pozas".to_owned())
+        } else if h.enter.as_deref() == Some(PRIVATE_ROOM) && !self.reserved {
+            ("Reservada", "Se alquila en recepción".to_owned())
+        } else if h.id == "mostrador" {
+            ("Hablar", "Recepción".to_owned())
+        } else if h.id == "bano" && self.room.as_deref() == Some(PRIVATE_ROOM) && self.reserved {
+            ("Meterse", h.label.clone())
         } else if h.enter.is_some() {
             ("Entrar", h.label.clone())
         } else {
@@ -803,6 +818,17 @@ impl State {
         };
         if h.to_village {
             return Action::Leave;
+        }
+        if h.enter.as_deref() == Some(PRIVATE_ROOM) && !self.reserved {
+            return Action::Say(
+                "Cerrada con llave. Un cartel: «Reservada · se alquila en recepción».",
+            );
+        }
+        if h.id == "mostrador" {
+            return Action::Talk("termas_recepcion");
+        }
+        if h.id == "bano" && self.room.as_deref() == Some(PRIVATE_ROOM) && self.reserved {
+            return Action::Talk("termas_mirilla");
         }
         if let Some(id) = h.enter.as_deref() {
             if let Some(room) = plan().rooms.get(id) {

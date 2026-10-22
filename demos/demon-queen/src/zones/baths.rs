@@ -36,6 +36,10 @@ impl RenderState {
         if let Some(scene) = self.baths_scene.as_ref() {
             scene.draws(inside, elapsed, moon, &mut draws);
         }
+        // The followed mission's way: arrows on the ground and the light on its spot.
+        if let Some(guide) = frame.mission {
+            self.mission_draws(guide, elapsed, &mut draws);
+        }
         // Wading, she stands in the water up to her knees.
         let queen_matrix = Mat4::from_translation(Vec3::new(player.x, player.y + bob, player.z))
             * Mat4::from_rotation_y(yaw)
@@ -184,6 +188,10 @@ impl App {
     }
 
     pub(super) fn leave_baths(&mut self) {
+        // The private room is rented for the visit.
+        for var in ["privada_alquilada", "en_privada"] {
+            self.story.values.insert(var.to_owned(), 0);
+        }
         if let Some(inside) = self.baths.take() {
             self.player = inside.return_to;
             self.player_yaw = inside.return_yaw + std::f32::consts::PI;
@@ -243,6 +251,15 @@ impl App {
         inside.hour = hour;
         inside.others = others;
         inside.mugo = mugo;
+        // The private room, rented at the counter (until she leaves the springs); in it, the
+        // missions' step moves on.
+        inside.reserved = self.story.get("privada_alquilada") > 0;
+        let in_private = i32::from(inside.room.as_deref() == Some(baths::PRIVATE_ROOM));
+        if self.story.get("en_privada") != in_private {
+            self.story
+                .values
+                .insert("en_privada".to_owned(), in_private);
+        }
         // Asked to (`@var mugo_guia`), Mugo leads her to the first spot not photographed yet;
         // with all of them taken he goes back to his post.
         let story = &self.story;
@@ -352,6 +369,13 @@ impl App {
             }
             Some(baths::Action::Say(text)) => {
                 self.queen_thought = Some((text, self.elapsed + 4.5));
+            }
+            Some(baths::Action::Talk(place)) => {
+                // (what she carries, for the guion's prices)
+                self.story
+                    .values
+                    .insert("oro_bolsa".to_owned(), self.gold as i32);
+                self.start_talk(None, Some(place));
             }
             _ => {
                 if let Some(room) = self.baths.as_ref().and_then(|b| b.room.clone()) {

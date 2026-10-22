@@ -3507,7 +3507,10 @@ impl MapOverlay {
             }
             pass.set_bind_group(
                 3,
-                if self.scene.is_some() || self.caricias.as_ref().is_some_and(|c| c.reel) {
+                if self.scene.is_some()
+                    || self.caricias.as_ref().is_some_and(|c| c.reel)
+                    || self.stage.as_ref().is_some_and(|s| s.clip.is_some())
+                {
                     &self.scene_picture.bind_group
                 } else {
                     &self.pictures.bind_group

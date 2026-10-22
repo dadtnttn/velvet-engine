@@ -988,6 +988,9 @@ pub(crate) struct App {
     talk_story_before: Option<guion::Vars>,
     /// A guion scene on the full-screen stage (its backdrop, cast and flourishes).
     stage: Option<stage::Stage>,
+    /// The stage's clip (`@clip`) and its newest frame, waiting for the GPU.
+    stage_clip: Option<stage::StageClip>,
+    stage_frame: Option<image::RgbaImage>,
     /// The option picked in a choice.
     talk_choice: usize,
     /// The bed scene playing in the middle of the screen (its minigame).
@@ -1186,6 +1189,8 @@ impl App {
             talk_choice: 0,
             talk_line_at: 0.0,
             stage: None,
+            stage_clip: None,
+            stage_frame: None,
             pending_guion_vn: None,
             brothel_rope_open,
             shop_tab: shop::Tab::Buy,
@@ -1572,7 +1577,10 @@ impl App {
         let alcove_view = self.alcove_view();
         let court_view = self.court_view();
         let caricias_view = self.caricias_view();
-        let caricias_frame = self.caricias_frame.take();
+        let caricias_frame = self
+            .caricias_frame
+            .take()
+            .or_else(|| self.stage_frame.take());
         let mage_view = self.mage_view();
         let shop_view = self.shop_view();
         let mascot_view = self.mascot_view();

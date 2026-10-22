@@ -269,6 +269,7 @@ fn grid(zone: ZoneId, level: u8) -> Option<&'static Grid> {
     static FOREST: OnceLock<Option<Grid>> = OnceLock::new();
     static VILLAGE: OnceLock<Option<Grid>> = OnceLock::new();
     static PENASCAL: OnceLock<Option<Grid>> = OnceLock::new();
+    static BATHS: OnceLock<Option<Grid>> = OnceLock::new();
     let made = |cell: &'static OnceLock<Option<Grid>>, make: &dyn Fn() -> Option<Grid>| {
         cell.get_or_init(|| {
             let started = Instant::now();
@@ -320,6 +321,14 @@ fn grid(zone: ZoneId, level: u8) -> Option<&'static Grid> {
             }
             let p = penascal3d::plan();
             Some(Grid::build(p.bounds(), 0.3, |x, z| p.blocked(x, z, 0.3)))
+        }),
+        // the springs' valley (its rooms are small: the way across them is straight)
+        ZoneId::Baths => made(&BATHS, &|| {
+            let p = baths::plan();
+            let h = p.half;
+            Some(Grid::build([-h, h, -h, h], 0.35, |x, z| {
+                p.blocked_outdoor(x, z, 0.3)
+            }))
         }),
         _ => None,
     }
@@ -394,7 +403,45 @@ impl App {
                 let h = penascal3d::plan().hotspot(id)?;
                 Some((Vec3::new(h.x, 0.0, h.z), h.label.clone(), 0))
             }
+            ZoneId::Baths => self.baths_spot(id),
             _ => None,
+        }
+    }
+
+    /// A spot of the springs, out in the valley or in one of its rooms: there when she is where it
+    /// is, else the door on the way (the room's way out, or the valley's door into its room).
+    fn baths_spot(&self, id: &str) -> Option<(Vec3, String, u8)> {
+        let inside = self.baths.as_ref()?;
+        let p = baths::plan();
+        let valley =
+            |h: &baths::Hotspot| Some((Vec3::new(h.x, p.stand(h.x, h.z), h.z), h.label.clone(), 0));
+        let in_room = |h: &baths::Hotspot| Some((Vec3::new(h.x, 0.0, h.z), h.label.clone(), 0));
+        // out of the room she is in, to the valley
+        let way_out = || {
+            let room = p.rooms.get(inside.room.as_deref()?)?;
+            let h = room.hotspots.iter().find(|h| h.exit)?;
+            in_room(h)
+        };
+        if let Some(h) = p.hotspots.iter().find(|h| h.id == id) {
+            return match inside.room {
+                None => valley(h),
+                Some(_) => way_out(),
+            };
+        }
+        let (room_id, h) = p.rooms.iter().find_map(|(rid, r)| {
+            r.hotspots
+                .iter()
+                .find(|h| h.id == id && !h.exit)
+                .map(|h| (rid.as_str(), h))
+        })?;
+        match inside.room.as_deref() {
+            Some(here) if here == room_id => in_room(h),
+            Some(_) => way_out(),
+            None => valley(
+                p.hotspots
+                    .iter()
+                    .find(|d| d.enter.as_deref() == Some(room_id))?,
+            ),
         }
     }
 
@@ -414,6 +461,11 @@ impl App {
                 (dark_forest::exit("penascal")?.0, "El camino del Peñascal")
             }
             (ZoneId::Village, ZoneId::Forest) => (village::entrance(), "El camino del bosque"),
+            (ZoneId::Village, ZoneId::Baths) => {
+                let (at, _) = village::spot("villa_banos_termales")?;
+                (at, "Las termas")
+            }
+            (ZoneId::Baths, ZoneId::Village) => return self.baths_spot("salida"),
             (ZoneId::Penascal, ZoneId::Forest) => {
                 let h = penascal3d::plan().hotspot("salida")?;
                 (Vec3::new(h.x, 0.0, h.z), "La bajada al bosque")
@@ -429,6 +481,8 @@ impl App {
             ZoneId::Forest => nature_walk_surface_height(x, z),
             ZoneId::Village => village::surface_height(x, z),
             ZoneId::Castle => level_y,
+            // (the rooms stand far off, on their own floor)
+            ZoneId::Baths if x < 200.0 => baths::plan().stand(x, z),
             _ => 0.0,
         }
     }

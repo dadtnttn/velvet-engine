@@ -234,7 +234,7 @@ words:
 
 `sala`, `fondo`, `cg`, `quitar`, `sprite`, `musica`, `izq`, `der`, `pose`, `titulo`, `sello`,
 `sacude`, `bote`, `destello`, `barrido`, `objeto`, `panel`, `revela`, `giro`, `desbloquea`,
-`cierre`, `teclas`, `llevar`, `recuerdo`.
+`cierre`, `teclas`, `llevar`, `recuerdo`, `clip`, `mirilla`.
 
 What each one means is up to the game. Their argument is the rest of the line, as written. For
 example, `@fondo posada/entrada` has the command `fondo` and the argument `posada/entrada`, and

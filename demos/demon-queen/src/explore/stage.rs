@@ -7,6 +7,23 @@
 use super::ui_sfx::{self, UiSfx};
 use super::*;
 
+/// El vídeo que se ve sobre el fondo (`@clip`): sus fotogramas, un decodificador propio, el
+/// fotograma pedido y el que está en la textura, y cuál de los vídeos es (`generation`: lo que
+/// llega tarde de uno anterior no se pinta).
+pub(super) struct StageClip {
+    dir: String,
+    started: f32,
+    frames: Vec<std::path::PathBuf>,
+    decoder: super::bed_scene::Decoder,
+    generation: u64,
+    asked: Option<usize>,
+    /// Un fotograma de este vídeo está en la textura (y su tamaño).
+    pub(super) ready: Option<[u32; 2]>,
+}
+
+/// Fotogramas por segundo de los vídeos de escena.
+const CLIP_FPS: f32 = 30.0;
+
 /// Alguien en escena.
 #[derive(Clone, Debug)]
 pub(super) struct Actor {
@@ -61,6 +78,11 @@ pub(super) struct Stage {
     pub unlocks: Vec<String>,
     /// Un recuerdo (`@recuerdo`): su nombre y cuándo llegó (la cinta de arriba a la derecha).
     pub memory: Option<(String, f32)>,
+    /// Un vídeo sobre el fondo (`@clip carpeta`): la carpeta de su toma bajo `data/assets` y
+    /// cuándo empezó (se repite hasta el siguiente `@fondo` o `@clip`).
+    pub clip: Option<(String, f32)>,
+    /// La mirilla (`@mirilla si`): todo se ve por un agujero redondo, con negro alrededor.
+    pub peephole: bool,
     /// El rótulo del final (`@cierre FOTO GUARDADA`; si no, «ESCENA COMPLETA»).
     pub outro_title: Option<String>,
     /// La escena terminó y se enseña lo desbloqueado hasta que se pulse F.
@@ -150,7 +172,16 @@ impl Stage {
     fn apply(&mut self, cmd: &str, arg: &str, now: f32, who_of: &dyn Fn(&str) -> String) {
         let parts = || arg.split('|').map(str::trim).collect::<Vec<_>>();
         match cmd {
+            "clip" => {
+                let dir = arg.trim();
+                self.clip = (!dir.is_empty()).then(|| (dir.to_owned(), now));
+            }
+            "mirilla" => {
+                self.peephole = !matches!(guion::slug(arg).as_str(), "no" | "fuera" | "off");
+            }
             "fondo" => {
+                // a new picture stops the clip that played over the last one
+                self.clip = None;
                 if self.bg.as_deref() != Some(arg) {
                     self.bg_prev = self.bg.take();
                     self.bg = Some(arg.to_owned());
@@ -676,7 +707,80 @@ impl App {
 
     /// Cada paso: lo que esperaba su momento pasa; la luz de cada una, la franja detrás de quien
     /// habla y la caja siguen a la línea en pantalla; Chiquita dice su frase cuando acaba el paso.
+    /// Cada paso: el vídeo de la escena (`@clip`) avanza; empieza con su sonido, se para con él.
+    fn tick_stage_clip(&mut self) {
+        let want = self.stage.as_ref().and_then(|s| s.clip.clone());
+        let Some((dir, started)) = want else {
+            if self.stage_clip.take().is_some() {
+                if let Some(audio) = self.audio.as_mut() {
+                    audio.scene_sound(None, false);
+                }
+            }
+            return;
+        };
+        let root = crate::exploration3d_state::data_dir()
+            .join("assets")
+            .join(&dir);
+        let new = self
+            .stage_clip
+            .as_ref()
+            .is_none_or(|c| c.dir != dir || c.started != started);
+        if new {
+            let frames = super::clip_video::frames(&root);
+            if frames.is_empty() {
+                eprintln!("[escena] no hay vídeo en {}", root.display());
+                if let Some(stage) = self.stage.as_mut() {
+                    stage.clip = None;
+                }
+                return;
+            }
+            let (decoder, generation) = match self.stage_clip.take() {
+                Some(old) => (old.decoder, old.generation + 1),
+                None => (super::bed_scene::Decoder::new(), 1),
+            };
+            self.stage_clip = Some(StageClip {
+                dir: dir.clone(),
+                started,
+                frames,
+                decoder,
+                generation,
+                asked: None,
+                ready: None,
+            });
+            let sound = root.join("audio.ogg");
+            if let Some(audio) = self.audio.as_mut() {
+                audio.scene_sound(sound.is_file().then_some(sound.as_path()), true);
+            }
+            super::gallery_seen::shot(&root);
+        }
+        let now = self.elapsed;
+        let Some(clip) = self.stage_clip.as_mut() else {
+            return;
+        };
+        while let Ok((key, picture)) = clip.decoder.done.try_recv() {
+            clip.decoder.busy = false;
+            if key >> 32 == clip.generation {
+                clip.ready = Some([picture.width(), picture.height()]);
+                self.stage_frame = Some(picture);
+            }
+        }
+        let index = ((now - clip.started).max(0.0) * CLIP_FPS) as usize % clip.frames.len();
+        if !clip.decoder.busy && clip.asked != Some(index) {
+            let key = (clip.generation << 32) | index as u64;
+            if clip
+                .decoder
+                .ask
+                .send((key, clip.frames[index].clone(), None))
+                .is_ok()
+            {
+                clip.decoder.busy = true;
+                clip.asked = Some(index);
+            }
+        }
+    }
+
     pub(super) fn tick_stage(&mut self) {
+        self.tick_stage_clip();
         if self.stage.is_none() {
             return;
         }
@@ -909,6 +1013,13 @@ impl App {
             waiting: stage.waiting(now),
             theme: stage.theme,
             preload: stage.preload.clone(),
+            // (the clip once its first frame is in, and once a wipe to its picture has covered)
+            clip: self
+                .stage_clip
+                .as_ref()
+                .filter(|_| stage.clip.is_some() && age(stage.wipe_at) > WIPE_COVER)
+                .and_then(|c| c.ready),
+            peephole: stage.peephole,
         })
     }
 }

@@ -2617,7 +2617,10 @@ pub(super) fn capture(out: &Path) -> Result<()> {
             "noche_mesa",
             "nido_llamada",
         ] {
-            if only.as_deref().is_some_and(|o| !o.split(',').any(|v| v == id)) {
+            if only
+                .as_deref()
+                .is_some_and(|o| !o.split(',').any(|v| v == id))
+            {
                 continue;
             }
             app.start_talk_at(&format!("guerra.{id}"));
@@ -4928,6 +4931,148 @@ pub(super) fn capture(out: &Path) -> Result<()> {
         app.penascal = None;
         return Ok(());
     }
+    if std::env::args().any(|a| a == "--termas-privada") {
+        // The springs' private room: its door shut, rented at the reception's counter (the guide
+        // then leads there), the room empty, and its bath's knothole scene with its clips, along
+        // the choices in VELVET_MIRILLA (`1,0,0,0,1,1` by default: let him be, play, mouth,
+        // deeper, the end, all of it).
+        app.nature_mode = true;
+        app.village_entered = true;
+        app.castle = None;
+        app.environment_cycle.set_phase(0.5);
+        app.story = guion::Vars::default();
+        app.story.values.insert("termas_bienvenida".into(), 1);
+        app.gold = 40;
+        app.enter_baths();
+        let step = |app: &mut App, frames: usize| {
+            for _ in 0..frames {
+                app.tick(1.0 / 30.0);
+                app.render_frame();
+            }
+        };
+        let place = |app: &mut App, room: Option<&str>, x: f32, z: f32| {
+            if let Some(inside) = app.baths.as_mut() {
+                inside.room = room.map(str::to_owned);
+                (inside.x, inside.z) = (x, z);
+                app.player = inside.position();
+                app.camera_focus = app.player;
+            }
+        };
+        step(&mut app, 60);
+        // the door, shut
+        place(&mut app, None, 13.2, 9.6);
+        app.interact_baths();
+        step(&mut app, 10);
+        eprintln!(
+            "[privada-qa] door: room {:?} · thought {:?}",
+            app.baths.as_ref().and_then(|b| b.room.clone()),
+            app.queen_thought.map(|t| t.0)
+        );
+        save(&mut app, out, "privada-0-cerrada")?;
+        // the counter
+        place(&mut app, Some("recepcion"), 398.8, -1.4);
+        step(&mut app, 10);
+        app.interact_baths();
+        let mut picks: Vec<usize> = vec![0];
+        let mut shots_seen: Vec<String> = Vec::new();
+        let play = |app: &mut App,
+                    picks: &mut Vec<usize>,
+                    shots_seen: &mut Vec<String>,
+                    tag: &str|
+         -> Result<()> {
+            for _ in 0..400 {
+                if app.talk.is_none() {
+                    if app.stage.as_ref().is_some_and(|s| s.outro_at.is_some()) {
+                        step(app, 36);
+                        save(app, out, &format!("privada-{tag}-fin"))?;
+                        if let Some(stage) = app.stage.as_mut() {
+                            stage.unlocks.clear();
+                        }
+                        app.end_talk();
+                    }
+                    break;
+                }
+                let clip = app
+                    .stage
+                    .as_ref()
+                    .and_then(|s| s.clip.as_ref().map(|c| c.0.clone()));
+                if let Some(c) = clip.filter(|c| !shots_seen.contains(c)) {
+                    step(app, 30);
+                    let name = c.rsplit('/').next().unwrap_or("").to_owned();
+                    save(
+                        app,
+                        out,
+                        &format!("privada-{tag}-{}-{name}", shots_seen.len()),
+                    )?;
+                    shots_seen.push(c);
+                }
+                let lib = guion::library();
+                match app.talk.as_ref().map(|t| t.shown(lib, &app.story)) {
+                    Some(guion::Shown::Choice { .. }) => {
+                        step(app, 12);
+                        save(app, out, &format!("privada-{tag}-eleccion-{}", picks.len()))?;
+                        let pick = if picks.is_empty() { 0 } else { picks.remove(0) };
+                        app.talk_pick(pick);
+                    }
+                    _ => {
+                        app.elapsed += 5.0;
+                        app.talk_confirm();
+                    }
+                }
+                step(app, 3);
+            }
+            Ok(())
+        };
+        play(&mut app, &mut picks, &mut shots_seen, "recepcion")?;
+        eprintln!(
+            "[privada-qa] rented: {} · gold {} · paid flag {} · followed {:?}",
+            app.story.get("privada_alquilada"),
+            app.gold,
+            app.story.get("privada_pagar"),
+            app.guide
+                .as_ref()
+                .map(|g| (g.title.clone(), g.step.clone(), g.target_label.clone()))
+        );
+        // out in the valley: the guide's way to the room
+        place(&mut app, None, -4.0, -0.6);
+        step(&mut app, 30);
+        eprintln!(
+            "[privada-qa] guide: {:?}",
+            app.guide
+                .as_ref()
+                .map(|g| (g.step.clone(), g.target_label.clone(), g.distance as i32))
+        );
+        save(&mut app, out, "privada-1-guia")?;
+        // the room, empty, and its bath
+        place(&mut app, None, 13.2, 9.6);
+        app.interact_baths();
+        step(&mut app, 30);
+        eprintln!(
+            "[privada-qa] in: {:?} · en_privada {} · guide {:?}",
+            app.baths.as_ref().and_then(|b| b.room.clone()),
+            app.story.get("en_privada"),
+            app.guide
+                .as_ref()
+                .map(|g| (g.step.clone(), g.target_label.clone()))
+        );
+        save(&mut app, out, "privada-2-sala")?;
+        place(&mut app, Some("privada"), 402.6, 0.6);
+        step(&mut app, 10);
+        app.interact_baths();
+        let mut picks: Vec<usize> = std::env::var("VELVET_MIRILLA")
+            .unwrap_or_else(|_| "1,0,0,0,1,1".into())
+            .split(',')
+            .filter_map(|p| p.trim().parse().ok())
+            .collect();
+        play(&mut app, &mut picks, &mut shots_seen, "mirilla")?;
+        eprintln!(
+            "[privada-qa] scene: vista {} · shots {} · {:?}",
+            app.story.get("mirilla_vista"),
+            shots_seen.len(),
+            shots_seen
+        );
+        return Ok(());
+    }
     if std::env::args().any(|a| a == "--mugo") {
         // Mugo at the springs: at his post, leading the Queen to the first spot (she follows a
         // step behind), pointing at it, the photo's prompt, and the photo on the stage.
@@ -6432,7 +6577,10 @@ pub(super) fn capture(out: &Path) -> Result<()> {
                 app.story.get("cita_hoy")
             );
             // back from the date: the page comes up on her, the hearts and the memory coming in
-            eprintln!("[court-qa] citas: page back after the date {}", app.court_open());
+            eprintln!(
+                "[court-qa] citas: page back after the date {}",
+                app.court_open()
+            );
             wait(&mut app, 0.75);
             save(&mut app, out, "court-51b-back-hearts")?;
             wait(&mut app, 0.75);
@@ -6455,7 +6603,10 @@ pub(super) fn capture(out: &Path) -> Result<()> {
             save(&mut app, out, "court-51h-memory-locked")?;
             app.court_key(KeyCode::Escape);
             app.court_key(KeyCode::Escape);
-            eprintln!("[court-qa] citas: still open after Esc ×2 {}", app.court_open());
+            eprintln!(
+                "[court-qa] citas: still open after Esc ×2 {}",
+                app.court_open()
+            );
             app.open_dates();
             wait(&mut app, 1.2);
             save(&mut app, out, "court-52-dates-after")?;

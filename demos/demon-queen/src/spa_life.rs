@@ -85,7 +85,7 @@ struct RoomGirl {
 
 /// The spa girls of the valley.
 pub(crate) struct SpaLife {
-    /// Indoors: two at the reception's tea table, one in the private bath's tub.
+    /// Indoors: two at the reception's tea table.
     room_girls: Vec<RoomGirl>,
     model: GltfModel,
     scale: f32,
@@ -342,9 +342,9 @@ impl SpaLife {
             });
         }
         // Indoors: at the reception's tea table (on the cushions, the room's own frame turned
-        // into the world's by its centre), and soaking in the private bath's tub.
+        // into the world's by its centre). (The private bath is the Queen's alone: rented, it is
+        // empty.)
         let mut room_girls = Vec::new();
-        let chest_y = bone_y(sit, "mixamorig:Spine2");
         for (room, dx, dz, yaw, clip, y, bow, phase) in [
             // (Her hips a little above the cushion: the seated clips sit on the floor at 0.)
             (
@@ -366,16 +366,6 @@ impl SpaLife {
                 0.36,
                 Some(0.12),
                 0.6,
-            ),
-            (
-                "privada",
-                2.0,
-                -2.9,
-                std::f32::consts::FRAC_PI_2,
-                sit,
-                0.58 - chest_y + 0.12,
-                Some(0.78),
-                0.4,
             ),
         ] {
             let Some(r) = p.rooms.get(room) else { continue };

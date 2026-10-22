@@ -657,7 +657,7 @@ pub fn parse(source: &str, path: &Path, cast: &Cast) -> (Guion, Vec<Problem>) {
                 w @ ("sala" | "fondo" | "cg" | "quitar" | "sprite" | "musica" | "izq" | "der"
                 | "pose" | "titulo" | "sello" | "sacude" | "bote" | "destello" | "barrido"
                 | "objeto" | "panel" | "revela" | "giro" | "desbloquea" | "cierre"
-                | "teclas" | "llevar" | "recuerdo") => Some(Step::Stage {
+                | "teclas" | "llevar" | "recuerdo" | "clip" | "mirilla") => Some(Step::Stage {
                     cmd: w.to_owned(),
                     arg: arg.to_owned(),
                 }),

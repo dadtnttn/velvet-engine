@@ -40,7 +40,7 @@ struct AlbumDef {
 /// The dates' album.
 const MEMORIES: usize = 1;
 
-const ALBUMS: [AlbumDef; 6] = [
+const ALBUMS: [AlbumDef; 7] = [
     AlbumDef {
         es: "Prólogo",
         en: "Prologue",
@@ -102,6 +102,17 @@ const ALBUMS: [AlbumDef; 6] = [
                 dir: "burdel/noa/escena_futa",
             },
         ],
+        memories: false,
+    },
+    AlbumDef {
+        es: "Termas",
+        en: "Hot springs",
+        icon: Icon::Bath,
+        scenes: &[SceneDef {
+            es: "La mirilla",
+            en: "The knothole",
+            dir: "termas_vn/mirilla",
+        }],
         memories: false,
     },
     AlbumDef {
@@ -214,12 +225,24 @@ pub(crate) struct Memory {
 
 /// Where a shot comes in its scene: the way in first, the end and the calm last.
 fn shot_rank(name: &str) -> (u8, String) {
+    // («La mirilla» numbers its story shots p01..p15; its endings are fin*, blast and paliza*)
+    let numbered =
+        name.len() == 3 && name.starts_with('p') && name[1..].bytes().all(|b| b.is_ascii_digit());
     let rank = if name.starts_with("intro") || name == "l0" || name == "p0" {
         0
-    } else if name.starts_with("climax") || name.starts_with("c") && name.len() <= 3 {
+    } else if numbered && name < "p11" {
+        1
+    } else if name.starts_with("climax")
+        || name.starts_with("c") && name.len() <= 3
+        || name.starts_with("fin_")
+        || name == "fin"
+        || name == "blast"
+    {
         8
-    } else if name.starts_with("relax") || name.starts_with("final") {
+    } else if name.starts_with("relax") || name.starts_with("final") || numbered {
         9
+    } else if name.starts_with("paliza") {
+        10
     } else {
         4
     };
