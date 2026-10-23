@@ -32,8 +32,12 @@ use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{anyhow, bail, Context, Result};
+// (the icon is only built into Windows executables, and checked by the tests)
+#[cfg(any(windows, test))]
 use image::codecs::png::PngEncoder;
+#[cfg(any(windows, test))]
 use image::imageops::{self, FilterType};
+#[cfg(any(windows, test))]
 use image::{ExtendedColorType, ImageEncoder, RgbaImage};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -76,7 +80,7 @@ const ICON_WARN_SIDE: u32 = 256;
 const FIRST_ICON_ID: u16 = 1;
 
 /// The resource id of the icon group, which names the images of the program's icon.
-#[cfg(any(windows, test))]
+#[cfg(windows)]
 const GROUP_ICON_ID: u16 = 1;
 
 /// The type in an icon header: 1 for icons (2 is for cursors).
