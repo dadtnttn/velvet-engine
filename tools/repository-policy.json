@@ -1,6 +1,7 @@
 {
   "demos": [
     "cellular-arena",
+    "desk-demo",
     "fx-forge",
     "ui-gallery",
     "terraflow",
