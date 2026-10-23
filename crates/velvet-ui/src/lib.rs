@@ -23,6 +23,8 @@ mod vcss;
 mod widget;
 
 pub mod prelude;
+/// Labels anchored to things in the world, laid out off the HUD and off each other.
+pub mod world_tags;
 
 pub use animation::{Ease, TweenProperty, TweenSample, UiAnimator, UiTween};
 pub use button_fx::{

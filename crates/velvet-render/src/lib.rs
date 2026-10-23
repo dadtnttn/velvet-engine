@@ -29,6 +29,8 @@ mod product_batch;
 mod profile;
 mod readback;
 mod render_plan;
+/// Clips from one rig onto another (bone maps, rest alignment, quaternion helpers).
+pub mod retarget;
 pub mod scene_bridge;
 mod skin3d;
 mod software;

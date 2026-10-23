@@ -5,6 +5,26 @@ All notable changes to Velvet Engine are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **`velvet-pixel`**: hand-shaded pixel art built in code. Shaded primitives and signed-distance
+  bodies (`velvet_pixel::sdf`) go into a material buffer, lit with banded ramps and dithering, with
+  cast shadows, rim light and selective outlines. It is the toolkit Demon Queen's loading screens
+  were drawn with, moved into the engine unchanged (same pixels).
+- **`velvet_ui::world_tags`**: labels anchored to things in the world. They sit over their thing,
+  keep off the HUD and off each other (the important ones choose first), hang from a pole, glide
+  to their place and fade instead of jumping.
+- **`velvet_render::retarget`**: clips from one rig onto another (bone maps, rest-direction
+  alignment, unmapped bones riding their parents), with a Mixamo-to-Mixamo map and the
+  quaternion helpers it uses.
+
+### Changed
+
+- Demon Queen left the engine's repository for its own private one beside it; it uses the
+  engine's crates by path.
+
 ## [0.3.0] - 2026-10-16
 
 Velvet Engine 0.2 was never tagged on its own: it shipped inside Demon Queen 0.2.0. This release

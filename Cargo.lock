@@ -5633,6 +5633,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "velvet-pixel"
+version = "0.3.0"
+
+[[package]]
 name = "velvet-play"
 version = "0.3.0"
 dependencies = [

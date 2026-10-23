@@ -78,6 +78,7 @@ members = [
     "crates/velvet-terrain",
     "crates/velvet-liquid",
     "crates/velvet-nav",
+    "crates/velvet-pixel",
     "crates/velvet-guion",
     "crates/velvet-qa",
     "crates/velvet-stacks",
@@ -161,6 +162,7 @@ velvet-liquid = { path = "crates/velvet-liquid" }
 velvet-render-rtx = { path = "crates/velvet-render-rtx" }
 velvet-scene3d = { path = "crates/velvet-scene3d" }
 velvet-nav = { path = "crates/velvet-nav" }
+velvet-pixel = { path = "crates/velvet-pixel" }
 velvet-guion = { path = "crates/velvet-guion" }
 velvet-qa = { path = "crates/velvet-qa" }
 velvet-stacks = { path = "crates/velvet-stacks" }

@@ -1,0 +1,9 @@
+[package]
+name = "velvet-pixel"
+description = "Hand-shaded pixel art built in code: shaded primitives and signed-distance bodies into a material buffer, lit with banded ramps, cast shadows, rim light and selective outlines"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
