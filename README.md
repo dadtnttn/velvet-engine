@@ -153,7 +153,7 @@ Docs: [`docs/language/VELVET_STORY.md`](docs/language/VELVET_STORY.md) ·
 **Requirements:** [Rust](https://www.rust-lang.org/) stable (see `rust-toolchain.toml`).
 
 ```bash
-# Clone the engine, supported demos and Demon Queen source
+# Clone the engine and its supported demos
 git clone https://github.com/dadtnttn/velvet-engine.git
 cd velvet-engine
 
@@ -187,10 +187,9 @@ cargo run -p velvet-cli --release -- style check templates/visual-novel/styles/u
 | Studio GUI *(alpha)* | `cargo run -p velvet-editor --release -- gui templates/visual-novel --interactive` | Visual / Script / Nodes |
 
 Supported demos: `cellular-arena`, `fx-forge`, `ui-gallery`, `terraflow`,
-`third-person`, `rpg-quest-vs3` and `demon-queen`. Demon Queen is published as
-source code only: its story, data and art stay private, so it does not build from
-this repository alone. See [repository contents](docs/engineering/REPOSITORY_CONTENTS.md)
-and [Demon Queen setup](demos/demon-queen/README.md).
+`third-person` and `rpg-quest-vs3`. Demon Queen, the game the engine grew up with, now
+lives in its own private repository beside it and uses the engine's crates by path.
+See [repository contents](docs/engineering/REPOSITORY_CONTENTS.md).
 
 ---
 
@@ -239,22 +238,21 @@ Brand assets used on this page: [`docs/assets/`](docs/assets/).
 ```text
 crates/      Engine libraries — 65 crates: core, render (2D + 3D), media, world, story, script, tools
 examples/    Focused runnable examples (run from a fresh clone)
-demos/       Supported engine demos and Demon Queen source
+demos/       Supported engine demos
 templates/   Project starters for `velvet new`
 samples/     Ship-shaped sample projects (short-novella, vs3-logic)
 docs/        Architecture, ADRs, formats, languages, tutorials (index: docs/README.md)
 editors/     VS Code language support
-tools/       Quality tooling and velvet-three-kit (the JS / Three.js prototyping kit)
+tools/       Quality tooling
 ```
 
 65 crates, one workspace, ~1950 tests behind a single gate:
 
 ```bash
 cargo fmt --all -- --check
-cargo check --workspace --all-targets --all-features --exclude demon-queen --exclude demon-queen-dungeon
-cargo check -p demon-queen --all-targets
-cargo test --workspace --all-targets --all-features --exclude demon-queen --exclude demon-queen-dungeon
-cargo clippy --workspace --all-targets --all-features --exclude demon-queen --exclude demon-queen-dungeon -- -D warnings
+cargo check --workspace --all-targets --all-features
+cargo test --workspace --all-targets --all-features
+cargo clippy --workspace --all-targets --all-features -- -D warnings
 python tools/check_repository.py
 ```
 

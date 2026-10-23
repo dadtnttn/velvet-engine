@@ -552,7 +552,7 @@ mod tests {
     #[test]
     fn joint_matrices_deform_like_the_cpu_sampler() {
         let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../demos/demon-queen/data/assets/3d/baths/spa_girl.glb");
+            .join("../../../DemonQueen/juego/nucleo/data/assets/3d/baths/spa_girl.glb");
         if !path.exists() {
             return;
         }
@@ -590,7 +590,7 @@ mod tests {
     #[ignore]
     fn skin_cost() {
         let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../demos/demon-queen/data/assets/3d/characters/queen_chibi_v2_animated.glb");
+            .join("../../../DemonQueen/juego/nucleo/data/assets/3d/characters/queen_chibi_v2_animated.glb");
         let model = crate::mesh3d::GltfModel::load(path).expect("queen loads");
         let clip = model.animation_index("Queen_Walk").unwrap();
         let verts: usize = model.meshes.iter().map(|m| m.vertices.len()).sum();

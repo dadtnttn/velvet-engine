@@ -5,8 +5,7 @@
     "ui-gallery",
     "terraflow",
     "third-person",
-    "rpg-quest-vs3",
-    "demon-queen"
+    "rpg-quest-vs3"
   ],
   "public_media": [
     "templates/visual-novel/assets/bg/rooftop.png",
@@ -17,7 +16,5 @@
     "templates/visual-novel/assets/characters/hero.png"
   ],
   "public_media_directories": [],
-  "source_only_demos": [
-    "demon-queen"
-  ]
+  "source_only_demos": []
 }

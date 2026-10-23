@@ -338,7 +338,7 @@ mod tests {
     #[ignore]
     fn bc7_real() {
         let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../demos/demon-queen/data/assets/3d");
+            .join("../../../DemonQueen/juego/nucleo/data/assets/3d");
         for file in [
             "villa/villa_town.glb",
             "baths/baths_places.glb",

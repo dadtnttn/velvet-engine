@@ -58,100 +58,7 @@ lcov.info
 !/demos/terraflow/
 !/demos/third-person/
 !/demos/rpg-quest-vs3/
-!/demos/demon-queen/
-
-# Demon Queen source and data are public; media is private by default.
-/demos/demon-queen/**/*.png
-/demos/demon-queen/**/*.jpg
-/demos/demon-queen/**/*.jpeg
-/demos/demon-queen/**/*.webp
-/demos/demon-queen/**/*.gif
-/demos/demon-queen/**/*.ico
-/demos/demon-queen/**/*.mp4
-/demos/demon-queen/**/*.webm
-/demos/demon-queen/**/*.wav
-/demos/demon-queen/**/*.ogg
-/demos/demon-queen/**/*.mp3
-/demos/demon-queen/**/*.flac
-/demos/demon-queen/**/*.glb
-/demos/demon-queen/**/*.gltf
-/demos/demon-queen/**/*.bin
-/demos/demon-queen/**/*.blend
-/demos/demon-queen/**/*.blend1
-/demos/demon-queen/**/*.fbx
-/demos/demon-queen/**/*.obj
-/demos/demon-queen/**/*.mtl
-/demos/demon-queen/**/*.zip
-/demos/demon-queen/**/*.exe
-/demos/demon-queen/**/*.pdf
-/demos/demon-queen/**/*.svg
-/demos/demon-queen/data/assets/*
-!/demos/demon-queen/data/assets/title/
-/demos/demon-queen/data/assets/title/*
-!/demos/demon-queen/data/assets/ui/
-/demos/demon-queen/data/assets/ui/*
-!/demos/demon-queen/data/assets/3d/
-/demos/demon-queen/data/assets/3d/*
-!/demos/demon-queen/data/assets/3d/enemies/
-/demos/demon-queen/data/assets/3d/enemies/*
-!/demos/demon-queen/data/assets/3d/enemies/kaykit_skeletons/
-!/demos/demon-queen/data/assets/3d/enemies/kaykit_skeletons/**
-!/demos/demon-queen/assets/ui/shop/*.svg
-
-# Reviewed non-explicit resources; keep in sync with tools/repository-policy.json.
-!/demos/demon-queen/assets/ui/shop/cart.png
-!/demos/demon-queen/assets/ui/shop/item_amulet_art.png
-!/demos/demon-queen/assets/ui/shop/item_arcane_ash.png
-!/demos/demon-queen/assets/ui/shop/item_bone.png
-!/demos/demon-queen/assets/ui/shop/item_bread.png
-!/demos/demon-queen/assets/ui/shop/item_champion_skull.png
-!/demos/demon-queen/assets/ui/shop/item_closed_box_art.png
-!/demos/demon-queen/assets/ui/shop/item_cloth.png
-!/demos/demon-queen/assets/ui/shop/item_crimson.png
-!/demos/demon-queen/assets/ui/shop/item_heart_shard.png
-!/demos/demon-queen/assets/ui/shop/item_herbs.png
-!/demos/demon-queen/assets/ui/shop/item_ink.png
-!/demos/demon-queen/assets/ui/shop/item_market_map_art.png
-!/demos/demon-queen/assets/ui/shop/item_memory_crystal_art.png
-!/demos/demon-queen/assets/ui/shop/item_mysterious_ring.png
-!/demos/demon-queen/assets/ui/shop/item_mystery_potion.png
-!/demos/demon-queen/assets/ui/shop/item_perfume.png
-!/demos/demon-queen/assets/ui/shop/item_potion.png
-!/demos/demon-queen/assets/ui/shop/item_seal.png
-!/demos/demon-queen/assets/ui/shop/item_slime_blue.png
-!/demos/demon-queen/assets/ui/shop/item_slime_green.png
-!/demos/demon-queen/assets/ui/shop/item_vault_key.png
-!/demos/demon-queen/assets/ui/shop/item_wood_sword.png
-!/demos/demon-queen/assets/ui/shop/sell.png
-!/demos/demon-queen/data/assets/title/app_icon.ico
-!/demos/demon-queen/data/assets/title/app_icon.png
-!/demos/demon-queen/data/assets/ui/button_demon_pill.png
-!/demos/demon-queen/data/assets/ui/button_gothic.png
-!/demos/demon-queen/data/assets/ui/choice_selector_native_1260x108.png
-!/demos/demon-queen/data/assets/ui/choice_selector_native_1320x108.png
-!/demos/demon-queen/data/assets/ui/choice_selector_native_840x72.png
-!/demos/demon-queen/data/assets/ui/choice_selector_premium_native_1320x108.png
-!/demos/demon-queen/data/assets/ui/dialogue_frame_native_1280x720.png
-!/demos/demon-queen/data/assets/ui/dialogue_frame_premium_native_1920x1080.png
-!/demos/demon-queen/data/maps/bosque.png
-!/demos/demon-queen/data/maps/castillo-0.png
-!/demos/demon-queen/data/maps/castillo-1.png
-!/demos/demon-queen/data/maps/termas.png
-!/demos/demon-queen/data/maps/villa.png
-
-# Game-local outputs and discarded preparation files
-/demos/demon-queen/tmp_*
-/demos/demon-queen/_tmp*
-/demos/demon-queen/.tmp*
-/demos/demon-queen/workflow_*.json
-/demos/demon-queen/gen_*.py
-/demos/demon-queen/patch_*.py
-/demos/demon-queen/fix_*.py
-/demos/demon-queen/logs/
-/demos/demon-queen/temp/
-/demos/demon-queen/demos/
-/demos/demon-queen/tools/comfyui/salidas/
-/demos/demon-queen/AUDIT_ASSETS_DEMON_QUEEN.json
+# Demon Queen left for its own private monorepo (2026-10-23), beside the engine.
 
 # Local art generation experiments, not engine tooling
 /tools/generate_*_moody*.py
@@ -165,48 +72,6 @@ lcov.info
 /tools/inspect_app_capture_cli.py
 /tools/build_venue_assets.py
 /tools/generate_moody_image.py
-
-# Reviewed pixel-art loading scenes and their visual test references
-!/demos/demon-queen/data/loading/banquet_hall.png
-!/demos/demon-queen/data/loading/banquet_plate.png
-!/demos/demon-queen/data/loading/banquet_table.png
-!/demos/demon-queen/data/loading/infirmary_bench.png
-!/demos/demon-queen/data/loading/infirmary_room.png
-!/demos/demon-queen/data/loading/ref/banquet_frame.png
-!/demos/demon-queen/data/loading/ref/infirmary_frame.png
-!/demos/demon-queen/data/loading/ref/nyx_calm.png
-!/demos/demon-queen/data/loading/ref/nyx_happy.png
-!/demos/demon-queen/data/loading/ref/nyx_squeeze.png
-!/demos/demon-queen/data/loading/ref/queen_bite.png
-!/demos/demon-queen/data/loading/ref/queen_chew.png
-!/demos/demon-queen/data/loading/ref/queen_grab.png
-!/demos/demon-queen/data/loading/ref/queen_rest.png
-
-# Demon Queen's story stays private (2026-10-14): drafts, prologue texts, the game's scripts and
-# lore live only on the dev machine (also purged from the published history).
-/demos/demon-queen/ACT1_*.md
-/demos/demon-queen/ACTO1_*.md
-/demos/demon-queen/BORRADOR_*.md
-/demos/demon-queen/CHARACTER_GUIDE_*.md
-/demos/demon-queen/CHECKPOINT_*.md
-/demos/demon-queen/HIPNO_*.md
-/demos/demon-queen/MISIONES_SECUNDARIAS_*.md
-/demos/demon-queen/PROLOGUE_*.md
-/demos/demon-queen/STORY_IDEAS.md
-/demos/demon-queen/hipno_storyboard.html
-/demos/demon-queen/data/guiones/*.md
-/demos/demon-queen/data/pelis/**/*.peli.md
-/demos/demon-queen/story/prologue.json
-/demos/demon-queen/world-editor/**/*lore*.json
-/demos/demon-queen/docs/comfyui/PROMPTS_*.md
-
-# Story design notes, routes and rules are private too (2026-10-14): they live in
-# the private lore folder (not a repository) or in demos/demon-queen/privado/.
-/demos/demon-queen/privado/
-/demos/demon-queen/*IDEAS*.md
-/demos/demon-queen/RUTA_*.md
-/demos/demon-queen/ZONAS_*.md
-/demos/demon-queen/LORE*.md
 
 # Only code is public (2026-10-15): tools, docs, art, the story's text (locales, dialogue,
 # missions, venues) and internal notes stay on the dev machine, and are purged from the published
@@ -222,28 +87,6 @@ lcov.info
 /tools/model_preview.html
 /tools/module_test.html
 /tools/render_glb_preview_cpu.py
-/demos/demon-queen/*.md
-!/demos/demon-queen/README.md
-/demos/demon-queen/*.html
-/demos/demon-queen/tools/
-/demos/demon-queen/docs/
-/demos/demon-queen/world-editor/
-/demos/demon-queen/worlds/
-/demos/demon-queen/assets/
-/demos/demon-queen/story/*
-!/demos/demon-queen/story/schema.json
-/demos/demon-queen/data/assets/
-/demos/demon-queen/data/loading/
-/demos/demon-queen/data/fonts/
-/demos/demon-queen/data/maps/*.png
-/demos/demon-queen/data/locales/
-/demos/demon-queen/data/npc_dialogues.json
-/demos/demon-queen/data/misiones/
-/demos/demon-queen/data/castillo/
-/demos/demon-queen/data/guerra/reliquias.json
-/demos/demon-queen/data/venues/
-/demos/demon-queen/data/shops/
-/demos/demon-queen/data/achievements/*.md
 
 # Velvet JS: WebAssembly built from the Rust crates (pnpm build:wasm).
 /js/packages/wasm/gen/

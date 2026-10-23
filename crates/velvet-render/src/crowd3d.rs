@@ -8,7 +8,7 @@
 //! vertex buffer. Everything that draws meshes (shading, shadows, ink lines) sees one ordinary
 //! mesh whose drawn length follows the soldiers in it.
 //!
-//! The animation is the war prototype's vertex patch (`demon-queen-war-threejs/src/battle/crowd.js`)
+//! The animation is the war prototype's vertex patch (Demon Queen's `prototipos/guerra/src/battle/crowd.js`)
 //! as it was.
 
 use bytemuck::{Pod, Zeroable};

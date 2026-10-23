@@ -7698,7 +7698,7 @@ mod tests {
     #[test]
     fn nature_assets_keep_authored_normal_maps() {
         let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../demos/demon-queen/data/assets/3d/stylized_nature_test/CommonTree_1.gltf");
+            .join("../../../DemonQueen/juego/nucleo/data/assets/3d/stylized_nature_test/CommonTree_1.gltf");
         if !path.exists() {
             return;
         }
@@ -7754,7 +7754,7 @@ mod tests {
     #[ignore]
     fn load_cost() {
         let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../demos/demon-queen/data/assets/3d");
+            .join("../../../DemonQueen/juego/nucleo/data/assets/3d");
         for file in [
             "baths/baths_places.glb",
             "baths/baths_ground.glb",
@@ -7796,7 +7796,7 @@ mod tests {
     #[test]
     fn authored_queen_glb_exposes_walk_skin_and_texture() {
         let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../demos/demon-queen/data/assets/3d/characters/queen_chibi_v2_animated.glb");
+            .join("../../../DemonQueen/juego/nucleo/data/assets/3d/characters/queen_chibi_v2_animated.glb");
         if !path.exists() {
             return;
         }
@@ -7814,7 +7814,7 @@ mod tests {
     #[test]
     fn a_model_packed_whole_loads_as_the_original() {
         let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../demos/demon-queen/data/assets/3d/characters/queen_chibi_v2_animated.glb");
+            .join("../../../DemonQueen/juego/nucleo/data/assets/3d/characters/queen_chibi_v2_animated.glb");
         let Ok(original) = std::fs::read(&path) else {
             return;
         };
@@ -7852,7 +7852,7 @@ mod tests {
             return;
         };
         let project =
-            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../demos/demon-queen");
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../DemonQueen/juego/nucleo");
         fn walk(dir: &Path, out: &mut Vec<std::path::PathBuf>) {
             for entry in std::fs::read_dir(dir).into_iter().flatten().flatten() {
                 let path = entry.path();
@@ -7917,7 +7917,7 @@ mod tests {
     #[test]
     fn mixamo_walk_glb_exposes_runtime_clip() {
         let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
-            "../../demos/demon-queen/data/assets/3d/characters/queen_chibi_v2_mixamo_walk.glb",
+            "../../../DemonQueen/juego/nucleo/data/assets/3d/characters/queen_chibi_v2_mixamo_walk.glb",
         );
         if !path.exists() {
             return;
@@ -7945,7 +7945,7 @@ mod tests {
     #[test]
     fn native_mixamo_queen_keeps_texture_and_authored_walk() {
         let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
-            "../../demos/demon-queen/data/assets/3d/characters/queen_chibi_v2_mixamo_native.glb",
+            "../../../DemonQueen/juego/nucleo/data/assets/3d/characters/queen_chibi_v2_mixamo_native.glb",
         );
         if !path.exists() {
             return;
@@ -7974,7 +7974,7 @@ mod tests {
     #[test]
     fn retargeted_queen_glb_keeps_texture_and_walk_clip() {
         let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
-            "../../demos/demon-queen/data/assets/3d/characters/queen_chibi_v2_mixamo_retargeted.glb",
+            "../../../DemonQueen/juego/nucleo/data/assets/3d/characters/queen_chibi_v2_mixamo_retargeted.glb",
         );
         if !path.exists() {
             return;
@@ -8003,7 +8003,7 @@ mod tests {
     #[test]
     fn green_dress_queen_glb_exposes_walk_run_and_triangle_budget() {
         let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../demos/demon-queen/data/assets/3d/characters/queen_green_dress.glb");
+            .join("../../../DemonQueen/juego/nucleo/data/assets/3d/characters/queen_green_dress.glb");
         if !path.exists() {
             return;
         }
@@ -8042,7 +8042,7 @@ mod tests {
     #[test]
     fn hair_run_queen_glb_exposes_walk_run_and_skinned_hair() {
         let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../demos/demon-queen/data/assets/3d/characters/queen_chibi_v2_hair_run.glb");
+            .join("../../../DemonQueen/juego/nucleo/data/assets/3d/characters/queen_chibi_v2_hair_run.glb");
         if !path.exists() {
             return;
         }
@@ -8065,7 +8065,7 @@ mod tests {
     #[test]
     fn hair_lite_queen_glb_exposes_walk_run_and_skinned_cards() {
         let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
-            "../../demos/demon-queen/data/assets/3d/characters/queen_chibi_v2_hair_lite_run.glb",
+            "../../../DemonQueen/juego/nucleo/data/assets/3d/characters/queen_chibi_v2_hair_lite_run.glb",
         );
         if !path.exists() {
             return;
@@ -8090,7 +8090,7 @@ mod tests {
     #[test]
     fn hair_lowpoly_queen_glb_stays_under_ten_thousand_faces() {
         let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
-            "../../demos/demon-queen/data/assets/3d/characters/queen_chibi_v2_hair_lowpoly_run.glb",
+            "../../../DemonQueen/juego/nucleo/data/assets/3d/characters/queen_chibi_v2_hair_lowpoly_run.glb",
         );
         if !path.exists() {
             return;
@@ -8118,7 +8118,7 @@ mod tests {
     #[test]
     fn hair_micro_queen_glb_keeps_authored_shape_under_ten_thousand_faces() {
         let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
-            "../../demos/demon-queen/data/assets/3d/characters/queen_chibi_v2_hair_micro_run.glb",
+            "../../../DemonQueen/juego/nucleo/data/assets/3d/characters/queen_chibi_v2_hair_micro_run.glb",
         );
         if !path.exists() {
             return;
