@@ -7851,8 +7851,8 @@ mod tests {
         else {
             return;
         };
-        let project =
-            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../DemonQueen/juego/nucleo");
+        let project = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../DemonQueen/juego/nucleo");
         fn walk(dir: &Path, out: &mut Vec<std::path::PathBuf>) {
             for entry in std::fs::read_dir(dir).into_iter().flatten().flatten() {
                 let path = entry.path();
@@ -8002,8 +8002,9 @@ mod tests {
 
     #[test]
     fn green_dress_queen_glb_exposes_walk_run_and_triangle_budget() {
-        let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../../DemonQueen/juego/nucleo/data/assets/3d/characters/queen_green_dress.glb");
+        let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
+            "../../../DemonQueen/juego/nucleo/data/assets/3d/characters/queen_green_dress.glb",
+        );
         if !path.exists() {
             return;
         }

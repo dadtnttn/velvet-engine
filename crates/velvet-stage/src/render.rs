@@ -82,13 +82,22 @@ fn linear(c: f32) -> f32 {
 
 impl StageRenderer {
     /// A renderer for targets of `format`, with `samples` samples a pixel (1 or 4).
-    pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, format: wgpu::TextureFormat, samples: u32) -> StageRenderer {
+    pub fn new(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        format: wgpu::TextureFormat,
+        samples: u32,
+    ) -> StageRenderer {
         let globals_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("velvet-stage globals"),
             entries: &[wgpu::BindGroupLayoutEntry {
                 binding: 0,
                 visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: false, min_binding_size: None },
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
                 count: None,
             }],
         });
@@ -98,46 +107,100 @@ impl StageRenderer {
                 wgpu::BindGroupLayoutEntry {
                     binding: 0,
                     visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: true }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false },
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
                     count: None,
                 },
-                wgpu::BindGroupLayoutEntry { binding: 1, visibility: wgpu::ShaderStages::FRAGMENT, ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering), count: None },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
             ],
         });
-        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("velvet-stage"), source: wgpu::ShaderSource::Wgsl(include_str!("stage.wgsl").into()) });
-        let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("velvet-stage"), bind_group_layouts: &[&globals_layout, &picture_layout], push_constant_ranges: &[] });
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("velvet-stage"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("stage.wgsl").into()),
+        });
+        let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("velvet-stage"),
+            bind_group_layouts: &[&globals_layout, &picture_layout],
+            push_constant_ranges: &[],
+        });
         let attributes = wgpu::vertex_attr_array![0 => Float32x4, 1 => Float32x4, 2 => Float32x4, 3 => Float32x4, 4 => Float32x4, 5 => Float32x4, 6 => Float32x4, 7 => Float32x4];
         let normal = wgpu::BlendState {
-            color: wgpu::BlendComponent { src_factor: wgpu::BlendFactor::One, dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha, operation: wgpu::BlendOperation::Add },
-            alpha: wgpu::BlendComponent { src_factor: wgpu::BlendFactor::One, dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha, operation: wgpu::BlendOperation::Add },
+            color: wgpu::BlendComponent {
+                src_factor: wgpu::BlendFactor::One,
+                dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                operation: wgpu::BlendOperation::Add,
+            },
+            alpha: wgpu::BlendComponent {
+                src_factor: wgpu::BlendFactor::One,
+                dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                operation: wgpu::BlendOperation::Add,
+            },
         };
         let add = wgpu::BlendState {
-            color: wgpu::BlendComponent { src_factor: wgpu::BlendFactor::One, dst_factor: wgpu::BlendFactor::One, operation: wgpu::BlendOperation::Add },
-            alpha: wgpu::BlendComponent { src_factor: wgpu::BlendFactor::Zero, dst_factor: wgpu::BlendFactor::One, operation: wgpu::BlendOperation::Add },
+            color: wgpu::BlendComponent {
+                src_factor: wgpu::BlendFactor::One,
+                dst_factor: wgpu::BlendFactor::One,
+                operation: wgpu::BlendOperation::Add,
+            },
+            alpha: wgpu::BlendComponent {
+                src_factor: wgpu::BlendFactor::Zero,
+                dst_factor: wgpu::BlendFactor::One,
+                operation: wgpu::BlendOperation::Add,
+            },
         };
-        let pipeline = |blend: wgpu::BlendState, write_depth: bool, compare: wgpu::CompareFunction| {
-            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some("velvet-stage"),
-                layout: Some(&layout),
-                vertex: wgpu::VertexState {
-                    module: &shader,
-                    entry_point: Some("vs_main"),
-                    compilation_options: Default::default(),
-                    buffers: &[wgpu::VertexBufferLayout { array_stride: std::mem::size_of::<Instance>() as u64, step_mode: wgpu::VertexStepMode::Instance, attributes: &attributes }],
-                },
-                fragment: Some(wgpu::FragmentState {
-                    module: &shader,
-                    entry_point: Some("fs_main"),
-                    compilation_options: Default::default(),
-                    targets: &[Some(wgpu::ColorTargetState { format, blend: Some(blend), write_mask: wgpu::ColorWrites::ALL })],
-                }),
-                primitive: wgpu::PrimitiveState { cull_mode: None, ..Default::default() },
-                depth_stencil: Some(wgpu::DepthStencilState { format: DEPTH, depth_write_enabled: write_depth, depth_compare: compare, stencil: Default::default(), bias: Default::default() }),
-                multisample: wgpu::MultisampleState { count: samples, mask: !0, alpha_to_coverage_enabled: false },
-                multiview: None,
-                cache: None,
-            })
-        };
+        let pipeline =
+            |blend: wgpu::BlendState, write_depth: bool, compare: wgpu::CompareFunction| {
+                device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                    label: Some("velvet-stage"),
+                    layout: Some(&layout),
+                    vertex: wgpu::VertexState {
+                        module: &shader,
+                        entry_point: Some("vs_main"),
+                        compilation_options: Default::default(),
+                        buffers: &[wgpu::VertexBufferLayout {
+                            array_stride: std::mem::size_of::<Instance>() as u64,
+                            step_mode: wgpu::VertexStepMode::Instance,
+                            attributes: &attributes,
+                        }],
+                    },
+                    fragment: Some(wgpu::FragmentState {
+                        module: &shader,
+                        entry_point: Some("fs_main"),
+                        compilation_options: Default::default(),
+                        targets: &[Some(wgpu::ColorTargetState {
+                            format,
+                            blend: Some(blend),
+                            write_mask: wgpu::ColorWrites::ALL,
+                        })],
+                    }),
+                    primitive: wgpu::PrimitiveState {
+                        cull_mode: None,
+                        ..Default::default()
+                    },
+                    depth_stencil: Some(wgpu::DepthStencilState {
+                        format: DEPTH,
+                        depth_write_enabled: write_depth,
+                        depth_compare: compare,
+                        stencil: Default::default(),
+                        bias: Default::default(),
+                    }),
+                    multisample: wgpu::MultisampleState {
+                        count: samples,
+                        mask: !0,
+                        alpha_to_coverage_enabled: false,
+                    },
+                    multiview: None,
+                    cache: None,
+                })
+            };
         let pipelines = [
             pipeline(normal, true, wgpu::CompareFunction::LessEqual),
             pipeline(add, false, wgpu::CompareFunction::LessEqual),
@@ -163,12 +226,35 @@ impl StageRenderer {
         let globals_bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("velvet-stage globals"),
             layout: &globals_layout,
-            entries: &[wgpu::BindGroupEntry { binding: 0, resource: globals.as_entire_binding() }],
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: globals.as_entire_binding(),
+            }],
         });
         let capacity = 64;
         let instances = Self::instance_buffer(device, capacity);
-        let white = Self::upload(device, queue, &picture_layout, &sampler, 1, 1, &[255, 255, 255, 255]);
-        StageRenderer { samples, picture_layout, pipelines, sampler, globals, globals_bind, instances, capacity, pictures: HashMap::new(), white, targets: None }
+        let white = Self::upload(
+            device,
+            queue,
+            &picture_layout,
+            &sampler,
+            1,
+            1,
+            &[255, 255, 255, 255],
+        );
+        StageRenderer {
+            samples,
+            picture_layout,
+            pipelines,
+            sampler,
+            globals,
+            globals_bind,
+            instances,
+            capacity,
+            pictures: HashMap::new(),
+            white,
+            targets: None,
+        }
     }
 
     fn instance_buffer(device: &wgpu::Device, capacity: usize) -> wgpu::Buffer {
@@ -181,11 +267,23 @@ impl StageRenderer {
     }
 
     /// A texture with its smaller copies, from premultiplied RGBA pixels.
-    fn upload(device: &wgpu::Device, queue: &wgpu::Queue, layout: &wgpu::BindGroupLayout, sampler: &wgpu::Sampler, width: u32, height: u32, pixels: &[u8]) -> wgpu::BindGroup {
+    fn upload(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        layout: &wgpu::BindGroupLayout,
+        sampler: &wgpu::Sampler,
+        width: u32,
+        height: u32,
+        pixels: &[u8],
+    ) -> wgpu::BindGroup {
         let levels = 32 - width.max(height).max(1).leading_zeros();
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("velvet-stage picture"),
-            size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
             mip_level_count: levels,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
@@ -197,10 +295,23 @@ impl StageRenderer {
         let (mut w, mut h) = (width, height);
         for mip in 0..levels {
             queue.write_texture(
-                wgpu::TexelCopyTextureInfo { texture: &texture, mip_level: mip, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
+                wgpu::TexelCopyTextureInfo {
+                    texture: &texture,
+                    mip_level: mip,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
                 &level,
-                wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(w * 4), rows_per_image: Some(h) },
-                wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+                wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(w * 4),
+                    rows_per_image: Some(h),
+                },
+                wgpu::Extent3d {
+                    width: w,
+                    height: h,
+                    depth_or_array_layers: 1,
+                },
             );
             if mip + 1 < levels {
                 let (next, nw, nh) = halve(&level, w, h);
@@ -214,8 +325,14 @@ impl StageRenderer {
             label: Some("velvet-stage picture"),
             layout,
             entries: &[
-                wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&view) },
-                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Sampler(sampler) },
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(sampler),
+                },
             ],
         })
     }
@@ -223,12 +340,30 @@ impl StageRenderer {
     /// Sends the pictures painted since the last frame, and forgets the ones taken off the stage.
     fn prepare(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, stage: &Stage) {
         for (id, picture) in stage.pictures() {
-            if self.pictures.get(&id).is_some_and(|g| g.version == picture.version) {
+            if self
+                .pictures
+                .get(&id)
+                .is_some_and(|g| g.version == picture.version)
+            {
                 continue;
             }
             let canvas = &picture.canvas;
-            let bind = Self::upload(device, queue, &self.picture_layout, &self.sampler, canvas.pixel_width(), canvas.pixel_height(), canvas.pixels());
-            self.pictures.insert(id, GpuPicture { bind, version: picture.version });
+            let bind = Self::upload(
+                device,
+                queue,
+                &self.picture_layout,
+                &self.sampler,
+                canvas.pixel_width(),
+                canvas.pixel_height(),
+                canvas.pixels(),
+            );
+            self.pictures.insert(
+                id,
+                GpuPicture {
+                    bind,
+                    version: picture.version,
+                },
+            );
         }
         self.pictures.retain(|id, _| stage.picture(*id).is_some());
     }
@@ -241,7 +376,11 @@ impl StageRenderer {
             device
                 .create_texture(&wgpu::TextureDescriptor {
                     label: Some(label),
-                    size: wgpu::Extent3d { width: size.0.max(1), height: size.1.max(1), depth_or_array_layers: 1 },
+                    size: wgpu::Extent3d {
+                        width: size.0.max(1),
+                        height: size.1.max(1),
+                        depth_or_array_layers: 1,
+                    },
                     mip_level_count: 1,
                     sample_count: self.samples,
                     dimension: wgpu::TextureDimension::D2,
@@ -284,7 +423,9 @@ impl StageRenderer {
             }
             match card.space {
                 Space::World => {
-                    let Some(matrix) = stage.matrix(id) else { continue };
+                    let Some(matrix) = stage.matrix(id) else {
+                        continue;
+                    };
                     let centre = matrix.transform_point3(card.face_point(0.5, 0.5));
                     let depth = view.transform_point3(centre).z;
                     world.push((card.order, depth, id));
@@ -308,8 +449,12 @@ impl StageRenderer {
         });
         draws.push((Pass::Screen, None));
         for (_, _, id) in &world {
-            let Some(card) = stage.card(*id) else { continue };
-            let Some(matrix) = stage.matrix(*id) else { continue };
+            let Some(card) = stage.card(*id) else {
+                continue;
+            };
+            let Some(matrix) = stage.matrix(*id) else {
+                continue;
+            };
             instances.push(Instance {
                 model: matrix.to_cols_array_2d(),
                 shape: [card.size.x, card.size.y, card.anchor.x, card.anchor.y],
@@ -317,11 +462,22 @@ impl StageRenderer {
                 tint: card.tint,
                 flags: [if card.lit { 1.0 } else { 0.0 }, 0.0, 0.0, 0.0],
             });
-            draws.push((if card.blend == Blend::Add { Pass::WorldAdd } else { Pass::World }, Some(card.picture)));
+            draws.push((
+                if card.blend == Blend::Add {
+                    Pass::WorldAdd
+                } else {
+                    Pass::World
+                },
+                Some(card.picture),
+            ));
         }
         for (_, _, id) in &screen {
-            let Some(card) = stage.card(*id) else { continue };
-            let Some(matrix) = stage.matrix(*id) else { continue };
+            let Some(card) = stage.card(*id) else {
+                continue;
+            };
+            let Some(matrix) = stage.matrix(*id) else {
+                continue;
+            };
             instances.push(Instance {
                 model: matrix.to_cols_array_2d(),
                 shape: [card.size.x, card.size.y, card.anchor.x, card.anchor.y],
@@ -329,7 +485,14 @@ impl StageRenderer {
                 tint: card.tint,
                 flags: [0.0, 1.0, 0.0, 0.0],
             });
-            draws.push((if card.blend == Blend::Add { Pass::ScreenAdd } else { Pass::Screen }, Some(card.picture)));
+            draws.push((
+                if card.blend == Blend::Add {
+                    Pass::ScreenAdd
+                } else {
+                    Pass::Screen
+                },
+                Some(card.picture),
+            ));
         }
 
         // The globals.
@@ -337,15 +500,33 @@ impl StageRenderer {
         let mut light_position = [[0.0f32; 4]; MAX_LIGHTS];
         let mut light_color = [[0.0f32; 4]; MAX_LIGHTS];
         for (i, light) in lights.iter().enumerate() {
-            light_position[i] = [light.position.x, light.position.y, light.position.z, light.range.max(1e-3)];
-            light_color[i] = [light.color[0] * light.intensity, light.color[1] * light.intensity, light.color[2] * light.intensity, 0.0];
+            light_position[i] = [
+                light.position.x,
+                light.position.y,
+                light.position.z,
+                light.range.max(1e-3),
+            ];
+            light_color[i] = [
+                light.color[0] * light.intensity,
+                light.color[1] * light.intensity,
+                light.color[2] * light.intensity,
+                0.0,
+            ];
         }
         let (fog_color, fog) = match stage.fog {
-            Some(f) => ([f.color[0], f.color[1], f.color[2], 1.0], [f.start, f.end, 1.0, lights.len() as f32]),
+            Some(f) => (
+                [f.color[0], f.color[1], f.color[2], 1.0],
+                [f.start, f.end, 1.0, lights.len() as f32],
+            ),
             None => ([0.0; 4], [0.0, 1.0, 0.0, lights.len() as f32]),
         };
         let (w, h) = (stage.screen.x.max(1.0), stage.screen.y.max(1.0));
-        let screen_proj = Mat4::from_cols([2.0 / w, 0.0, 0.0, 0.0], [0.0, -2.0 / h, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0], [-1.0, 1.0, 0.0, 1.0]);
+        let screen_proj = Mat4::from_cols(
+            [2.0 / w, 0.0, 0.0, 0.0],
+            [0.0, -2.0 / h, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0],
+            [-1.0, 1.0, 0.0, 1.0],
+        );
         let eye = stage.camera.eye;
         let globals = Globals {
             view_proj: stage.view_projection().to_cols_array_2d(),
@@ -374,11 +555,17 @@ impl StageRenderer {
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                 view,
                 resolve_target: resolve,
-                ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::BLACK), store: wgpu::StoreOp::Store },
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                    store: wgpu::StoreOp::Store,
+                },
             })],
             depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                 view: &targets.depth,
-                depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(1.0), store: wgpu::StoreOp::Discard }),
+                depth_ops: Some(wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(1.0),
+                    store: wgpu::StoreOp::Discard,
+                }),
                 stencil_ops: None,
             }),
             timestamp_writes: None,

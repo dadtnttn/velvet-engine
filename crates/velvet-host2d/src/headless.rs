@@ -17,7 +17,12 @@ impl Headless {
     /// A run whose canvas is drawn at `pw`×`ph` pixels.
     pub fn new(config: HostConfig, pw: u32, ph: u32) -> Self {
         let canvas = Canvas::with_pixels(config.logical_width, config.logical_height, pw, ph);
-        Self { config, canvas, input: Input::new(), steps: 0 }
+        Self {
+            config,
+            canvas,
+            input: Input::new(),
+            steps: 0,
+        }
     }
 
     /// Records what the player does (it reaches the game at the next step).
@@ -34,8 +39,14 @@ impl Headless {
     /// A press and a release of the left button at a logical point, in the same step.
     pub fn click(&mut self, x: f32, y: f32) -> &mut Self {
         let at = Point::new(x, y);
-        self.push(InputEvent::PointerDown { button: Button::Left, at });
-        self.push(InputEvent::PointerUp { button: Button::Left, at })
+        self.push(InputEvent::PointerDown {
+            button: Button::Left,
+            at,
+        });
+        self.push(InputEvent::PointerUp {
+            button: Button::Left,
+            at,
+        })
     }
 
     /// One fixed step of the game.
@@ -90,7 +101,10 @@ mod tests {
         fn draw(&mut self, canvas: &mut Canvas) {
             canvas.clear(Color::BLACK);
             if let Some(p) = self.last {
-                canvas.fill_rect(Rect::new(p.x - 10.0, p.y - 10.0, 20.0, 20.0), &Color::WHITE.into());
+                canvas.fill_rect(
+                    Rect::new(p.x - 10.0, p.y - 10.0, 20.0, 20.0),
+                    &Color::WHITE.into(),
+                );
             }
         }
     }
@@ -105,7 +119,11 @@ mod tests {
         assert_eq!(game.clicks, 1, "an event reaches one step only");
         let canvas = run.draw(&mut game);
         assert_eq!((canvas.pixel_width(), canvas.pixel_height()), (960, 540));
-        assert_eq!(canvas.pixel(50, 100), Some([255, 255, 255, 255]), "logical (100, 200) at half size");
+        assert_eq!(
+            canvas.pixel(50, 100),
+            Some([255, 255, 255, 255]),
+            "logical (100, 200) at half size"
+        );
         run.run_for(&mut game, 1.0);
         assert_eq!(run.steps(), 62);
         assert!((run.input.time - 62.0 / 60.0).abs() < 1e-4);

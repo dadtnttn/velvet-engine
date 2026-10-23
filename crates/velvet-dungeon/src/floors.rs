@@ -597,9 +597,7 @@ mod tests {
     #[test]
     fn a_baked_file_reads_back() {
         let mut bytes = b"DQFL".to_vec();
-        for v in [2u32] {
-            bytes.extend(v.to_le_bytes());
-        }
+        bytes.extend(2u32.to_le_bytes());
         for v in [0.0f32, 0.0, 1.0] {
             bytes.extend(v.to_le_bytes());
         }

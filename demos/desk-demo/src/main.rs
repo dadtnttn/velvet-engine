@@ -11,12 +11,15 @@
 //! cargo run -p desk-demo --release -- --bench               (twelve papers at 2560×1440, timed)
 //! ```
 
-use velvet_canvas::{Align, Canvas, Color, Fill, Font, Point as CPoint, Rect as CRect, StrokeStyle, TextStyle};
+use velvet_canvas::{
+    Align, Canvas, Color, Fill, Font, Point as CPoint, Rect as CRect, StrokeStyle, TextStyle,
+};
 use velvet_desk::{Desk, DeskEvent, Point, Rect};
 use velvet_host2d::{Button, Game2D, Headless, HostConfig, Input, InputEvent, KeyCode};
 use velvet_sfx::{presets, Player, Sound};
 
-const FONT: &[u8] = include_bytes!("../../../crates/velvet-canvas/tests/fixtures/Nunito-ExtraBold.ttf");
+const FONT: &[u8] =
+    include_bytes!("../../../crates/velvet-canvas/tests/fixtures/Nunito-ExtraBold.ttf");
 
 const INK: Color = Color::hex(0x2a1b10);
 const PAPER: Color = Color::hex(0xf4e7cb);
@@ -135,7 +138,23 @@ struct Sounds {
 
 impl Demo {
     fn new() -> Demo {
-        let mut demo = Demo { font: Font::from_bytes(FONT.to_vec()).expect("font"), desk: Desk::new(DESK), papers: papers(), magnifier: false, notice: None, time: 0.0, pointer: None, office: None, sounds: Sounds { paper: presets::paper(), stamp: presets::stamp(), chime: presets::chime(), click: presets::click() }, player: None };
+        let mut demo = Demo {
+            font: Font::from_bytes(FONT.to_vec()).expect("font"),
+            desk: Desk::new(DESK),
+            papers: papers(),
+            magnifier: false,
+            notice: None,
+            time: 0.0,
+            pointer: None,
+            office: None,
+            sounds: Sounds {
+                paper: presets::paper(),
+                stamp: presets::stamp(),
+                chime: presets::chime(),
+                click: presets::click(),
+            },
+            player: None,
+        };
         demo.desk.add_zone("window", WINDOW);
         demo.lay_out();
         demo
@@ -144,8 +163,12 @@ impl Demo {
     /// Every paper on the desk, a little apart and a little turned.
     fn lay_out(&mut self) {
         for (i, paper) in self.papers.iter().enumerate() {
-            let at = Point::new(220.0 + (i % 3) as f32 * 470.0 + (i / 3) as f32 * 60.0, 470.0 + (i % 2) as f32 * 120.0 + (i / 3) as f32 * 40.0);
-            self.desk.add_item(paper.id, paper.w, paper.h, at, [-3.0, 2.0, -1.5][i % 3]);
+            let at = Point::new(
+                220.0 + (i % 3) as f32 * 470.0 + (i / 3) as f32 * 60.0,
+                470.0 + (i % 2) as f32 * 120.0 + (i / 3) as f32 * 40.0,
+            );
+            self.desk
+                .add_item(paper.id, paper.w, paper.h, at, [-3.0, 2.0, -1.5][i % 3]);
             for (name, _, _, rect) in &paper.fields {
                 self.desk.add_field(paper.id, name, *rect);
             }
@@ -159,7 +182,12 @@ impl Demo {
 
     fn sound(&mut self, which: fn(&Sounds) -> &Sound, name: &str) {
         if let Some(player) = &mut self.player {
-            player.play(name, which(&self.sounds), 0.8, std::time::Duration::from_millis(60));
+            player.play(
+                name,
+                which(&self.sounds),
+                0.8,
+                std::time::Duration::from_millis(60),
+            );
         }
     }
 
@@ -171,10 +199,28 @@ impl Demo {
     fn draw_paper(font: &Font, frame: &Canvas, paper: &mut Paper) {
         let mut layer = frame.layer(paper.w, paper.h);
         let body = CRect::new(0.0, 0.0, paper.w, paper.h);
-        layer.fill_round_rect(body, 12.0, &Fill::Linear { from: CPoint::new(0.0, 0.0), to: CPoint::new(0.0, paper.h), stops: vec![(0.0, PAPER), (1.0, PAPER_EDGE)] });
-        layer.stroke_round_rect(body.inflate(-1.5), 11.0, &StrokeStyle::new(3.0, Color::hex(0x6b4a2b)));
-        layer.stroke_round_rect(body.inflate(-10.0), 7.0, &StrokeStyle::new(1.5, Color::hex(0xb08a55)).dashed(&[7.0, 5.0]));
-        let title = TextStyle::new(font, 21.0, Color::hex(0x4a2c58)).letter_spacing(1.2).align(Align::Center);
+        layer.fill_round_rect(
+            body,
+            12.0,
+            &Fill::Linear {
+                from: CPoint::new(0.0, 0.0),
+                to: CPoint::new(0.0, paper.h),
+                stops: vec![(0.0, PAPER), (1.0, PAPER_EDGE)],
+            },
+        );
+        layer.stroke_round_rect(
+            body.inflate(-1.5),
+            11.0,
+            &StrokeStyle::new(3.0, Color::hex(0x6b4a2b)),
+        );
+        layer.stroke_round_rect(
+            body.inflate(-10.0),
+            7.0,
+            &StrokeStyle::new(1.5, Color::hex(0xb08a55)).dashed(&[7.0, 5.0]),
+        );
+        let title = TextStyle::new(font, 21.0, Color::hex(0x4a2c58))
+            .letter_spacing(1.2)
+            .align(Align::Center);
         layer.text(paper.title, paper.w / 2.0, 22.0, &title);
         let label = TextStyle::new(font, 12.5, Color::hex(0x8a6a44)).letter_spacing(0.8);
         let value = TextStyle::new(font, 19.0, INK);
@@ -183,7 +229,14 @@ impl Demo {
             layer.text(v, r.x, r.y + 15.0, &value);
         }
         if let Some((approved, _)) = paper.stamp {
-            Self::draw_stamp(font, &mut layer, paper.w - 92.0, paper.h - 78.0, approved, 1.0);
+            Self::draw_stamp(
+                font,
+                &mut layer,
+                paper.w - 92.0,
+                paper.h - 78.0,
+                approved,
+                1.0,
+            );
         }
         paper.layer = Some(layer);
         paper.baked = None;
@@ -191,12 +244,29 @@ impl Demo {
     }
 
     /// Draws the straight paper turned, with its shadow (resting, or lifted in the hand), into a layer of its own.
-    fn bake(frame: &Canvas, paper: &Paper, rotation: f32, lifted: bool) -> Option<(Canvas, CPoint, f32)> {
+    fn bake(
+        frame: &Canvas,
+        paper: &Paper,
+        rotation: f32,
+        lifted: bool,
+    ) -> Option<(Canvas, CPoint, f32)> {
         let flat = paper.layer.as_ref()?;
         let (sin, cos) = rotation.to_radians().sin_cos();
-        let corners = [(0.0, 0.0), (paper.w, 0.0), (0.0, paper.h), (paper.w, paper.h)].map(|(x, y)| (x * cos - y * sin, x * sin + y * cos));
-        let (x0, y0) = (corners.iter().map(|c| c.0).fold(f32::MAX, f32::min), corners.iter().map(|c| c.1).fold(f32::MAX, f32::min));
-        let (x1, y1) = (corners.iter().map(|c| c.0).fold(f32::MIN, f32::max), corners.iter().map(|c| c.1).fold(f32::MIN, f32::max));
+        let corners = [
+            (0.0, 0.0),
+            (paper.w, 0.0),
+            (0.0, paper.h),
+            (paper.w, paper.h),
+        ]
+        .map(|(x, y)| (x * cos - y * sin, x * sin + y * cos));
+        let (x0, y0) = (
+            corners.iter().map(|c| c.0).fold(f32::MAX, f32::min),
+            corners.iter().map(|c| c.1).fold(f32::MAX, f32::min),
+        );
+        let (x1, y1) = (
+            corners.iter().map(|c| c.0).fold(f32::MIN, f32::max),
+            corners.iter().map(|c| c.1).fold(f32::MIN, f32::max),
+        );
         let pad = if lifted { 60.0 } else { 32.0 };
         let mut baked = frame.layer(x1 - x0 + 2.0 * pad, y1 - y0 + 2.0 * pad);
         let origin = CPoint::new(pad - x0, pad - y0);
@@ -204,9 +274,21 @@ impl Demo {
         baked.translate(origin.x, origin.y);
         baked.rotate(rotation);
         if lifted {
-            baked.shadow(CRect::new(0.0, 0.0, paper.w, paper.h), 12.0, 22.0, CPoint::new(0.0, 18.0), Color::BLACK.fade(0.5));
+            baked.shadow(
+                CRect::new(0.0, 0.0, paper.w, paper.h),
+                12.0,
+                22.0,
+                CPoint::new(0.0, 18.0),
+                Color::BLACK.fade(0.5),
+            );
         } else {
-            baked.shadow(CRect::new(0.0, 0.0, paper.w, paper.h), 12.0, 10.0, CPoint::new(0.0, 7.0), Color::BLACK.fade(0.45));
+            baked.shadow(
+                CRect::new(0.0, 0.0, paper.w, paper.h),
+                12.0,
+                10.0,
+                CPoint::new(0.0, 7.0),
+                Color::BLACK.fade(0.45),
+            );
         }
         baked.restore();
         baked.draw_layer(flat, origin, 1.0, rotation, 1.0);
@@ -219,19 +301,43 @@ impl Demo {
         c.translate(x, y);
         c.rotate(-12.0);
         c.scale(scale);
-        c.stroke_round_rect(CRect::new(-74.0, -26.0, 148.0, 52.0), 10.0, &StrokeStyle::new(5.0, color));
-        let text = TextStyle::new(font, 22.0, color).letter_spacing(2.0).align(Align::Center);
-        c.text(if approved { "APROBADO" } else { "RECHAZADO" }, 0.0, -14.0, &text);
+        c.stroke_round_rect(
+            CRect::new(-74.0, -26.0, 148.0, 52.0),
+            10.0,
+            &StrokeStyle::new(5.0, color),
+        );
+        let text = TextStyle::new(font, 22.0, color)
+            .letter_spacing(2.0)
+            .align(Align::Center);
+        c.text(
+            if approved { "APROBADO" } else { "RECHAZADO" },
+            0.0,
+            -14.0,
+            &text,
+        );
         c.restore();
     }
 
     /// What the two marks say: the same, or not.
     fn comparison(&self) -> Option<(String, bool)> {
         let (a, b) = self.desk.pair()?;
-        let value = |owner: u64, field: &str| self.paper(owner)?.fields.iter().find(|f| f.0 == field).map(|f| f.2);
+        let value = |owner: u64, field: &str| {
+            self.paper(owner)?
+                .fields
+                .iter()
+                .find(|f| f.0 == field)
+                .map(|f| f.2)
+        };
         let (va, vb) = (value(a.owner, &a.field)?, value(b.owner, &b.field)?);
         let same = va == vb;
-        Some((if same { format!("Coinciden: «{va}»") } else { format!("No coinciden: «{va}» / «{vb}»") }, same))
+        Some((
+            if same {
+                format!("Coinciden: «{va}»")
+            } else {
+                format!("No coinciden: «{va}» / «{vb}»")
+            },
+            same,
+        ))
     }
 }
 
@@ -246,34 +352,56 @@ impl Game2D for Demo {
                     self.desk.refresh_marks();
                 }
                 InputEvent::PointerLeft => self.pointer = None,
-                InputEvent::PointerDown { button: Button::Left, at } => {
+                InputEvent::PointerDown {
+                    button: Button::Left,
+                    at,
+                } => {
                     if self.desk.magnified().is_some() {
                         self.desk.set_magnified(None);
                         continue;
                     }
-                    if let Some(DeskEvent::Picked { .. }) = self.desk.pointer_down(Point::new(at.x, at.y), self.time) {
+                    if let Some(DeskEvent::Picked { .. }) =
+                        self.desk.pointer_down(Point::new(at.x, at.y), self.time)
+                    {
                         self.sound(|s| &s.paper, "paper");
                     }
                 }
-                InputEvent::PointerDown { button: Button::Right, .. } => self.magnifier = !self.magnifier,
-                InputEvent::PointerUp { button: Button::Left, at } => match self.desk.pointer_up(Point::new(at.x, at.y), self.time) {
-                    Some(DeskEvent::Dropped { item, zone: Some(zone) }) if zone == "window" => {
+                InputEvent::PointerDown {
+                    button: Button::Right,
+                    ..
+                } => self.magnifier = !self.magnifier,
+                InputEvent::PointerUp {
+                    button: Button::Left,
+                    at,
+                } => match self.desk.pointer_up(Point::new(at.x, at.y), self.time) {
+                    Some(DeskEvent::Dropped {
+                        item,
+                        zone: Some(zone),
+                    }) if zone == "window" => {
                         let title = self.paper(item).map(|p| p.title).unwrap_or("");
                         self.desk.remove_item(item);
                         self.say(format!("Devuelto: {}", title.to_lowercase()));
                         self.sound(|s| &s.chime, "chime");
                     }
-                    Some(DeskEvent::Clicked { item, field: Some(field), .. }) if self.magnifier => {
+                    Some(DeskEvent::Clicked {
+                        item,
+                        field: Some(field),
+                        ..
+                    }) if self.magnifier => {
                         self.desk.mark_field(item, &field);
                         self.sound(|s| &s.click, "click");
                     }
-                    Some(DeskEvent::DoubleClicked { item, .. }) if !self.magnifier => self.desk.set_magnified(Some(item)),
+                    Some(DeskEvent::DoubleClicked { item, .. }) if !self.magnifier => {
+                        self.desk.set_magnified(Some(item))
+                    }
                     _ => {}
                 },
                 InputEvent::KeyDown(KeyCode::Space) => self.magnifier = !self.magnifier,
                 InputEvent::KeyDown(key @ (KeyCode::KeyA | KeyCode::KeyR)) => {
                     let under = self.pointer.and_then(|p| self.desk.item_at(p));
-                    if let Some(paper) = under.and_then(|id| self.papers.iter_mut().find(|p| p.id == id)) {
+                    if let Some(paper) =
+                        under.and_then(|id| self.papers.iter_mut().find(|p| p.id == id))
+                    {
                         paper.stamp = Some((*key == KeyCode::KeyA, self.time));
                         paper.layer = None;
                         self.sound(|s| &s.stamp, "stamp");
@@ -304,13 +432,47 @@ impl Game2D for Demo {
         // The office: the night behind the window, the counter, the desk — drawn once into a layer.
         if self.office.is_none() {
             let mut o = c.layer(1920.0, 1080.0);
-            o.fill_rect(CRect::new(0.0, 0.0, 1920.0, 1080.0), &Fill::Linear { from: CPoint::new(0.0, 0.0), to: CPoint::new(0.0, 340.0), stops: vec![(0.0, Color::hex(0x2b1d45)), (1.0, NIGHT)] });
-            o.fill_round_rect(CRect::new(WINDOW.x, WINDOW.y, WINDOW.w, WINDOW.h), 18.0, &Fill::Radial { center: CPoint::new(960.0, 120.0), radius: 320.0, stops: vec![(0.0, Color::hex(0x5b3f86)), (1.0, Color::hex(0x231737))] });
-            o.stroke_round_rect(CRect::new(WINDOW.x, WINDOW.y, WINDOW.w, WINDOW.h), 18.0, &StrokeStyle::new(6.0, GOLD));
+            o.fill_rect(
+                CRect::new(0.0, 0.0, 1920.0, 1080.0),
+                &Fill::Linear {
+                    from: CPoint::new(0.0, 0.0),
+                    to: CPoint::new(0.0, 340.0),
+                    stops: vec![(0.0, Color::hex(0x2b1d45)), (1.0, NIGHT)],
+                },
+            );
+            o.fill_round_rect(
+                CRect::new(WINDOW.x, WINDOW.y, WINDOW.w, WINDOW.h),
+                18.0,
+                &Fill::Radial {
+                    center: CPoint::new(960.0, 120.0),
+                    radius: 320.0,
+                    stops: vec![(0.0, Color::hex(0x5b3f86)), (1.0, Color::hex(0x231737))],
+                },
+            );
+            o.stroke_round_rect(
+                CRect::new(WINDOW.x, WINDOW.y, WINDOW.w, WINDOW.h),
+                18.0,
+                &StrokeStyle::new(6.0, GOLD),
+            );
             let hint = TextStyle::new(&font, 18.0, GOLD.fade(0.8)).align(Align::Center);
-            o.text("Suelta aquí para devolver", 960.0, WINDOW.bottom() - 40.0, &hint);
-            o.fill_rect(CRect::new(DESK.x, DESK.y, DESK.w, DESK.h), &Fill::Linear { from: CPoint::new(0.0, DESK.y), to: CPoint::new(0.0, 1080.0), stops: vec![(0.0, Color::hex(0x4a2a1c)), (1.0, Color::hex(0x2a160f))] });
-            o.fill_rect(CRect::new(0.0, DESK.y - 6.0, 1920.0, 10.0), &Color::hex(0x6e4430).into());
+            o.text(
+                "Suelta aquí para devolver",
+                960.0,
+                WINDOW.bottom() - 40.0,
+                &hint,
+            );
+            o.fill_rect(
+                CRect::new(DESK.x, DESK.y, DESK.w, DESK.h),
+                &Fill::Linear {
+                    from: CPoint::new(0.0, DESK.y),
+                    to: CPoint::new(0.0, 1080.0),
+                    stops: vec![(0.0, Color::hex(0x4a2a1c)), (1.0, Color::hex(0x2a160f))],
+                },
+            );
+            o.fill_rect(
+                CRect::new(0.0, DESK.y - 6.0, 1920.0, 10.0),
+                &Color::hex(0x6e4430).into(),
+            );
             self.office = Some(o);
         }
         if let Some(office) = &self.office {
@@ -320,23 +482,38 @@ impl Game2D for Demo {
         // The papers, bottom to top, each from its layer.
         let ids: Vec<u64> = self.desk.items().iter().map(|i| i.id).collect();
         for id in ids {
-            let Some(item) = self.desk.item(id).cloned() else { continue };
-            let Some(index) = self.papers.iter().position(|p| p.id == id) else { continue };
+            let Some(item) = self.desk.item(id).cloned() else {
+                continue;
+            };
+            let Some(index) = self.papers.iter().position(|p| p.id == id) else {
+                continue;
+            };
             if self.papers[index].layer.is_none() {
                 Self::draw_paper(&font, c, &mut self.papers[index]);
             }
             // A paper in the hand casts a bigger, softer shadow.
             let lifted = self.desk.dragging() == Some(id);
-            let stale = |b: &Option<(Canvas, CPoint, f32)>| b.as_ref().map(|b| b.2) != Some(item.rotation);
+            let stale =
+                |b: &Option<(Canvas, CPoint, f32)>| b.as_ref().map(|b| b.2) != Some(item.rotation);
             if lifted && stale(&self.papers[index].lifted) {
                 self.papers[index].lifted = Self::bake(c, &self.papers[index], item.rotation, true);
             }
             if !lifted && stale(&self.papers[index].baked) {
                 self.papers[index].baked = Self::bake(c, &self.papers[index], item.rotation, false);
             }
-            let shown = if lifted { &self.papers[index].lifted } else { &self.papers[index].baked };
+            let shown = if lifted {
+                &self.papers[index].lifted
+            } else {
+                &self.papers[index].baked
+            };
             if let Some((baked, origin, _)) = shown {
-                c.draw_layer(baked, CPoint::new(item.pos.x - origin.x, item.pos.y - origin.y), 1.0, 0.0, 1.0);
+                c.draw_layer(
+                    baked,
+                    CPoint::new(item.pos.x - origin.x, item.pos.y - origin.y),
+                    1.0,
+                    0.0,
+                    1.0,
+                );
             }
 
             // A fresh stamp lands with a bounce, drawn over the layer until it settles.
@@ -346,47 +523,90 @@ impl Game2D for Demo {
                     c.save();
                     c.translate(item.pos.x, item.pos.y);
                     c.rotate(item.rotation);
-                    Self::draw_stamp(&font, c, item.w - 92.0, item.h - 78.0, approved, 1.0 + 0.5 * (1.0 - t) * (1.0 - t));
+                    Self::draw_stamp(
+                        &font,
+                        c,
+                        item.w - 92.0,
+                        item.h - 78.0,
+                        approved,
+                        1.0 + 0.5 * (1.0 - t) * (1.0 - t),
+                    );
                     c.restore();
                 }
             }
         }
 
         // The marks and what they say.
-        let marks: Vec<CPoint> = self.desk.marks().iter().map(|m| CPoint::new(m.at.x, m.at.y)).collect();
+        let marks: Vec<CPoint> = self
+            .desk
+            .marks()
+            .iter()
+            .map(|m| CPoint::new(m.at.x, m.at.y))
+            .collect();
         for m in &marks {
             c.stroke_circle(*m, 26.0, &StrokeStyle::new(4.0, GOLD));
         }
         if let [a, b] = marks.as_slice() {
             c.line(*a, *b, &StrokeStyle::new(3.0, GOLD).dashed(&[10.0, 7.0]));
             if let Some((text, same)) = self.comparison() {
-                let style = TextStyle::new(&font, 26.0, if same { Color::hex(0x9fe0b4) } else { Color::hex(0xff9aa8) }).outline(4.0, NIGHT).align(Align::Center);
+                let style = TextStyle::new(
+                    &font,
+                    26.0,
+                    if same {
+                        Color::hex(0x9fe0b4)
+                    } else {
+                        Color::hex(0xff9aa8)
+                    },
+                )
+                .outline(4.0, NIGHT)
+                .align(Align::Center);
                 c.text(&text, (a.x + b.x) / 2.0, (a.y + b.y) / 2.0 - 52.0, &style);
             }
         }
 
         // A paper to read, big, over a dimmed desk.
         if let Some(id) = self.desk.magnified() {
-            c.fill_rect(CRect::new(0.0, 0.0, 1920.0, 1080.0), &Color::BLACK.fade(0.6).into());
+            c.fill_rect(
+                CRect::new(0.0, 0.0, 1920.0, 1080.0),
+                &Color::BLACK.fade(0.6).into(),
+            );
             if let Some(layer) = self.paper(id).and_then(|p| p.layer.as_ref()) {
                 let scale = (1500.0 / layer.width()).min(860.0 / layer.height());
-                let at = CPoint::new(960.0 - layer.width() * scale / 2.0, 540.0 - layer.height() * scale / 2.0);
+                let at = CPoint::new(
+                    960.0 - layer.width() * scale / 2.0,
+                    540.0 - layer.height() * scale / 2.0,
+                );
                 c.draw_layer(layer, at, scale, 0.0, 1.0);
             }
         }
 
         // The top line: the magnifier, the keys, a notice.
         let top = TextStyle::new(&font, 20.0, Color::hex(0xd9c9ee));
-        c.text(if self.magnifier { "LUPA: haz clic en dos campos para compararlos" } else { "Arrastra · doble clic: leer · Espacio: lupa · A/R: sellar · N: de nuevo" }, 28.0, 14.0, &top);
+        c.text(
+            if self.magnifier {
+                "LUPA: haz clic en dos campos para compararlos"
+            } else {
+                "Arrastra · doble clic: leer · Espacio: lupa · A/R: sellar · N: de nuevo"
+            },
+            28.0,
+            14.0,
+            &top,
+        );
         if let Some((text, until)) = &self.notice {
             if self.time < *until {
-                let style = TextStyle::new(&font, 24.0, Color::WHITE).outline(4.0, NIGHT).align(Align::Center);
+                let style = TextStyle::new(&font, 24.0, Color::WHITE)
+                    .outline(4.0, NIGHT)
+                    .align(Align::Center);
                 c.text(text, 960.0, WINDOW.bottom() + 6.0, &style);
             }
         }
         if self.magnifier {
             if let Some(p) = self.pointer {
-                c.stroke_circle(CPoint::new(p.x, p.y), 30.0, &StrokeStyle::new(3.0, GOLD.fade(0.8)));
+                c.stroke_circle(
+                    CPoint::new(p.x, p.y),
+                    30.0,
+                    &StrokeStyle::new(3.0, GOLD.fade(0.8)),
+                );
             }
         }
     }
@@ -404,11 +624,17 @@ fn bench() {
     demo.lay_out();
     run.draw(&mut demo);
     let first = demo.desk.item(1).expect("paper 1").pos;
-    run.push(InputEvent::PointerDown { button: Button::Left, at: CPoint::new(first.x + 20.0, first.y + 20.0) });
+    run.push(InputEvent::PointerDown {
+        button: Button::Left,
+        at: CPoint::new(first.x + 20.0, first.y + 20.0),
+    });
     run.step(&mut demo);
     let mut times = Vec::new();
     for k in 0..120 {
-        run.move_to(first.x + 20.0 + (k as f32 * 0.1).sin() * 300.0, first.y + 20.0 + (k as f32 * 0.07).cos() * 150.0);
+        run.move_to(
+            first.x + 20.0 + (k as f32 * 0.1).sin() * 300.0,
+            first.y + 20.0 + (k as f32 * 0.07).cos() * 150.0,
+        );
         run.step(&mut demo);
         let start = std::time::Instant::now();
         run.draw(&mut demo);
@@ -416,7 +642,12 @@ fn bench() {
     }
     times.sort_by(|a, b| a.partial_cmp(b).expect("times"));
     let mean = times.iter().sum::<f64>() / times.len() as f64;
-    println!("12 papeles a 2560×1440: media {:.2} ms, p95 {:.2} ms, peor {:.2} ms", mean, times[times.len() * 95 / 100], times[times.len() - 1]);
+    println!(
+        "12 papeles a 2560×1440: media {:.2} ms, p95 {:.2} ms, peor {:.2} ms",
+        mean,
+        times[times.len() * 95 / 100],
+        times[times.len() - 1]
+    );
 }
 
 /// A scripted scene without a window, saved to a PNG: a paper dragged, two fields compared, a stamp.
@@ -424,13 +655,22 @@ fn capture(path: &str) {
     let mut run = Headless::new(HostConfig::new("desk-demo"), 2560, 1440);
     let mut demo = Demo::new();
     let first = demo.desk.item(1).expect("paper 1").pos;
-    run.push(InputEvent::PointerDown { button: Button::Left, at: CPoint::new(first.x + 40.0, first.y + 30.0) });
+    run.push(InputEvent::PointerDown {
+        button: Button::Left,
+        at: CPoint::new(first.x + 40.0, first.y + 30.0),
+    });
     run.step(&mut demo);
     for k in 1..=10 {
-        run.move_to(first.x + 40.0 + k as f32 * 6.0, first.y + 30.0 + k as f32 * 20.0);
+        run.move_to(
+            first.x + 40.0 + k as f32 * 6.0,
+            first.y + 30.0 + k as f32 * 20.0,
+        );
         run.step(&mut demo);
     }
-    run.push(InputEvent::PointerUp { button: Button::Left, at: CPoint::new(first.x + 100.0, first.y + 230.0) });
+    run.push(InputEvent::PointerUp {
+        button: Button::Left,
+        at: CPoint::new(first.x + 100.0, first.y + 230.0),
+    });
     run.step(&mut demo);
     run.push(InputEvent::KeyDown(KeyCode::Space));
     run.step(&mut demo);
@@ -457,7 +697,11 @@ fn main() {
         return;
     }
     if let Some(i) = args.iter().position(|a| a == "--capture") {
-        capture(args.get(i + 1).map(String::as_str).unwrap_or("desk-demo.png"));
+        capture(
+            args.get(i + 1)
+                .map(String::as_str)
+                .unwrap_or("desk-demo.png"),
+        );
         return;
     }
     let mut config = HostConfig::new("Velvet · escritorio");

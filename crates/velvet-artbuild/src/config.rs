@@ -87,7 +87,7 @@ pub struct BuildConfig {
     pub formats: Vec<OutputFormat>,
     /// The quality of the lossy formats.
     pub quality: Quality,
-    /// Output pixels per logical pixel, from 1 to [`MAX_SCALE`]. Defaults to 1.
+    /// Output pixels per logical pixel, from 1 to `MAX_SCALE` (4). Defaults to 1.
     pub scale: u32,
     /// The size limit of one output, in bytes. Outputs above it are listed in the report.
     pub max_bytes: u64,

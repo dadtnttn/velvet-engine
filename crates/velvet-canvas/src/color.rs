@@ -29,19 +29,32 @@ impl Color {
 
     /// A colour from `0xRRGGBBAA`.
     pub const fn hexa(rgba: u32) -> Self {
-        Self::rgba((rgba >> 24) as u8, (rgba >> 16) as u8, (rgba >> 8) as u8, rgba as u8)
+        Self::rgba(
+            (rgba >> 24) as u8,
+            (rgba >> 16) as u8,
+            (rgba >> 8) as u8,
+            rgba as u8,
+        )
     }
 
     /// The same colour with its alpha multiplied by `factor` (0 to 1).
     pub fn fade(self, factor: f32) -> Self {
-        Self { a: (self.a as f32 * factor.clamp(0.0, 1.0)).round() as u8, ..self }
+        Self {
+            a: (self.a as f32 * factor.clamp(0.0, 1.0)).round() as u8,
+            ..self
+        }
     }
 
     /// The colour mixed towards `other` by `t` (0 gives this colour, 1 gives `other`).
     pub fn mix(self, other: Color, t: f32) -> Self {
         let t = t.clamp(0.0, 1.0);
         let lerp = |a: u8, b: u8| (a as f32 + (b as f32 - a as f32) * t).round() as u8;
-        Self::rgba(lerp(self.r, other.r), lerp(self.g, other.g), lerp(self.b, other.b), lerp(self.a, other.a))
+        Self::rgba(
+            lerp(self.r, other.r),
+            lerp(self.g, other.g),
+            lerp(self.b, other.b),
+            lerp(self.a, other.a),
+        )
     }
 
     pub(crate) fn to_skia(self) -> tiny_skia::Color {
@@ -61,7 +74,10 @@ mod tests {
 
     #[test]
     fn mix_and_fade() {
-        assert_eq!(Color::BLACK.mix(Color::WHITE, 0.5), Color::rgba(128, 128, 128, 255));
+        assert_eq!(
+            Color::BLACK.mix(Color::WHITE, 0.5),
+            Color::rgba(128, 128, 128, 255)
+        );
         assert_eq!(Color::WHITE.fade(0.5).a, 128);
     }
 }

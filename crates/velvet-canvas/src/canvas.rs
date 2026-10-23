@@ -4,8 +4,8 @@
 use std::sync::Arc;
 
 use tiny_skia::{
-    BlendMode, FillRule, FilterQuality, GradientStop, LineCap, LineJoin, LinearGradient, Mask, Paint, Pixmap, PixmapPaint,
-    RadialGradient, SpreadMode, Stroke, StrokeDash, Transform,
+    BlendMode, FillRule, FilterQuality, GradientStop, LineCap, LineJoin, LinearGradient, Mask,
+    Paint, Pixmap, PixmapPaint, RadialGradient, SpreadMode, Stroke, StrokeDash, Transform,
 };
 
 use std::collections::HashMap;
@@ -55,8 +55,16 @@ impl Blend {
 #[derive(Debug, Clone)]
 pub enum Fill {
     Solid(Color),
-    Linear { from: Point, to: Point, stops: Vec<(f32, Color)> },
-    Radial { center: Point, radius: f32, stops: Vec<(f32, Color)> },
+    Linear {
+        from: Point,
+        to: Point,
+        stops: Vec<(f32, Color)>,
+    },
+    Radial {
+        center: Point,
+        radius: f32,
+        stops: Vec<(f32, Color)>,
+    },
 }
 
 impl From<Color> for Fill {
@@ -77,7 +85,12 @@ pub struct StrokeStyle {
 
 impl StrokeStyle {
     pub fn new(width: f32, color: Color) -> Self {
-        Self { width, color, round: true, dash: None }
+        Self {
+            width,
+            color,
+            round: true,
+            dash: None,
+        }
     }
 
     /// Square ends and sharp corners.
@@ -149,7 +162,12 @@ impl Canvas {
             height,
             k,
             pixmap,
-            state: State { transform: Transform::identity(), clip: None, opacity: 1.0, blend: Blend::Normal },
+            state: State {
+                transform: Transform::identity(),
+                clip: None,
+                opacity: 1.0,
+                blend: Blend::Normal,
+            },
             saved: Vec::new(),
             shadows: HashMap::new(),
         }
@@ -160,7 +178,12 @@ impl Canvas {
     pub fn layer(&self, width: f32, height: f32) -> Canvas {
         // The layer keeps this canvas's exact k (its pixels are rounded up around it): drawn back at scale 1 it is a
         // plain copy, not a resampling.
-        let mut layer = Canvas::with_pixels(width, height, (width * self.k).ceil() as u32, (height * self.k).ceil() as u32);
+        let mut layer = Canvas::with_pixels(
+            width,
+            height,
+            (width * self.k).ceil() as u32,
+            (height * self.k).ceil() as u32,
+        );
         layer.k = self.k;
         layer
     }
@@ -207,7 +230,9 @@ impl Canvas {
 
     /// One pixel, premultiplied RGBA, or None outside the canvas.
     pub fn pixel(&self, x: u32, y: u32) -> Option<[u8; 4]> {
-        self.pixmap.pixel(x, y).map(|c| [c.red(), c.green(), c.blue(), c.alpha()])
+        self.pixmap
+            .pixel(x, y)
+            .map(|c| [c.red(), c.green(), c.blue(), c.alpha()])
     }
 
     /// Writes the pixels to a PNG file (for tests and captures).
@@ -244,7 +269,10 @@ impl Canvas {
 
     /// Turns what is drawn next around the current origin, in degrees (clockwise on screen).
     pub fn rotate(&mut self, degrees: f32) {
-        self.state.transform = self.state.transform.pre_concat(Transform::from_rotate(degrees));
+        self.state.transform = self
+            .state
+            .transform
+            .pre_concat(Transform::from_rotate(degrees));
     }
 
     /// Multiplies the opacity of what is drawn next.
@@ -274,7 +302,8 @@ impl Canvas {
                 mask
             }
             None => {
-                let mut mask = Mask::new(self.pixmap.width(), self.pixmap.height()).expect("a mask the canvas's size");
+                let mut mask = Mask::new(self.pixmap.width(), self.pixmap.height())
+                    .expect("a mask the canvas's size");
                 mask.fill_path(&path.0, FillRule::Winding, true, t);
                 mask
             }
@@ -332,22 +361,44 @@ impl Canvas {
     }
 
     pub fn fill_path(&mut self, path: &Path, fill: &Fill) {
-        let Some(paint) = self.paint(fill) else { return };
+        let Some(paint) = self.paint(fill) else {
+            return;
+        };
         let t = self.to_pixels();
-        self.pixmap.fill_path(&path.0, &paint, FillRule::Winding, t, self.state.clip.as_deref());
+        self.pixmap.fill_path(
+            &path.0,
+            &paint,
+            FillRule::Winding,
+            t,
+            self.state.clip.as_deref(),
+        );
     }
 
     pub fn stroke_path(&mut self, path: &Path, stroke: &StrokeStyle) {
-        let Some(paint) = self.paint(&Fill::Solid(stroke.color)) else { return };
+        let Some(paint) = self.paint(&Fill::Solid(stroke.color)) else {
+            return;
+        };
         let t = self.to_pixels();
         let skia = Stroke {
             width: stroke.width,
-            line_cap: if stroke.round { LineCap::Round } else { LineCap::Butt },
-            line_join: if stroke.round { LineJoin::Round } else { LineJoin::Miter },
-            dash: stroke.dash.as_ref().and_then(|d| StrokeDash::new(d.clone(), 0.0)),
+            line_cap: if stroke.round {
+                LineCap::Round
+            } else {
+                LineCap::Butt
+            },
+            line_join: if stroke.round {
+                LineJoin::Round
+            } else {
+                LineJoin::Miter
+            },
+            dash: stroke
+                .dash
+                .as_ref()
+                .and_then(|d| StrokeDash::new(d.clone(), 0.0)),
             ..Stroke::default()
         };
-        self.pixmap.stroke_path(&path.0, &paint, &skia, t, self.state.clip.as_deref());
+        self.pixmap
+            .stroke_path(&path.0, &paint, &skia, t, self.state.clip.as_deref());
     }
 
     /// A soft shadow under a rounded rectangle: the shape moved by `offset` and blurred by about `blur` logical pixels.
@@ -369,16 +420,31 @@ impl Canvas {
             color,
         };
         if !self.shadows.contains_key(&key) {
-            let Some(pixmap) = blurred_shadow(key, pad) else { return };
+            let Some(pixmap) = blurred_shadow(key, pad) else {
+                return;
+            };
             if self.shadows.len() >= 48 {
                 self.shadows.clear();
             }
             self.shadows.insert(key, pixmap);
         }
         let pixmap = &self.shadows[&key];
-        let place = t.pre_translate(r.x + offset.x, r.y + offset.y).pre_scale(1.0 / s, 1.0 / s).pre_translate(-pad, -pad);
-        let paint = PixmapPaint { opacity: 1.0, blend_mode: BlendMode::SourceOver, quality: FilterQuality::Bilinear };
-        draw_pixels(&mut self.pixmap, pixmap, &paint, place, self.state.clip.as_deref());
+        let place = t
+            .pre_translate(r.x + offset.x, r.y + offset.y)
+            .pre_scale(1.0 / s, 1.0 / s)
+            .pre_translate(-pad, -pad);
+        let paint = PixmapPaint {
+            opacity: 1.0,
+            blend_mode: BlendMode::SourceOver,
+            quality: FilterQuality::Bilinear,
+        };
+        draw_pixels(
+            &mut self.pixmap,
+            pixmap,
+            &paint,
+            place,
+            self.state.clip.as_deref(),
+        );
     }
 
     // ---- pictures ---------------------------------------------------------------------------------------------------
@@ -387,12 +453,17 @@ impl Canvas {
     pub fn draw_image(&mut self, image: &Image, dst: Rect, opacity: f32) {
         let base = self.to_pixels();
         let s = scale_of(&base);
-        let (pw, ph) = ((dst.w * s).round().max(1.0) as u32, (dst.h * s).round().max(1.0) as u32);
+        let (pw, ph) = (
+            (dst.w * s).round().max(1.0) as u32,
+            (dst.h * s).round().max(1.0) as u32,
+        );
         let paint = self.pixmap_paint(opacity);
         let mask = self.state.clip.clone();
         let target = &mut self.pixmap;
         image.pixels_for(pw, ph, |src| {
-            let t = base.pre_translate(dst.x, dst.y).pre_scale(dst.w / src.width() as f32, dst.h / src.height() as f32);
+            let t = base
+                .pre_translate(dst.x, dst.y)
+                .pre_scale(dst.w / src.width() as f32, dst.h / src.height() as f32);
             draw_pixels(target, src, &paint, t, mask.as_deref());
         });
     }
@@ -411,14 +482,27 @@ impl Canvas {
     }
 
     /// Draws a layer (see `layer`) with its top-left corner at `at`, scaled and turned (in degrees) around that corner.
-    pub fn draw_layer(&mut self, layer: &Canvas, at: Point, scale: f32, rotation: f32, opacity: f32) {
+    pub fn draw_layer(
+        &mut self,
+        layer: &Canvas,
+        at: Point,
+        scale: f32,
+        rotation: f32,
+        opacity: f32,
+    ) {
         let t = self
             .to_pixels()
             .pre_translate(at.x, at.y)
             .pre_concat(Transform::from_rotate(rotation))
             .pre_scale(scale / layer.k, scale / layer.k);
         let paint = self.pixmap_paint(opacity);
-        draw_pixels(&mut self.pixmap, &layer.pixmap, &paint, t, self.state.clip.as_deref());
+        draw_pixels(
+            &mut self.pixmap,
+            &layer.pixmap,
+            &paint,
+            t,
+            self.state.clip.as_deref(),
+        );
     }
 
     /// Draws an SVG document into a rectangle, rendered at the pixels it takes there.
@@ -426,12 +510,17 @@ impl Canvas {
     pub fn draw_svg(&mut self, svg: &crate::svg::Svg, dst: Rect, opacity: f32) {
         let base = self.to_pixels();
         let s = scale_of(&base);
-        let (pw, ph) = ((dst.w * s).round().max(1.0) as u32, (dst.h * s).round().max(1.0) as u32);
+        let (pw, ph) = (
+            (dst.w * s).round().max(1.0) as u32,
+            (dst.h * s).round().max(1.0) as u32,
+        );
         let paint = self.pixmap_paint(opacity);
         let mask = self.state.clip.clone();
         let target = &mut self.pixmap;
         svg.pixels_for(pw, ph, |src| {
-            let t = base.pre_translate(dst.x, dst.y).pre_scale(dst.w / src.width() as f32, dst.h / src.height() as f32);
+            let t = base
+                .pre_translate(dst.x, dst.y)
+                .pre_scale(dst.w / src.width() as f32, dst.h / src.height() as f32);
             draw_pixels(target, src, &paint, t, mask.as_deref());
         });
     }
@@ -452,9 +541,23 @@ impl Canvas {
         let scale = style.font.scale(style.size);
         if let Some((offset, color)) = style.shadow {
             if let Some((w, _)) = style.outline {
-                self.glyphs(&glyphs, left + offset.x, baseline + offset.y, scale, color, Some(w));
+                self.glyphs(
+                    &glyphs,
+                    left + offset.x,
+                    baseline + offset.y,
+                    scale,
+                    color,
+                    Some(w),
+                );
             }
-            self.glyphs(&glyphs, left + offset.x, baseline + offset.y, scale, color, None);
+            self.glyphs(
+                &glyphs,
+                left + offset.x,
+                baseline + offset.y,
+                scale,
+                color,
+                None,
+            );
         }
         if let Some((w, color)) = style.outline {
             self.glyphs(&glyphs, left, baseline, scale, color, Some(w));
@@ -466,26 +569,55 @@ impl Canvas {
     /// Draws a line of text along a circle, centred at `angle` (degrees, 0 at the top, clockwise), its baseline on the
     /// circle. Over the top (`clockwise`) the letters stand outwards and read left to right; along the bottom (not
     /// `clockwise`) they hang inwards and read left to right too: the two halves of a seal's ring.
-    pub fn text_on_arc(&mut self, text: &str, center: Point, radius: f32, angle: f32, clockwise: bool, style: &TextStyle) {
+    pub fn text_on_arc(
+        &mut self,
+        text: &str,
+        center: Point,
+        radius: f32,
+        angle: f32,
+        clockwise: bool,
+        style: &TextStyle,
+    ) {
         let radius = radius.max(1.0);
-        let letters: Vec<(String, f32)> = text.chars().map(|c| {
-            let s = c.to_string();
-            let w = style.measure(&s) + style.letter_spacing;
-            (s, w)
-        }).collect();
+        let letters: Vec<(String, f32)> = text
+            .chars()
+            .map(|c| {
+                let s = c.to_string();
+                let w = style.measure(&s) + style.letter_spacing;
+                (s, w)
+            })
+            .collect();
         let total: f32 = letters.iter().map(|(_, w)| *w).sum::<f32>() - style.letter_spacing;
         let span = total / radius;
-        let single = TextStyle { align: Align::Center, ..style.clone() };
+        let single = TextStyle {
+            align: Align::Center,
+            ..style.clone()
+        };
         let mut along = 0.0;
         for (letter, w) in &letters {
             let middle = (along + (w - style.letter_spacing) / 2.0) / radius;
             along += w;
-            let theta = if clockwise { angle.to_radians() - span / 2.0 + middle } else { angle.to_radians() + span / 2.0 - middle };
-            let at = Point::new(center.x + radius * theta.sin(), center.y - radius * theta.cos());
+            let theta = if clockwise {
+                angle.to_radians() - span / 2.0 + middle
+            } else {
+                angle.to_radians() + span / 2.0 - middle
+            };
+            let at = Point::new(
+                center.x + radius * theta.sin(),
+                center.y - radius * theta.cos(),
+            );
             self.save();
             self.translate(at.x, at.y);
-            self.rotate(if clockwise { theta.to_degrees() } else { theta.to_degrees() - 180.0 });
-            let y = if clockwise { -single.baseline_offset() } else { -single.baseline_offset() + single.font.ascent(single.size) * 0.72 };
+            self.rotate(if clockwise {
+                theta.to_degrees()
+            } else {
+                theta.to_degrees() - 180.0
+            });
+            let y = if clockwise {
+                -single.baseline_offset()
+            } else {
+                -single.baseline_offset() + single.font.ascent(single.size) * 0.72
+            };
             self.text(letter, 0.0, y, &single);
             self.restore();
         }
@@ -507,16 +639,42 @@ impl Canvas {
     }
 
     /// Fills (or, with `outline`, strokes by that many logical pixels outside) the glyphs of a line.
-    fn glyphs(&mut self, glyphs: &[(Option<tiny_skia::Path>, f32)], left: f32, baseline: f32, scale: f32, color: Color, outline: Option<f32>) {
-        let Some(paint) = self.paint(&Fill::Solid(color)) else { return };
+    fn glyphs(
+        &mut self,
+        glyphs: &[(Option<tiny_skia::Path>, f32)],
+        left: f32,
+        baseline: f32,
+        scale: f32,
+        color: Color,
+        outline: Option<f32>,
+    ) {
+        let Some(paint) = self.paint(&Fill::Solid(color)) else {
+            return;
+        };
         let base = self.to_pixels();
-        let stroke = outline.map(|w| Stroke { width: 2.0 * w / scale, line_join: LineJoin::Round, line_cap: LineCap::Round, ..Stroke::default() });
+        let stroke = outline.map(|w| Stroke {
+            width: 2.0 * w / scale,
+            line_join: LineJoin::Round,
+            line_cap: LineCap::Round,
+            ..Stroke::default()
+        });
         for (path, pen) in glyphs {
             let Some(path) = path else { continue };
-            let t = base.pre_translate(left + pen, baseline).pre_scale(scale, scale);
+            let t = base
+                .pre_translate(left + pen, baseline)
+                .pre_scale(scale, scale);
             match &stroke {
-                Some(stroke) => self.pixmap.stroke_path(path, &paint, stroke, t, self.state.clip.as_deref()),
-                None => self.pixmap.fill_path(path, &paint, FillRule::Winding, t, self.state.clip.as_deref()),
+                Some(stroke) => {
+                    self.pixmap
+                        .stroke_path(path, &paint, stroke, t, self.state.clip.as_deref())
+                }
+                None => self.pixmap.fill_path(
+                    path,
+                    &paint,
+                    FillRule::Winding,
+                    t,
+                    self.state.clip.as_deref(),
+                ),
             }
         }
     }
@@ -525,9 +683,16 @@ impl Canvas {
 
     fn paint(&self, fill: &Fill) -> Option<Paint<'static>> {
         let opacity = self.state.opacity;
-        let mut paint = Paint { anti_alias: true, blend_mode: self.state.blend.mode(), ..Paint::default() };
+        let mut paint = Paint {
+            anti_alias: true,
+            blend_mode: self.state.blend.mode(),
+            ..Paint::default()
+        };
         let stops = |stops: &[(f32, Color)]| -> Vec<GradientStop> {
-            stops.iter().map(|(at, c)| GradientStop::new(*at, c.fade(opacity).to_skia())).collect()
+            stops
+                .iter()
+                .map(|(at, c)| GradientStop::new(*at, c.fade(opacity).to_skia()))
+                .collect()
         };
         match fill {
             Fill::Solid(c) => {
@@ -536,7 +701,11 @@ impl Canvas {
                 }
                 paint.set_color(c.fade(opacity).to_skia());
             }
-            Fill::Linear { from, to, stops: list } => {
+            Fill::Linear {
+                from,
+                to,
+                stops: list,
+            } => {
                 let shader = LinearGradient::new(
                     tiny_skia::Point::from_xy(from.x, from.y),
                     tiny_skia::Point::from_xy(to.x, to.y),
@@ -549,9 +718,20 @@ impl Canvas {
                     None => paint.set_color(list.first()?.1.fade(opacity).to_skia()),
                 }
             }
-            Fill::Radial { center, radius, stops: list } => {
+            Fill::Radial {
+                center,
+                radius,
+                stops: list,
+            } => {
                 let c = tiny_skia::Point::from_xy(center.x, center.y);
-                match RadialGradient::new(c, c, *radius, stops(list), SpreadMode::Pad, Transform::identity()) {
+                match RadialGradient::new(
+                    c,
+                    c,
+                    *radius,
+                    stops(list),
+                    SpreadMode::Pad,
+                    Transform::identity(),
+                ) {
                     Some(shader) => paint.shader = shader,
                     None => paint.set_color(list.first()?.1.fade(opacity).to_skia()),
                 }
@@ -561,21 +741,48 @@ impl Canvas {
     }
 
     fn pixmap_paint(&self, opacity: f32) -> PixmapPaint {
-        PixmapPaint { opacity: (opacity * self.state.opacity).clamp(0.0, 1.0), blend_mode: self.state.blend.mode(), quality: FilterQuality::Bilinear }
+        PixmapPaint {
+            opacity: (opacity * self.state.opacity).clamp(0.0, 1.0),
+            blend_mode: self.state.blend.mode(),
+            quality: FilterQuality::Bilinear,
+        }
     }
 }
 
 /// Draws pixels with a transform. A copy that only moves (no scale, no turn) is put on whole pixels and copied as it
 /// is: a layer drawn at its own size stays as sharp as when it was drawn.
-fn draw_pixels(target: &mut Pixmap, src: &Pixmap, paint: &PixmapPaint, t: Transform, mask: Option<&Mask>) {
-    let only_moves = t.kx.abs() < 1e-5 && t.ky.abs() < 1e-5 && (t.sx - 1.0).abs() < 1e-4 && (t.sy - 1.0).abs() < 1e-4;
-    if only_moves && mask.is_none() && paint.opacity >= 1.0 && paint.blend_mode == BlendMode::SourceOver {
+fn draw_pixels(
+    target: &mut Pixmap,
+    src: &Pixmap,
+    paint: &PixmapPaint,
+    t: Transform,
+    mask: Option<&Mask>,
+) {
+    let only_moves = t.kx.abs() < 1e-5
+        && t.ky.abs() < 1e-5
+        && (t.sx - 1.0).abs() < 1e-4
+        && (t.sy - 1.0).abs() < 1e-4;
+    if only_moves
+        && mask.is_none()
+        && paint.opacity >= 1.0
+        && paint.blend_mode == BlendMode::SourceOver
+    {
         blend_over(target, src, t.tx.round() as i32, t.ty.round() as i32);
         return;
     }
     if only_moves {
-        let paint = PixmapPaint { quality: FilterQuality::Nearest, ..*paint };
-        target.draw_pixmap(t.tx.round() as i32, t.ty.round() as i32, src.as_ref(), &paint, Transform::identity(), mask);
+        let paint = PixmapPaint {
+            quality: FilterQuality::Nearest,
+            ..*paint
+        };
+        target.draw_pixmap(
+            t.tx.round() as i32,
+            t.ty.round() as i32,
+            src.as_ref(),
+            &paint,
+            Transform::identity(),
+            mask,
+        );
     } else {
         target.draw_pixmap(0, 0, src.as_ref(), paint, t, mask);
     }
@@ -586,10 +793,18 @@ fn blurred_shadow(key: ShadowKey, pad: f32) -> Option<Pixmap> {
     let pad_px = pad.ceil() as u32;
     let (w, h) = (key.w + 2 * pad_px, key.h + 2 * pad_px);
     let mut mask = Mask::new(w, h)?;
-    let path = Path::round_rect(Rect::new(pad, pad, key.w as f32, key.h as f32), key.radius as f32)?;
+    let path = Path::round_rect(
+        Rect::new(pad, pad, key.w as f32, key.h as f32),
+        key.radius as f32,
+    )?;
     mask.fill_path(&path.0, FillRule::Winding, true, Transform::identity());
     let mut alpha = mask.data().to_vec();
-    blur_mask(&mut alpha, w as usize, h as usize, (key.blur as f32 / 2.0).round().max(1.0) as usize);
+    blur_mask(
+        &mut alpha,
+        w as usize,
+        h as usize,
+        (key.blur as f32 / 2.0).round().max(1.0) as usize,
+    );
     let mut pixmap = Pixmap::new(w, h)?;
     let c = key.color;
     let data = pixmap.data_mut();
@@ -667,8 +882,16 @@ mod tests {
         let mut c = Canvas::with_pixels(100.0, 50.0, 200, 100);
         assert_eq!(c.k(), 2.0);
         c.fill_rect(Rect::new(10.0, 10.0, 20.0, 10.0), &RED.into());
-        assert_eq!(c.pixel(25, 25), Some([255, 0, 0, 255]), "logical (12.5, 12.5)");
-        assert_eq!(c.pixel(61, 25), Some([0, 0, 0, 0]), "past the right edge at logical 30");
+        assert_eq!(
+            c.pixel(25, 25),
+            Some([255, 0, 0, 255]),
+            "logical (12.5, 12.5)"
+        );
+        assert_eq!(
+            c.pixel(61, 25),
+            Some([0, 0, 0, 0]),
+            "past the right edge at logical 30"
+        );
     }
 
     #[test]
@@ -680,7 +903,11 @@ mod tests {
         c.multiply_opacity(0.5);
         c.fill_rect(Rect::new(0.0, 0.0, 20.0, 20.0), &RED.into());
         c.restore();
-        assert_eq!(c.pixel(25, 5).map(|p| p[3]), Some(128), "translated, clipped, half opaque");
+        assert_eq!(
+            c.pixel(25, 5).map(|p| p[3]),
+            Some(128),
+            "translated, clipped, half opaque"
+        );
         assert_eq!(c.pixel(25, 15), Some([0, 0, 0, 0]), "outside the clip");
         c.fill_rect(Rect::new(0.0, 0.0, 5.0, 5.0), &BLUE.into());
         assert_eq!(c.pixel(2, 2), Some([0, 0, 255, 255]), "back to the start");
@@ -711,7 +938,11 @@ mod tests {
     fn a_moved_layer_blends_like_the_general_path() {
         let base = Canvas::new(40.0, 40.0);
         let mut layer = base.layer(20.0, 20.0);
-        layer.fill_circle(Point::new(10.0, 10.0), 9.0, &Color::rgba(200, 40, 90, 160).into());
+        layer.fill_circle(
+            Point::new(10.0, 10.0),
+            9.0,
+            &Color::rgba(200, 40, 90, 160).into(),
+        );
         let mut fast = Canvas::new(40.0, 40.0);
         fast.clear(Color::hex(0x336699));
         let mut general = Canvas::new(40.0, 40.0);
@@ -727,7 +958,11 @@ mod tests {
     #[test]
     fn gradients_go_from_one_stop_to_the_other() {
         let mut c = Canvas::new(100.0, 10.0);
-        let fill = Fill::Linear { from: Point::new(0.0, 0.0), to: Point::new(100.0, 0.0), stops: vec![(0.0, RED), (1.0, BLUE)] };
+        let fill = Fill::Linear {
+            from: Point::new(0.0, 0.0),
+            to: Point::new(100.0, 0.0),
+            stops: vec![(0.0, RED), (1.0, BLUE)],
+        };
         c.fill_rect(Rect::new(0.0, 0.0, 100.0, 10.0), &fill);
         let left = c.pixel(1, 5).unwrap();
         let right = c.pixel(98, 5).unwrap();
@@ -738,7 +973,13 @@ mod tests {
     #[test]
     fn shadows_are_soft_and_offset() {
         let mut c = Canvas::new(100.0, 100.0);
-        c.shadow(Rect::new(30.0, 30.0, 40.0, 40.0), 6.0, 8.0, Point::new(0.0, 6.0), Color::BLACK.fade(0.5));
+        c.shadow(
+            Rect::new(30.0, 30.0, 40.0, 40.0),
+            6.0,
+            8.0,
+            Point::new(0.0, 6.0),
+            Color::BLACK.fade(0.5),
+        );
         let inside = c.pixel(50, 56).unwrap()[3];
         let edge = c.pixel(50, 76).unwrap()[3];
         let far = c.pixel(50, 99).unwrap()[3];
@@ -754,11 +995,21 @@ mod tests {
         let mut plain = Canvas::new(300.0, 60.0);
         let width = plain.text("Sello", 10.0, 10.0, &style);
         assert!((width - style.measure("Sello")).abs() < 0.01);
-        let inked = |c: &Canvas| (0..c.pixel_height()).flat_map(|y| (0..c.pixel_width()).map(move |x| (x, y))).filter(|&(x, y)| c.pixel(x, y).unwrap()[3] > 0).count();
+        let inked = |c: &Canvas| {
+            (0..c.pixel_height())
+                .flat_map(|y| (0..c.pixel_width()).map(move |x| (x, y)))
+                .filter(|&(x, y)| c.pixel(x, y).unwrap()[3] > 0)
+                .count()
+        };
         let plain_ink = inked(&plain);
         assert!(plain_ink > 200, "{plain_ink}");
         let mut outlined = Canvas::new(300.0, 60.0);
-        outlined.text("Sello", 10.0, 10.0, &style.clone().outline(3.0, Color::WHITE));
+        outlined.text(
+            "Sello",
+            10.0,
+            10.0,
+            &style.clone().outline(3.0, Color::WHITE),
+        );
         assert!(inked(&outlined) > plain_ink);
         // Nothing above the line box's top, nothing left of x.
         assert!((0..300).all(|x| plain.pixel(x, 5).unwrap()[3] == 0));
@@ -771,7 +1022,10 @@ mod tests {
         let mut c = Canvas::new(400.0, 60.0);
         let style = TextStyle::new(&font, 24.0, Color::BLACK).align(Align::Right);
         c.text("Velmira", 300.0, 10.0, &style);
-        let rightmost = (0..400u32).rev().find(|&x| (0..60).any(|y| c.pixel(x, y).unwrap()[3] > 0)).unwrap();
+        let rightmost = (0..400u32)
+            .rev()
+            .find(|&x| (0..60).any(|y| c.pixel(x, y).unwrap()[3] > 0))
+            .unwrap();
         assert!((290..=301).contains(&rightmost), "{rightmost}");
     }
 
@@ -784,24 +1038,44 @@ mod tests {
         assert_eq!(c.pixel(35, 20), Some([0, 0, 0, 0]));
         let big = Image::from_rgba(400, 400, [0u8, 0, 255, 255].repeat(160_000)).unwrap();
         c.draw_image(&big, Rect::new(0.0, 40.0, 10.0, 10.0), 1.0);
-        assert_eq!(c.pixel(5, 45), Some([0, 0, 255, 255]), "a big image drawn small");
+        assert_eq!(
+            c.pixel(5, 45),
+            Some([0, 0, 255, 255]),
+            "a big image drawn small"
+        );
     }
 
     #[test]
     fn blends_multiply_erase_and_come_back_with_restore() {
         let mut c = Canvas::new(40.0, 10.0);
-        c.fill_rect(Rect::new(0.0, 0.0, 40.0, 10.0), &Color::rgb(200, 100, 50).into());
+        c.fill_rect(
+            Rect::new(0.0, 0.0, 40.0, 10.0),
+            &Color::rgb(200, 100, 50).into(),
+        );
         c.save();
         c.set_blend(Blend::Multiply);
-        c.fill_rect(Rect::new(0.0, 0.0, 10.0, 10.0), &Color::rgb(128, 128, 128).into());
+        c.fill_rect(
+            Rect::new(0.0, 0.0, 10.0, 10.0),
+            &Color::rgb(128, 128, 128).into(),
+        );
         c.set_blend(Blend::Erase);
         c.fill_rect(Rect::new(10.0, 0.0, 10.0, 10.0), &Color::BLACK.into());
         c.restore();
-        c.fill_rect(Rect::new(20.0, 0.0, 10.0, 10.0), &Color::rgb(0, 0, 255).into());
+        c.fill_rect(
+            Rect::new(20.0, 0.0, 10.0, 10.0),
+            &Color::rgb(0, 0, 255).into(),
+        );
         let multiplied = c.pixel(5, 5).unwrap();
-        assert!((multiplied[0] as i32 - 100).abs() <= 2 && (multiplied[1] as i32 - 50).abs() <= 2, "{multiplied:?}");
+        assert!(
+            (multiplied[0] as i32 - 100).abs() <= 2 && (multiplied[1] as i32 - 50).abs() <= 2,
+            "{multiplied:?}"
+        );
         assert_eq!(c.pixel(15, 5).unwrap()[3], 0, "erased");
-        assert_eq!(c.pixel(25, 5), Some([0, 0, 255, 255]), "normal again after restore");
+        assert_eq!(
+            c.pixel(25, 5),
+            Some([0, 0, 255, 255]),
+            "normal again after restore"
+        );
     }
 
     #[test]
@@ -810,8 +1084,16 @@ mod tests {
         let mut c = Canvas::new(200.0, 200.0);
         let style = TextStyle::new(&font, 16.0, Color::BLACK);
         c.text_on_arc("ARRIBA", Point::new(100.0, 100.0), 70.0, 0.0, true, &style);
-        c.text_on_arc("ABAJO", Point::new(100.0, 100.0), 70.0, 180.0, false, &style);
-        let inked = |y0: u32, y1: u32| (y0..y1).any(|y| (0..200).any(|x| c.pixel(x, y).unwrap()[3] > 0));
+        c.text_on_arc(
+            "ABAJO",
+            Point::new(100.0, 100.0),
+            70.0,
+            180.0,
+            false,
+            &style,
+        );
+        let inked =
+            |y0: u32, y1: u32| (y0..y1).any(|y| (0..200).any(|x| c.pixel(x, y).unwrap()[3] > 0));
         assert!(inked(10, 45), "the top text sits round the top");
         assert!(inked(150, 190), "the bottom text sits round the bottom");
         assert!(!inked(60, 140), "nothing in the middle of the ring");
@@ -823,7 +1105,15 @@ mod tests {
         let svg = crate::svg::Svg::parse(r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><circle cx="5" cy="5" r="5" fill="#00ff00"/></svg>"##).unwrap();
         let mut c = Canvas::with_pixels(100.0, 100.0, 300, 300);
         c.draw_svg(&svg, Rect::new(10.0, 10.0, 20.0, 20.0), 1.0);
-        assert_eq!(c.pixel(60, 60), Some([0, 255, 0, 255]), "the middle of the circle, at 3 pixels a logical pixel");
-        assert_eq!(c.pixel(31, 31).map(|p| p[3]), Some(0), "the corner outside the circle");
+        assert_eq!(
+            c.pixel(60, 60),
+            Some([0, 255, 0, 255]),
+            "the middle of the circle, at 3 pixels a logical pixel"
+        );
+        assert_eq!(
+            c.pixel(31, 31).map(|p| p[3]),
+            Some(0),
+            "the corner outside the circle"
+        );
     }
 }

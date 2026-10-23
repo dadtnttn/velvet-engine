@@ -80,7 +80,10 @@ impl Item {
     pub fn to_desk(&self, p: Point) -> Point {
         let (sin, cos) = self.rotation.to_radians().sin_cos();
         let (x, y) = (p.x * self.scale, p.y * self.scale);
-        Point::new(self.pos.x + x * cos - y * sin, self.pos.y + x * sin + y * cos)
+        Point::new(
+            self.pos.x + x * cos - y * sin,
+            self.pos.y + x * sin + y * cos,
+        )
     }
 
     /// True when a point of the desk lies on the object.
@@ -97,7 +100,13 @@ impl Item {
 
     /// The smallest rectangle of the desk around the object.
     pub fn bounds(&self) -> Rect {
-        let corners = [Point::new(0.0, 0.0), Point::new(self.w, 0.0), Point::new(0.0, self.h), Point::new(self.w, self.h)].map(|c| self.to_desk(c));
+        let corners = [
+            Point::new(0.0, 0.0),
+            Point::new(self.w, 0.0),
+            Point::new(0.0, self.h),
+            Point::new(self.w, self.h),
+        ]
+        .map(|c| self.to_desk(c));
         let x0 = corners.iter().map(|c| c.x).fold(f32::MAX, f32::min);
         let y0 = corners.iter().map(|c| c.y).fold(f32::MAX, f32::min);
         let x1 = corners.iter().map(|c| c.x).fold(f32::MIN, f32::max);
@@ -131,7 +140,11 @@ pub enum DeskEvent {
     Dropped { item: ItemId, zone: Option<String> },
     /// An object was clicked (pressed and released without moving): the point in its own coordinates and the field
     /// there, if any.
-    Clicked { item: ItemId, local: Point, field: Option<String> },
+    Clicked {
+        item: ItemId,
+        local: Point,
+        field: Option<String>,
+    },
     /// The second click of a double click on the same object.
     DoubleClicked { item: ItemId, field: Option<String> },
     /// A press on no object.
@@ -187,7 +200,16 @@ impl Desk {
     /// Puts an object on top of the desk (replacing one with the same id).
     pub fn add_item(&mut self, id: ItemId, w: f32, h: f32, pos: Point, rotation: f32) {
         self.remove_item(id);
-        self.items.push(Item { id, w, h, pos, rotation, scale: 1.0, draggable: true, fields: Vec::new() });
+        self.items.push(Item {
+            id,
+            w,
+            h,
+            pos,
+            rotation,
+            scale: 1.0,
+            draggable: true,
+            fields: Vec::new(),
+        });
     }
 
     /// Takes an object off the desk, with its marks; its drag and its magnification end.
@@ -206,7 +228,10 @@ impl Desk {
     /// Adds a named field to an object, in its own coordinates.
     pub fn add_field(&mut self, id: ItemId, name: &str, rect: Rect) {
         if let Some(item) = self.item_mut(id) {
-            item.fields.push(Field { name: name.to_string(), rect });
+            item.fields.push(Field {
+                name: name.to_string(),
+                rect,
+            });
         }
     }
 
@@ -233,7 +258,11 @@ impl Desk {
 
     /// The topmost object under a point of the desk.
     pub fn item_at(&self, p: Point) -> Option<ItemId> {
-        self.items.iter().rev().find(|i| i.contains(p)).map(|i| i.id)
+        self.items
+            .iter()
+            .rev()
+            .find(|i| i.contains(p))
+            .map(|i| i.id)
     }
 
     /// The field under a point of the desk, on the topmost object there.
@@ -246,7 +275,10 @@ impl Desk {
 
     pub fn add_zone(&mut self, name: &str, rect: Rect) {
         self.zones.retain(|z| z.name != name);
-        self.zones.push(Zone { name: name.to_string(), rect });
+        self.zones.push(Zone {
+            name: name.to_string(),
+            rect,
+        });
     }
 
     pub fn zones(&self) -> &[Zone] {
@@ -268,7 +300,12 @@ impl Desk {
         };
         self.raise(id);
         let item = self.item(id)?;
-        self.drag = Some(Drag { item: id, grab: item.to_local(p), start: p, moved: false });
+        self.drag = Some(Drag {
+            item: id,
+            grab: item.to_local(p),
+            start: p,
+            moved: false,
+        });
         Some(DeskEvent::Picked { item: id })
     }
 
@@ -288,7 +325,10 @@ impl Desk {
         }
         // The grabbed point goes under the pointer.
         let grabbed_now = item.to_desk(grab);
-        item.pos = Point::new(item.pos.x + p.x - grabbed_now.x, item.pos.y + p.y - grabbed_now.y);
+        item.pos = Point::new(
+            item.pos.x + p.x - grabbed_now.x,
+            item.pos.y + p.y - grabbed_now.y,
+        );
         // And the object stays on the desk.
         let b = item.bounds();
         let (min_w, min_h) = (b.w * keep, b.h * keep);
@@ -317,7 +357,10 @@ impl Desk {
         if drag.moved {
             self.last_click = None;
             let zone = self.zone_at(p).map(|z| z.name.clone());
-            return Some(DeskEvent::Dropped { item: drag.item, zone });
+            return Some(DeskEvent::Dropped {
+                item: drag.item,
+                zone,
+            });
         }
         let item = self.item(drag.item)?;
         let local = item.to_local(p);
@@ -325,10 +368,17 @@ impl Desk {
         let double = matches!(self.last_click, Some((id, at)) if id == drag.item && now - at <= self.double_click_time);
         if double {
             self.last_click = None;
-            return Some(DeskEvent::DoubleClicked { item: drag.item, field });
+            return Some(DeskEvent::DoubleClicked {
+                item: drag.item,
+                field,
+            });
         }
         self.last_click = Some((drag.item, now));
-        Some(DeskEvent::Clicked { item: drag.item, local, field })
+        Some(DeskEvent::Clicked {
+            item: drag.item,
+            local,
+            field,
+        })
     }
 
     /// The object being dragged, if any.
@@ -357,16 +407,29 @@ impl Desk {
     /// Marks the field of an object of the desk (its centre is where the mark is drawn). Marking a marked field takes
     /// the mark off; a third mark replaces the oldest. Returns the marks now.
     pub fn mark_field(&mut self, id: ItemId, field: &str) -> &[Mark] {
-        let at = self.item(id).and_then(|i| i.fields.iter().find(|f| f.name == field).map(|f| i.to_desk(f.rect.center())));
+        let at = self.item(id).and_then(|i| {
+            i.fields
+                .iter()
+                .find(|f| f.name == field)
+                .map(|f| i.to_desk(f.rect.center()))
+        });
         if let Some(at) = at {
-            self.mark(Mark { owner: id, field: field.to_string(), at });
+            self.mark(Mark {
+                owner: id,
+                field: field.to_string(),
+                at,
+            });
         }
         &self.marks
     }
 
     /// Adds a mark from anywhere (a rule of a book, a feature seen through a window): same rules as `mark_field`.
     pub fn mark(&mut self, mark: Mark) -> &[Mark] {
-        if let Some(index) = self.marks.iter().position(|m| m.owner == mark.owner && m.field == mark.field) {
+        if let Some(index) = self
+            .marks
+            .iter()
+            .position(|m| m.owner == mark.owner && m.field == mark.field)
+        {
             self.marks.remove(index);
             return &self.marks;
         }
@@ -394,7 +457,12 @@ impl Desk {
     pub fn refresh_marks(&mut self) {
         for i in 0..self.marks.len() {
             let (owner, field) = (self.marks[i].owner, self.marks[i].field.clone());
-            if let Some(at) = self.item(owner).and_then(|item| item.fields.iter().find(|f| f.name == field).map(|f| item.to_desk(f.rect.center()))) {
+            if let Some(at) = self.item(owner).and_then(|item| {
+                item.fields
+                    .iter()
+                    .find(|f| f.name == field)
+                    .map(|f| item.to_desk(f.rect.center()))
+            }) {
                 self.marks[i].at = at;
             }
         }
@@ -434,11 +502,21 @@ mod tests {
     fn a_dragged_object_keeps_the_grabbed_point_under_the_pointer() {
         let mut d = desk();
         d.pointer_down(Point::new(110.0, 110.0), 0.0);
-        assert_eq!(d.pointer_move(Point::new(112.0, 110.0)), None, "under the threshold");
+        assert_eq!(
+            d.pointer_move(Point::new(112.0, 110.0)),
+            None,
+            "under the threshold"
+        );
         assert_eq!(d.pointer_move(Point::new(410.0, 310.0)), Some(1));
         assert_eq!(d.item(1).unwrap().pos, Point::new(400.0, 300.0));
         assert_eq!(d.dragging(), Some(1));
-        assert_eq!(d.pointer_up(Point::new(410.0, 310.0), 0.2), Some(DeskEvent::Dropped { item: 1, zone: None }));
+        assert_eq!(
+            d.pointer_up(Point::new(410.0, 310.0), 0.2),
+            Some(DeskEvent::Dropped {
+                item: 1,
+                zone: None
+            })
+        );
         assert_eq!(d.dragging(), None);
     }
 
@@ -458,7 +536,13 @@ mod tests {
         d.add_zone("window", Rect::new(800.0, 0.0, 200.0, 200.0));
         d.pointer_down(Point::new(110.0, 110.0), 0.0);
         d.pointer_move(Point::new(850.0, 50.0));
-        assert_eq!(d.pointer_up(Point::new(850.0, 50.0), 0.3), Some(DeskEvent::Dropped { item: 1, zone: Some("window".into()) }));
+        assert_eq!(
+            d.pointer_up(Point::new(850.0, 50.0), 0.3),
+            Some(DeskEvent::Dropped {
+                item: 1,
+                zone: Some("window".into())
+            })
+        );
     }
 
     #[test]
@@ -466,11 +550,30 @@ mod tests {
         let mut d = desk();
         d.add_field(2, "name", Rect::new(10.0, 10.0, 100.0, 20.0));
         d.pointer_down(Point::new(170.0, 135.0), 0.0);
-        assert_eq!(d.pointer_up(Point::new(170.0, 135.0), 0.05), Some(DeskEvent::Clicked { item: 2, local: Point::new(20.0, 15.0), field: Some("name".into()) }));
+        assert_eq!(
+            d.pointer_up(Point::new(170.0, 135.0), 0.05),
+            Some(DeskEvent::Clicked {
+                item: 2,
+                local: Point::new(20.0, 15.0),
+                field: Some("name".into())
+            })
+        );
         d.pointer_down(Point::new(170.0, 135.0), 0.2);
-        assert_eq!(d.pointer_up(Point::new(170.0, 135.0), 0.25), Some(DeskEvent::DoubleClicked { item: 2, field: Some("name".into()) }));
+        assert_eq!(
+            d.pointer_up(Point::new(170.0, 135.0), 0.25),
+            Some(DeskEvent::DoubleClicked {
+                item: 2,
+                field: Some("name".into())
+            })
+        );
         d.pointer_down(Point::new(170.0, 135.0), 2.0);
-        assert!(matches!(d.pointer_up(Point::new(170.0, 135.0), 2.05), Some(DeskEvent::Clicked { .. })), "too late for a double click");
+        assert!(
+            matches!(
+                d.pointer_up(Point::new(170.0, 135.0), 2.05),
+                Some(DeskEvent::Clicked { .. })
+            ),
+            "too late for a double click"
+        );
     }
 
     #[test]
@@ -481,9 +584,19 @@ mod tests {
         d.add_field(7, "seal", Rect::new(80.0, 30.0, 20.0, 20.0));
         // Turned 90° clockwise around its corner and doubled: local (90, 40) is at desk (300 - 80, 300 + 180).
         let at = d.item(7).unwrap().to_desk(Point::new(90.0, 40.0));
-        assert!((at.x - 220.0).abs() < 0.01 && (at.y - 480.0).abs() < 0.01, "{at:?}");
-        assert_eq!(d.field_at(Point::new(220.0, 480.0)), Some((7, "seal".into())));
-        assert_eq!(d.field_at(Point::new(330.0, 310.0)), None, "outside the turned object");
+        assert!(
+            (at.x - 220.0).abs() < 0.01 && (at.y - 480.0).abs() < 0.01,
+            "{at:?}"
+        );
+        assert_eq!(
+            d.field_at(Point::new(220.0, 480.0)),
+            Some((7, "seal".into()))
+        );
+        assert_eq!(
+            d.field_at(Point::new(330.0, 310.0)),
+            None,
+            "outside the turned object"
+        );
     }
 
     #[test]
@@ -495,16 +608,30 @@ mod tests {
         assert!(d.pair().is_none());
         d.mark_field(2, "species");
         assert!(d.pair().is_some());
-        d.mark(Mark { owner: 900, field: "rule-3".into(), at: Point::new(0.0, 0.0) });
-        assert_eq!(d.marks().iter().map(|m| m.owner).collect::<Vec<_>>(), vec![2, 900], "a third replaces the oldest");
+        d.mark(Mark {
+            owner: 900,
+            field: "rule-3".into(),
+            at: Point::new(0.0, 0.0),
+        });
+        assert_eq!(
+            d.marks().iter().map(|m| m.owner).collect::<Vec<_>>(),
+            vec![2, 900],
+            "a third replaces the oldest"
+        );
         d.mark_field(2, "species");
         assert_eq!(d.marks().len(), 1, "marking again takes it off");
         d.mark_field(1, "species");
         d.item_mut(1).unwrap().pos = Point::new(500.0, 500.0);
         d.refresh_marks();
-        assert_eq!(d.marks().iter().find(|m| m.owner == 1).unwrap().at, Point::new(520.0, 510.0));
+        assert_eq!(
+            d.marks().iter().find(|m| m.owner == 1).unwrap().at,
+            Point::new(520.0, 510.0)
+        );
         d.remove_item(1);
-        assert!(d.marks().iter().all(|m| m.owner != 1), "an object taken away takes its marks");
+        assert!(
+            d.marks().iter().all(|m| m.owner != 1),
+            "an object taken away takes its marks"
+        );
     }
 
     #[test]
@@ -519,7 +646,12 @@ mod tests {
     #[test]
     fn a_press_on_nothing_is_missed_and_magnifying_follows_the_objects() {
         let mut d = desk();
-        assert_eq!(d.pointer_down(Point::new(900.0, 500.0), 0.0), Some(DeskEvent::Missed { at: Point::new(900.0, 500.0) }));
+        assert_eq!(
+            d.pointer_down(Point::new(900.0, 500.0), 0.0),
+            Some(DeskEvent::Missed {
+                at: Point::new(900.0, 500.0)
+            })
+        );
         d.set_magnified(Some(1));
         assert_eq!(d.magnified(), Some(1));
         d.set_magnified(Some(42));

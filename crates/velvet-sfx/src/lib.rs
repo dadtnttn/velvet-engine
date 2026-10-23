@@ -38,7 +38,9 @@ pub enum Wave {
 impl Sound {
     /// Silence of a length.
     pub fn silence(seconds: f32) -> Sound {
-        Sound { samples: vec![0.0; frames(seconds)] }
+        Sound {
+            samples: vec![0.0; frames(seconds)],
+        }
     }
 
     /// A tone gliding from `from` to `to` hertz over its length.
@@ -52,7 +54,13 @@ impl Sound {
                 match wave {
                     Wave::Sine => (phase * std::f32::consts::TAU).sin(),
                     Wave::Triangle => 4.0 * (phase - 0.5).abs() - 1.0,
-                    Wave::Square => if phase < 0.5 { 1.0 } else { -1.0 },
+                    Wave::Square => {
+                        if phase < 0.5 {
+                            1.0
+                        } else {
+                            -1.0
+                        }
+                    }
                 }
             })
             .collect();
@@ -161,8 +169,12 @@ mod tests {
     #[test]
     fn envelopes_fade_and_mixes_extend() {
         let s = Sound::tone(Wave::Sine, 300.0, 300.0, 1.0).envelope(0.01, 0.1);
-        let early = s.samples[441..1323].iter().fold(0.0f32, |m, x| m.max(x.abs()));
-        let late = s.samples[40_000..].iter().fold(0.0f32, |m, x| m.max(x.abs()));
+        let early = s.samples[441..1323]
+            .iter()
+            .fold(0.0f32, |m, x| m.max(x.abs()));
+        let late = s.samples[40_000..]
+            .iter()
+            .fold(0.0f32, |m, x| m.max(x.abs()));
         assert!(early > 0.5 && late < 0.01, "{early} {late}");
         let mixed = Sound::silence(0.1).mix(&Sound::silence(0.2), 0.05);
         assert!((mixed.seconds() - 0.25).abs() < 1e-3);
@@ -179,7 +191,9 @@ mod tests {
 
     #[test]
     fn limit_keeps_a_loud_mix_under_one() {
-        let s = Sound::tone(Wave::Square, 200.0, 200.0, 0.1).gain(3.0).limit();
+        let s = Sound::tone(Wave::Square, 200.0, 200.0, 0.1)
+            .gain(3.0)
+            .limit();
         assert!(s.peak() <= 0.98 + 1e-6);
     }
 }

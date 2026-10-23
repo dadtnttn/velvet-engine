@@ -97,11 +97,14 @@ impl PathBuilder {
         let (x, y, w, h) = (r.x, r.y, r.w, r.h);
         self.0.move_to(x + radius, y);
         self.0.line_to(x + w - radius, y);
-        self.0.cubic_to(x + w - c, y, x + w, y + c, x + w, y + radius);
+        self.0
+            .cubic_to(x + w - c, y, x + w, y + c, x + w, y + radius);
         self.0.line_to(x + w, y + h - radius);
-        self.0.cubic_to(x + w, y + h - c, x + w - c, y + h, x + w - radius, y + h);
+        self.0
+            .cubic_to(x + w, y + h - c, x + w - c, y + h, x + w - radius, y + h);
         self.0.line_to(x + radius, y + h);
-        self.0.cubic_to(x + c, y + h, x, y + h - c, x, y + h - radius);
+        self.0
+            .cubic_to(x + c, y + h, x, y + h - c, x, y + h - radius);
         self.0.line_to(x, y + radius);
         self.0.cubic_to(x, y + c, x + c, y, x + radius, y);
         self.0.close();

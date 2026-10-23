@@ -601,12 +601,7 @@ impl Blueprint {
         let mut y = self.surface(p.x, p.z, p.y, body)?;
         for i in 0..8 {
             let a = i as f32 * std::f32::consts::TAU / 8.0;
-            y = y.max(self.surface(
-                p.x + a.cos() * radius,
-                p.z + a.sin() * radius,
-                p.y,
-                body,
-            )?);
+            y = y.max(self.surface(p.x + a.cos() * radius, p.z + a.sin() * radius, p.y, body)?);
         }
         Some(y)
     }

@@ -18,7 +18,14 @@ pub struct Camera {
 impl Camera {
     /// A camera at `eye` looking at `target`, 45° high, seeing from 1 to 5000 units.
     pub fn new(eye: Vec3, target: Vec3) -> Camera {
-        Camera { eye, target, up: Vec3::Y, fov: 45.0, near: 1.0, far: 5000.0 }
+        Camera {
+            eye,
+            target,
+            up: Vec3::Y,
+            fov: 45.0,
+            near: 1.0,
+            far: 5000.0,
+        }
     }
 
     pub fn view(&self) -> Mat4 {

@@ -24,9 +24,23 @@ pub fn run<G: Game2D + 'static>(config: HostConfig, game: G) -> Result<(), Box<d
     // QA: `VELVET_CAPTURE_AFTER=120:out.png` saves the canvas after that many frames and closes the window.
     let capture_after = std::env::var("VELVET_CAPTURE_AFTER").ok().and_then(|v| {
         let (frames, path) = v.split_once(':')?;
-        Some((frames.trim().parse().ok()?, std::path::PathBuf::from(path.trim())))
+        Some((
+            frames.trim().parse().ok()?,
+            std::path::PathBuf::from(path.trim()),
+        ))
     });
-    let mut app = App { config, game, canvas, input: Input::new(), running: None, last: None, behind: 0.0, error: None, frames: 0, capture_after };
+    let mut app = App {
+        config,
+        game,
+        canvas,
+        input: Input::new(),
+        running: None,
+        last: None,
+        behind: 0.0,
+        error: None,
+        frames: 0,
+        capture_after,
+    };
     event_loop.run_app(&mut app)?;
     match app.error {
         Some(e) => Err(e.into()),
@@ -63,9 +77,16 @@ struct Running {
 impl<G: Game2D> App<G> {
     /// The window has a new size: a new letterbox, and the canvas follows the picture's pixels.
     fn resized(&mut self, width: u32, height: u32) {
-        let Some(running) = self.running.as_mut() else { return };
+        let Some(running) = self.running.as_mut() else {
+            return;
+        };
         running.presenter.resize(width, height);
-        running.viewport = Viewport::letterbox(width, height, self.config.logical_width, self.config.logical_height);
+        running.viewport = Viewport::letterbox(
+            width,
+            height,
+            self.config.logical_width,
+            self.config.logical_height,
+        );
         if let Some(v) = running.viewport {
             let (pw, ph) = self.config.canvas_pixels(v.width, v.height);
             if pw != self.canvas.pixel_width() || ph != self.canvas.pixel_height() {
@@ -80,7 +101,9 @@ impl<G: Game2D> App<G> {
 
     fn frame(&mut self, event_loop: &ActiveEventLoop) {
         let now = Instant::now();
-        let dt = self.last.map_or(0.0, |last| now.duration_since(last).as_secs_f32());
+        let dt = self
+            .last
+            .map_or(0.0, |last| now.duration_since(last).as_secs_f32());
         self.last = Some(now);
         // A long stall (a dragged window, a breakpoint) does not make the game race to catch up.
         self.behind += dt.min(0.25);
@@ -95,15 +118,23 @@ impl<G: Game2D> App<G> {
             event_loop.exit();
             return;
         }
-        let Some(running) = self.running.as_mut() else { return };
+        let Some(running) = self.running.as_mut() else {
+            return;
+        };
         // A minimised window shows nothing: nothing is drawn nor sent to the graphics card.
-        let Some(viewport) = running.viewport else { return };
+        let Some(viewport) = running.viewport else {
+            return;
+        };
         let staged = self.game.stage().is_some();
         if !staged || self.config.overlay {
             self.game.draw(&mut self.canvas);
         }
         let shown = match self.game.stage() {
-            Some(stage) => running.presenter.present_stage(stage, self.config.overlay.then_some(&self.canvas), &viewport),
+            Some(stage) => running.presenter.present_stage(
+                stage,
+                self.config.overlay.then_some(&self.canvas),
+                &viewport,
+            ),
             None => running.presenter.present(&self.canvas, &viewport),
         };
         if let Err(e) = shown {
@@ -113,7 +144,11 @@ impl<G: Game2D> App<G> {
         if let Some((after, path)) = self.capture_after.clone() {
             if self.frames >= after {
                 match self.save_picture(&path) {
-                    Ok((w, h)) => eprintln!("[velvet-host2d] {} after {} frames ({w}×{h} pixels)", path.display(), self.frames),
+                    Ok((w, h)) => eprintln!(
+                        "[velvet-host2d] {} after {} frames ({w}×{h} pixels)",
+                        path.display(),
+                        self.frames
+                    ),
                     Err(e) => eprintln!("[velvet-host2d] the capture failed: {e}"),
                 }
                 event_loop.exit();
@@ -133,17 +168,21 @@ impl<G: Game2D> App<G> {
         let (w, h) = self.config.canvas_pixels(viewport.width, viewport.height);
         let stage = self.game.stage().ok_or("no stage")?;
         let pixels = running.presenter.capture_stage(stage, w, h);
-        image::save_buffer(path, &pixels, w, h, image::ColorType::Rgba8).map_err(|e| e.to_string())?;
+        image::save_buffer(path, &pixels, w, h, image::ColorType::Rgba8)
+            .map_err(|e| e.to_string())?;
         Ok((w, h))
     }
 
     fn pointer_to(&mut self, x: f64, y: f64) {
-        let Some(running) = self.running.as_mut() else { return };
+        let Some(running) = self.running.as_mut() else {
+            return;
+        };
         running.cursor = Some((x, y));
         match running.viewport.and_then(|v| v.to_logical(x, y)) {
             Some((lx, ly)) => {
                 running.on_picture = true;
-                self.input.push(InputEvent::PointerMoved(Point::new(lx, ly)));
+                self.input
+                    .push(InputEvent::PointerMoved(Point::new(lx, ly)));
             }
             None if running.on_picture => {
                 running.on_picture = false;
@@ -160,31 +199,46 @@ impl<G: Game2D> App<G> {
             MouseButton::Middle => Button::Middle,
             _ => return,
         };
-        let Some(running) = self.running.as_ref() else { return };
-        let (Some(viewport), Some((x, y))) = (running.viewport, running.cursor) else { return };
+        let Some(running) = self.running.as_ref() else {
+            return;
+        };
+        let (Some(viewport), Some((x, y))) = (running.viewport, running.cursor) else {
+            return;
+        };
         match state {
             // The bars take no input.
             ElementState::Pressed => {
                 if let Some((lx, ly)) = viewport.to_logical(x, y) {
-                    self.input.push(InputEvent::PointerDown { button, at: Point::new(lx, ly) });
+                    self.input.push(InputEvent::PointerDown {
+                        button,
+                        at: Point::new(lx, ly),
+                    });
                 }
             }
             // A release always arrives, so a drag that left the picture ends.
             ElementState::Released => {
                 if self.input.button_down(button) {
                     let (lx, ly) = viewport.to_logical_clamped(x, y);
-                    self.input.push(InputEvent::PointerUp { button, at: Point::new(lx, ly) });
+                    self.input.push(InputEvent::PointerUp {
+                        button,
+                        at: Point::new(lx, ly),
+                    });
                 }
             }
         }
     }
 
     fn screenshot(&mut self) {
-        let Some(dir) = self.config.captures_dir.clone() else { return };
+        let Some(dir) = self.config.captures_dir.clone() else {
+            return;
+        };
         if std::fs::create_dir_all(&dir).is_err() {
             return;
         }
-        let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0);
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0);
         let path = dir.join(format!("captura-{stamp}.png"));
         match self.save_picture(&path) {
             Ok(_) => eprintln!("[velvet-host2d] {}", path.display()),
@@ -200,8 +254,14 @@ impl<G: Game2D> ApplicationHandler for App<G> {
         }
         let attributes = Window::default_attributes()
             .with_title(self.config.title.clone())
-            .with_inner_size(PhysicalSize::new(self.config.window_width, self.config.window_height))
-            .with_min_inner_size(PhysicalSize::new(self.config.min_width, self.config.min_height));
+            .with_inner_size(PhysicalSize::new(
+                self.config.window_width,
+                self.config.window_height,
+            ))
+            .with_min_inner_size(PhysicalSize::new(
+                self.config.min_width,
+                self.config.min_height,
+            ));
         let window = match event_loop.create_window(attributes) {
             Ok(w) => Arc::new(w),
             Err(e) => {
@@ -219,7 +279,13 @@ impl<G: Game2D> ApplicationHandler for App<G> {
             }
         };
         let size = window.inner_size();
-        self.running = Some(Running { window, presenter, viewport: None, cursor: None, on_picture: false });
+        self.running = Some(Running {
+            window,
+            presenter,
+            viewport: None,
+            cursor: None,
+            on_picture: false,
+        });
         self.resized(size.width, size.height);
         self.last = Some(Instant::now());
     }
@@ -261,7 +327,11 @@ impl<G: Game2D> ApplicationHandler for App<G> {
                     }
                 }
                 if event.state == ElementState::Pressed {
-                    if let Some(text) = event.text.as_ref().filter(|t| t.chars().all(|c| !c.is_control())) {
+                    if let Some(text) = event
+                        .text
+                        .as_ref()
+                        .filter(|t| t.chars().all(|c| !c.is_control()))
+                    {
                         self.input.push(InputEvent::Text(text.to_string()));
                     }
                 }
@@ -333,7 +403,9 @@ impl Presenter {
             descriptor.backends = wgpu::Backends::DX12;
         }
         let instance = wgpu::Instance::new(&descriptor.with_env());
-        let surface = instance.create_surface(window.clone()).map_err(|e| format!("the window's surface: {e}"))?;
+        let surface = instance
+            .create_surface(window.clone())
+            .map_err(|e| format!("the window's surface: {e}"))?;
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::default(),
@@ -355,7 +427,12 @@ impl Presenter {
             .await
             .map_err(|e| format!("the graphics device: {e}"))?;
         let capabilities = surface.get_capabilities(&adapter);
-        let format = capabilities.formats.iter().copied().find(wgpu::TextureFormat::is_srgb).unwrap_or(capabilities.formats[0]);
+        let format = capabilities
+            .formats
+            .iter()
+            .copied()
+            .find(wgpu::TextureFormat::is_srgb)
+            .unwrap_or(capabilities.formats[0]);
         let size = window.inner_size();
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
@@ -389,18 +466,34 @@ impl Presenter {
                 },
             ],
         });
-        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("velvet-host2d"), source: wgpu::ShaderSource::Wgsl(SHADER.into()) });
-        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("velvet-host2d"), bind_group_layouts: &[&layout], push_constant_ranges: &[] });
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("velvet-host2d"),
+            source: wgpu::ShaderSource::Wgsl(SHADER.into()),
+        });
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("velvet-host2d"),
+            bind_group_layouts: &[&layout],
+            push_constant_ranges: &[],
+        });
         let make = |entry: &str, blend: Option<wgpu::BlendState>| {
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some("velvet-host2d"),
                 layout: Some(&pipeline_layout),
-                vertex: wgpu::VertexState { module: &shader, entry_point: Some("vs_main"), compilation_options: Default::default(), buffers: &[] },
+                vertex: wgpu::VertexState {
+                    module: &shader,
+                    entry_point: Some("vs_main"),
+                    compilation_options: Default::default(),
+                    buffers: &[],
+                },
                 fragment: Some(wgpu::FragmentState {
                     module: &shader,
                     entry_point: Some(entry),
                     compilation_options: Default::default(),
-                    targets: &[Some(wgpu::ColorTargetState { format, blend, write_mask: wgpu::ColorWrites::ALL })],
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format,
+                        blend,
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
                 }),
                 primitive: wgpu::PrimitiveState::default(),
                 depth_stencil: None,
@@ -410,7 +503,10 @@ impl Presenter {
             })
         };
         let pipeline = make("fs_main", None);
-        let overlay = make("fs_overlay", Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING));
+        let overlay = make(
+            "fs_overlay",
+            Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+        );
         let sampler = |filter| {
             device.create_sampler(&wgpu::SamplerDescriptor {
                 label: Some("velvet-host2d"),
@@ -423,7 +519,20 @@ impl Presenter {
         };
         let linear = sampler(wgpu::FilterMode::Linear);
         let nearest = sampler(wgpu::FilterMode::Nearest);
-        Ok(Presenter { surface, device, queue, config, layout, pipeline, linear, nearest, source: None, overlay, stage: None, capture: None })
+        Ok(Presenter {
+            surface,
+            device,
+            queue,
+            config,
+            layout,
+            pipeline,
+            linear,
+            nearest,
+            source: None,
+            overlay,
+            stage: None,
+            capture: None,
+        })
     }
 
     fn resize(&mut self, width: u32, height: u32) {
@@ -440,7 +549,11 @@ impl Presenter {
         if self.source.as_ref().map(|s| s.size) != Some(size) {
             let texture = self.device.create_texture(&wgpu::TextureDescriptor {
                 label: Some("velvet-host2d-canvas"),
-                size: wgpu::Extent3d { width: size.0, height: size.1, depth_or_array_layers: 1 },
+                size: wgpu::Extent3d {
+                    width: size.0,
+                    height: size.1,
+                    depth_or_array_layers: 1,
+                },
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
@@ -454,14 +567,25 @@ impl Presenter {
                     label: Some("velvet-host2d"),
                     layout: &self.layout,
                     entries: &[
-                        wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&view) },
-                        wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Sampler(sampler) },
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: wgpu::BindingResource::TextureView(&view),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: wgpu::BindingResource::Sampler(sampler),
+                        },
                     ],
                 })
             };
             let smooth = bind(&self.linear);
             let exact = bind(&self.nearest);
-            self.source = Some(Source { texture, smooth, exact, size });
+            self.source = Some(Source {
+                texture,
+                smooth,
+                exact,
+                size,
+            });
         }
         self.source.as_ref().expect("made above")
     }
@@ -471,10 +595,23 @@ impl Presenter {
         self.source(size);
         let source = self.source.as_ref().expect("made above");
         self.queue.write_texture(
-            wgpu::TexelCopyTextureInfo { texture: &source.texture, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
+            wgpu::TexelCopyTextureInfo {
+                texture: &source.texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
             canvas.pixels(),
-            wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(size.0 * 4), rows_per_image: Some(size.1) },
-            wgpu::Extent3d { width: size.0, height: size.1, depth_or_array_layers: 1 },
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(size.0 * 4),
+                rows_per_image: Some(size.1),
+            },
+            wgpu::Extent3d {
+                width: size.0,
+                height: size.1,
+                depth_or_array_layers: 1,
+            },
         );
         let frame = match self.surface.get_current_texture() {
             Ok(frame) => frame,
@@ -485,14 +622,21 @@ impl Presenter {
             Err(e) => return Err(e.to_string()),
         };
         let view = frame.texture.create_view(&Default::default());
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("velvet-host2d") });
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("velvet-host2d"),
+            });
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("velvet-host2d"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &view,
                     resolve_target: None,
-                    ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::BLACK), store: wgpu::StoreOp::Store },
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                        store: wgpu::StoreOp::Store,
+                    },
                 })],
                 depth_stencil_attachment: None,
                 timestamp_writes: None,
@@ -502,7 +646,14 @@ impl Presenter {
             let same = size == (viewport.width, viewport.height);
             pass.set_pipeline(&self.pipeline);
             pass.set_bind_group(0, if same { &source.exact } else { &source.smooth }, &[]);
-            pass.set_viewport(viewport.x as f32, viewport.y as f32, viewport.width as f32, viewport.height as f32, 0.0, 1.0);
+            pass.set_viewport(
+                viewport.x as f32,
+                viewport.y as f32,
+                viewport.width as f32,
+                viewport.height as f32,
+                0.0,
+                1.0,
+            );
             pass.draw(0..3, 0..1);
         }
         self.queue.submit(Some(encoder.finish()));
@@ -513,16 +664,34 @@ impl Presenter {
     }
 
     /// Shows a stage, and the canvas over it if given.
-    fn present_stage(&mut self, stage: &Stage, overlay: Option<&Canvas>, viewport: &Viewport) -> Result<(), String> {
+    fn present_stage(
+        &mut self,
+        stage: &Stage,
+        overlay: Option<&Canvas>,
+        viewport: &Viewport,
+    ) -> Result<(), String> {
         if let Some(canvas) = overlay {
             let size = (canvas.pixel_width(), canvas.pixel_height());
             self.source(size);
             let source = self.source.as_ref().expect("made above");
             self.queue.write_texture(
-                wgpu::TexelCopyTextureInfo { texture: &source.texture, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
+                wgpu::TexelCopyTextureInfo {
+                    texture: &source.texture,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
                 canvas.pixels(),
-                wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(size.0 * 4), rows_per_image: Some(size.1) },
-                wgpu::Extent3d { width: size.0, height: size.1, depth_or_array_layers: 1 },
+                wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(size.0 * 4),
+                    rows_per_image: Some(size.1),
+                },
+                wgpu::Extent3d {
+                    width: size.0,
+                    height: size.1,
+                    depth_or_array_layers: 1,
+                },
             );
         }
         let frame = match self.surface.get_current_texture() {
@@ -534,20 +703,48 @@ impl Presenter {
             Err(e) => return Err(e.to_string()),
         };
         let view = frame.texture.create_view(&Default::default());
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("velvet-host2d stage") });
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("velvet-host2d stage"),
+            });
         let format = self.config.format;
-        let renderer = self.stage.get_or_insert_with(|| StageRenderer::new(&self.device, &self.queue, format, 4));
-        let rect = [viewport.x as f32, viewport.y as f32, viewport.width as f32, viewport.height as f32];
-        renderer.render(&self.device, &self.queue, &mut encoder, &view, format, (self.config.width, self.config.height), rect, stage);
+        let renderer = self
+            .stage
+            .get_or_insert_with(|| StageRenderer::new(&self.device, &self.queue, format, 4));
+        let rect = [
+            viewport.x as f32,
+            viewport.y as f32,
+            viewport.width as f32,
+            viewport.height as f32,
+        ];
+        renderer.render(
+            &self.device,
+            &self.queue,
+            &mut encoder,
+            &view,
+            format,
+            (self.config.width, self.config.height),
+            rect,
+            stage,
+        );
         if let (Some(canvas), Some(source)) = (overlay, self.source.as_ref()) {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("velvet-host2d overlay"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment { view: &view, resolve_target: None, ops: wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store } })],
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
                 depth_stencil_attachment: None,
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
-            let same = (canvas.pixel_width(), canvas.pixel_height()) == (viewport.width, viewport.height);
+            let same =
+                (canvas.pixel_width(), canvas.pixel_height()) == (viewport.width, viewport.height);
             pass.set_pipeline(&self.overlay);
             pass.set_bind_group(0, if same { &source.exact } else { &source.smooth }, &[]);
             pass.set_viewport(rect[0], rect[1], rect[2], rect[3], 0.0, 1.0);
@@ -561,7 +758,14 @@ impl Presenter {
 
     /// The stage drawn again at a size and read back (sRGB RGBA), for screenshots and captures.
     fn capture_stage(&mut self, stage: &Stage, width: u32, height: u32) -> Vec<u8> {
-        let renderer = self.capture.get_or_insert_with(|| StageRenderer::new(&self.device, &self.queue, wgpu::TextureFormat::Rgba8UnormSrgb, 4));
+        let renderer = self.capture.get_or_insert_with(|| {
+            StageRenderer::new(
+                &self.device,
+                &self.queue,
+                wgpu::TextureFormat::Rgba8UnormSrgb,
+                4,
+            )
+        });
         velvet_stage::render_rgba(&self.device, &self.queue, renderer, stage, width, height)
     }
 }

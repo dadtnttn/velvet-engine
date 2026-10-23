@@ -36,7 +36,11 @@ impl Player {
                 }
             }
         };
-        Player { stream, last: HashMap::new(), volume: 1.0 }
+        Player {
+            stream,
+            last: HashMap::new(),
+            volume: 1.0,
+        }
     }
 
     /// True when sounds are heard.
@@ -48,7 +52,11 @@ impl Player {
     pub fn play(&mut self, name: &str, sound: &Sound, volume: f32, spacing: Duration) {
         let Some(stream) = &self.stream else { return };
         let now = Instant::now();
-        if self.last.get(name).is_some_and(|t| now.duration_since(*t) < spacing) {
+        if self
+            .last
+            .get(name)
+            .is_some_and(|t| now.duration_since(*t) < spacing)
+        {
             return;
         }
         self.last.insert(name.to_string(), now);

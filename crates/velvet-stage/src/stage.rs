@@ -89,7 +89,13 @@ impl Card {
 
     /// A card on the screen with its top-left corner at a logical point.
     pub fn screen(picture: PictureId, x: f32, y: f32, width: f32, height: f32) -> Card {
-        Card { space: Space::Screen, anchor: Vec2::new(0.0, 0.0), position: Vec3::new(x, y, 0.0), lit: false, ..Card::world(picture, width, height) }
+        Card {
+            space: Space::Screen,
+            anchor: Vec2::new(0.0, 0.0),
+            position: Vec3::new(x, y, 0.0),
+            lit: false,
+            ..Card::world(picture, width, height)
+        }
     }
 
     pub fn at(mut self, position: Vec3) -> Card {
@@ -151,8 +157,16 @@ impl Card {
     /// A point of the card's face (0 to 1 across and down) in the card's own space.
     pub fn face_point(&self, u: f32, v: f32) -> Vec3 {
         match self.space {
-            Space::World => Vec3::new((u - self.anchor.x) * self.size.x, (self.anchor.y - v) * self.size.y, 0.0),
-            Space::Screen => Vec3::new((u - self.anchor.x) * self.size.x, (v - self.anchor.y) * self.size.y, 0.0),
+            Space::World => Vec3::new(
+                (u - self.anchor.x) * self.size.x,
+                (self.anchor.y - v) * self.size.y,
+                0.0,
+            ),
+            Space::Screen => Vec3::new(
+                (u - self.anchor.x) * self.size.x,
+                (v - self.anchor.y) * self.size.y,
+                0.0,
+            ),
         }
     }
 }
@@ -252,13 +266,25 @@ impl Stage {
     pub fn add_picture(&mut self, canvas: Canvas) -> PictureId {
         let id = self.next_picture;
         self.next_picture += 1;
-        self.pictures.insert(id, Picture { canvas, version: next_version() });
+        self.pictures.insert(
+            id,
+            Picture {
+                canvas,
+                version: next_version(),
+            },
+        );
         id
     }
 
     /// Paints a picture again (its cards show the new one).
     pub fn set_picture(&mut self, id: PictureId, canvas: Canvas) {
-        self.pictures.insert(id, Picture { canvas, version: next_version() });
+        self.pictures.insert(
+            id,
+            Picture {
+                canvas,
+                version: next_version(),
+            },
+        );
     }
 
     pub fn remove_picture(&mut self, id: PictureId) {
@@ -283,16 +309,27 @@ impl Stage {
     }
 
     pub fn card(&self, id: CardId) -> Option<&Card> {
-        self.cards.iter().find(|(c, _)| *c == id).map(|(_, card)| card)
+        self.cards
+            .iter()
+            .find(|(c, _)| *c == id)
+            .map(|(_, card)| card)
     }
 
     pub fn card_mut(&mut self, id: CardId) -> Option<&mut Card> {
-        self.cards.iter_mut().find(|(c, _)| *c == id).map(|(_, card)| card)
+        self.cards
+            .iter_mut()
+            .find(|(c, _)| *c == id)
+            .map(|(_, card)| card)
     }
 
     /// Takes a card and its children off the stage.
     pub fn remove(&mut self, id: CardId) {
-        let children: Vec<CardId> = self.cards.iter().filter(|(_, c)| c.parent == Some(id)).map(|(c, _)| *c).collect();
+        let children: Vec<CardId> = self
+            .cards
+            .iter()
+            .filter(|(_, c)| c.parent == Some(id))
+            .map(|(c, _)| *c)
+            .collect();
         for child in children {
             self.remove(child);
         }
@@ -331,7 +368,11 @@ impl Stage {
         let u = (point.x / canvas.width() - u0) / (u1 - u0).max(1e-6);
         let v = (point.y / canvas.height() - v0) / (v1 - v0).max(1e-6);
         let p = card.face_point(u, v);
-        let lift = if card.space == Space::World { lift } else { 0.0 };
+        let lift = if card.space == Space::World {
+            lift
+        } else {
+            0.0
+        };
         Some(Vec3::new(p.x, p.y, lift))
     }
 
@@ -354,7 +395,10 @@ impl Stage {
         let inverse = self.view_projection().inverse().unwrap_or(Mat4::IDENTITY);
         let near = inverse.transform_point3(Vec3::new(ndc_x, ndc_y, 0.0));
         let far = inverse.transform_point3(Vec3::new(ndc_x, ndc_y, 1.0));
-        Ray { origin: near, direction: (far - near).normalize_or_zero() }
+        Ray {
+            origin: near,
+            direction: (far - near).normalize_or_zero(),
+        }
     }
 
     /// Where a point of the world shows on the screen (logical pixels), and its depth from 0 (near) to 1 (far); None
@@ -369,7 +413,13 @@ impl Stage {
             return None;
         }
         let (nx, ny) = (x / w, y / w);
-        Some((Vec2::new((nx + 1.0) * 0.5 * self.screen.x, (1.0 - ny) * 0.5 * self.screen.y), z / w))
+        Some((
+            Vec2::new(
+                (nx + 1.0) * 0.5 * self.screen.x,
+                (1.0 - ny) * 0.5 * self.screen.y,
+            ),
+            z / w,
+        ))
     }
 
     /// The card under a logical point of the screen: the screen cards first (the highest order on top), then the
@@ -381,8 +431,13 @@ impl Stage {
             if !card.pickable || !self.shown(*id) {
                 continue;
             }
-            let Some(hit) = self.pick_on(*id, point) else { continue };
-            if !(0.0..=1.0).contains(&hit.uv.x) || !(0.0..=1.0).contains(&hit.uv.y) || !self.solid(card, hit.point) {
+            let Some(hit) = self.pick_on(*id, point) else {
+                continue;
+            };
+            if !(0.0..=1.0).contains(&hit.uv.x)
+                || !(0.0..=1.0).contains(&hit.uv.y)
+                || !self.solid(card, hit.point)
+            {
                 continue;
             }
             match card.space {
@@ -394,7 +449,10 @@ impl Stage {
                 }
             }
         }
-        if let Some((_, _, hit)) = screen.into_iter().max_by_key(|(order, index, _)| (*order, *index)) {
+        if let Some((_, _, hit)) = screen
+            .into_iter()
+            .max_by_key(|(order, index, _)| (*order, *index))
+        {
             return Some(hit);
         }
         world
@@ -434,16 +492,31 @@ impl Stage {
         };
         let canvas = self.picture(card.picture)?;
         let [u0, v0, u1, v1] = card.uv;
-        let point = Vec2::new((u0 + (u1 - u0) * u) * canvas.width(), (v0 + (v1 - v0) * v) * canvas.height());
-        Some(Hit { card: id, uv: Vec2::new(u, v), point, world, distance })
+        let point = Vec2::new(
+            (u0 + (u1 - u0) * u) * canvas.width(),
+            (v0 + (v1 - v0) * v) * canvas.height(),
+        );
+        Some(Hit {
+            card: id,
+            uv: Vec2::new(u, v),
+            point,
+            world,
+            distance,
+        })
     }
 
     /// True where the card's picture is not transparent.
     fn solid(&self, card: &Card, point: Vec2) -> bool {
-        let Some(canvas) = self.picture(card.picture) else { return false };
+        let Some(canvas) = self.picture(card.picture) else {
+            return false;
+        };
         let k = canvas.k();
-        let x = (point.x * k).floor().clamp(0.0, canvas.pixel_width() as f32 - 1.0) as u32;
-        let y = (point.y * k).floor().clamp(0.0, canvas.pixel_height() as f32 - 1.0) as u32;
+        let x = (point.x * k)
+            .floor()
+            .clamp(0.0, canvas.pixel_width() as f32 - 1.0) as u32;
+        let y = (point.y * k)
+            .floor()
+            .clamp(0.0, canvas.pixel_height() as f32 - 1.0) as u32;
         canvas.pixel(x, y).is_some_and(|p| p[3] > 8)
     }
 
@@ -451,7 +524,11 @@ impl Stage {
     pub fn active_lights(&self) -> Vec<Light> {
         let mut lights = self.lights.clone();
         let target = self.camera.target;
-        lights.sort_by(|a, b| (a.position - target).length().total_cmp(&(b.position - target).length()));
+        lights.sort_by(|a, b| {
+            (a.position - target)
+                .length()
+                .total_cmp(&(b.position - target).length())
+        });
         lights.truncate(MAX_LIGHTS);
         lights
     }
@@ -470,7 +547,11 @@ mod tests {
         canvas.clear(velvet_canvas::Color::WHITE);
         stage.set_picture(picture, canvas);
         // A floor lying flat, its top towards -Z.
-        let floor = stage.add(Card::world(picture, 200.0, 100.0).turned(-90.0, 0.0, 0.0).pickable());
+        let floor = stage.add(
+            Card::world(picture, 200.0, 100.0)
+                .turned(-90.0, 0.0, 0.0)
+                .pickable(),
+        );
         (stage, floor)
     }
 
@@ -493,11 +574,19 @@ mod tests {
             let (screen, depth) = stage.project(world).unwrap();
             assert!((0.0..1.0).contains(&depth));
             let hit = stage.pick_on(floor, screen).unwrap();
-            assert!((hit.point.x - px).abs() < 0.05 && (hit.point.y - py).abs() < 0.05, "{px},{py} → {:?}", hit.point);
+            assert!(
+                (hit.point.x - px).abs() < 0.05 && (hit.point.y - py).abs() < 0.05,
+                "{px},{py} → {:?}",
+                hit.point
+            );
         }
         // The top of the picture is the far side of the floor.
-        let near = stage.card_to_world(floor, Vec2::new(100.0, 99.0), 0.0).unwrap();
-        let far = stage.card_to_world(floor, Vec2::new(100.0, 1.0), 0.0).unwrap();
+        let near = stage
+            .card_to_world(floor, Vec2::new(100.0, 99.0), 0.0)
+            .unwrap();
+        let far = stage
+            .card_to_world(floor, Vec2::new(100.0, 1.0), 0.0)
+            .unwrap();
         assert!(far.z < near.z);
     }
 
@@ -508,7 +597,11 @@ mod tests {
         solid.clear(velvet_canvas::Color::BLACK);
         let picture = stage.add_picture(solid);
         let low = stage.add(Card::screen(picture, 900.0, 500.0, 100.0, 100.0).pickable());
-        let high = stage.add(Card::screen(picture, 950.0, 520.0, 100.0, 100.0).ordered(5).pickable());
+        let high = stage.add(
+            Card::screen(picture, 950.0, 520.0, 100.0, 100.0)
+                .ordered(5)
+                .pickable(),
+        );
         assert_eq!(stage.pick(Vec2::new(960.0, 540.0)).unwrap().card, high);
         assert_eq!(stage.pick(Vec2::new(910.0, 510.0)).unwrap().card, low);
         let hit = stage.pick(Vec2::new(1000.0, 600.0)).unwrap();
@@ -520,17 +613,35 @@ mod tests {
     fn children_follow_their_parent_and_transparent_parts_are_not_picked() {
         let (mut stage, floor) = stage_with_floor();
         let mut dot = Canvas::new(10.0, 10.0);
-        dot.fill_circle(velvet_canvas::Point::new(5.0, 5.0), 2.0, &velvet_canvas::Color::BLACK.into());
+        dot.fill_circle(
+            velvet_canvas::Point::new(5.0, 5.0),
+            2.0,
+            &velvet_canvas::Color::BLACK.into(),
+        );
         let picture = stage.add_picture(dot);
         let at = stage.on_card(floor, Vec2::new(150.0, 30.0), 0.5).unwrap();
-        let child = stage.add(Card::world(picture, 10.0, 10.0).at(at).child_of(floor).pickable());
-        let world = stage.card_to_world(child, Vec2::new(5.0, 5.0), 0.0).unwrap();
-        let expected = stage.card_to_world(floor, Vec2::new(150.0, 30.0), 0.5).unwrap();
-        assert!((world - expected).length() < 1e-3, "{world:?} vs {expected:?}");
+        let child = stage.add(
+            Card::world(picture, 10.0, 10.0)
+                .at(at)
+                .child_of(floor)
+                .pickable(),
+        );
+        let world = stage
+            .card_to_world(child, Vec2::new(5.0, 5.0), 0.0)
+            .unwrap();
+        let expected = stage
+            .card_to_world(floor, Vec2::new(150.0, 30.0), 0.5)
+            .unwrap();
+        assert!(
+            (world - expected).length() < 1e-3,
+            "{world:?} vs {expected:?}"
+        );
         let (screen, _) = stage.project(world).unwrap();
         assert_eq!(stage.pick(screen).unwrap().card, child);
         // The corner of the dot's picture is transparent: the floor under it is picked.
-        let corner = stage.card_to_world(child, Vec2::new(0.5, 0.5), 0.0).unwrap();
+        let corner = stage
+            .card_to_world(child, Vec2::new(0.5, 0.5), 0.0)
+            .unwrap();
         let (screen, _) = stage.project(corner).unwrap();
         assert_eq!(stage.pick(screen).unwrap().card, floor);
         // Hidden with its parent, removed with its parent.

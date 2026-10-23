@@ -86,13 +86,19 @@ impl HostConfig {
     /// The canvas's pixels for a picture of `width`×`height` window pixels: the forced size of `VELVET_RENDER_SIZE`,
     /// the picture's own pixels when native, else the logical size.
     pub fn canvas_pixels(&self, width: u32, height: u32) -> (u32, u32) {
-        if let Some(forced) = std::env::var("VELVET_RENDER_SIZE").ok().and_then(|v| parse_size(&v)) {
+        if let Some(forced) = std::env::var("VELVET_RENDER_SIZE")
+            .ok()
+            .and_then(|v| parse_size(&v))
+        {
             return forced;
         }
         if self.native {
             (width.max(1), height.max(1))
         } else {
-            (self.logical_width.round() as u32, self.logical_height.round() as u32)
+            (
+                self.logical_width.round() as u32,
+                self.logical_height.round() as u32,
+            )
         }
     }
 }
@@ -100,7 +106,10 @@ impl HostConfig {
 /// `2560x1440` → (2560, 1440).
 fn parse_size(text: &str) -> Option<(u32, u32)> {
     let (w, h) = text.trim().split_once(['x', 'X', '×'])?;
-    Some((w.trim().parse().ok().filter(|&w| w > 0)?, h.trim().parse().ok().filter(|&h| h > 0)?))
+    Some((
+        w.trim().parse().ok().filter(|&w| w > 0)?,
+        h.trim().parse().ok().filter(|&h| h > 0)?,
+    ))
 }
 
 /// A 2D game, as the host runs it.

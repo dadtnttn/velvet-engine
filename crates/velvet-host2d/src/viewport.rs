@@ -17,11 +17,18 @@ pub struct Viewport {
 
 impl Viewport {
     /// The largest centred rectangle of the logical aspect inside a window, or None for an empty window.
-    pub fn letterbox(window_width: u32, window_height: u32, logical_width: f32, logical_height: f32) -> Option<Viewport> {
-        if window_width == 0 || window_height == 0 || logical_width <= 0.0 || logical_height <= 0.0 {
+    pub fn letterbox(
+        window_width: u32,
+        window_height: u32,
+        logical_width: f32,
+        logical_height: f32,
+    ) -> Option<Viewport> {
+        if window_width == 0 || window_height == 0 || logical_width <= 0.0 || logical_height <= 0.0
+        {
             return None;
         }
-        let scale = (window_width as f32 / logical_width).min(window_height as f32 / logical_height);
+        let scale =
+            (window_width as f32 / logical_width).min(window_height as f32 / logical_height);
         let width = ((logical_width * scale).round() as u32).clamp(1, window_width);
         let height = ((logical_height * scale).round() as u32).clamp(1, window_height);
         Some(Viewport {
@@ -38,7 +45,10 @@ impl Viewport {
     pub fn to_logical(&self, px: f64, py: f64) -> Option<(f32, f32)> {
         let lx = (px - self.x as f64) * self.logical_width as f64 / self.width as f64;
         let ly = (py - self.y as f64) * self.logical_height as f64 / self.height as f64;
-        let inside = lx >= 0.0 && ly >= 0.0 && lx < self.logical_width as f64 && ly < self.logical_height as f64;
+        let inside = lx >= 0.0
+            && ly >= 0.0
+            && lx < self.logical_width as f64
+            && ly < self.logical_height as f64;
         inside.then_some((lx as f32, ly as f32))
     }
 
@@ -46,12 +56,18 @@ impl Viewport {
     pub fn to_logical_clamped(&self, px: f64, py: f64) -> (f32, f32) {
         let lx = (px - self.x as f64) * self.logical_width as f64 / self.width as f64;
         let ly = (py - self.y as f64) * self.logical_height as f64 / self.height as f64;
-        (lx.clamp(0.0, self.logical_width as f64 - 0.001) as f32, ly.clamp(0.0, self.logical_height as f64 - 0.001) as f32)
+        (
+            lx.clamp(0.0, self.logical_width as f64 - 0.001) as f32,
+            ly.clamp(0.0, self.logical_height as f64 - 0.001) as f32,
+        )
     }
 
     /// A logical point in window pixels.
     pub fn to_window(&self, lx: f32, ly: f32) -> (f32, f32) {
-        (self.x as f32 + lx * self.width as f32 / self.logical_width, self.y as f32 + ly * self.height as f32 / self.logical_height)
+        (
+            self.x as f32 + lx * self.width as f32 / self.logical_width,
+            self.y as f32 + ly * self.height as f32 / self.logical_height,
+        )
     }
 }
 
@@ -75,12 +91,21 @@ mod tests {
 
     #[test]
     fn the_way_back_is_exact_at_any_size() {
-        for (w, h) in [(1280, 720), (1600, 900), (2560, 1440), (1366, 768), (3440, 1440)] {
+        for (w, h) in [
+            (1280, 720),
+            (1600, 900),
+            (2560, 1440),
+            (1366, 768),
+            (3440, 1440),
+        ] {
             let v = Viewport::letterbox(w, h, 1920.0, 1080.0).unwrap();
             for (lx, ly) in [(0.0, 0.0), (960.0, 540.0), (1919.0, 1079.0), (123.4, 987.6)] {
                 let (px, py) = v.to_window(lx, ly);
                 let (bx, by) = v.to_logical(px as f64, py as f64).unwrap();
-                assert!((bx - lx).abs() < 0.01 && (by - ly).abs() < 0.01, "{w}×{h}: {lx},{ly} → {bx},{by}");
+                assert!(
+                    (bx - lx).abs() < 0.01 && (by - ly).abs() < 0.01,
+                    "{w}×{h}: {lx},{ly} → {bx},{by}"
+                );
             }
         }
     }

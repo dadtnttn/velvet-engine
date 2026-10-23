@@ -460,7 +460,9 @@ mod tests {
             }
             b.tick(1.0)
         };
-        assert_eq!(run(5), run(5));
+        // The same seed plays the same board twice: two runs, one result.
+        let (once, again) = (run(5), run(5));
+        assert_eq!(once, again);
     }
 
     #[test]

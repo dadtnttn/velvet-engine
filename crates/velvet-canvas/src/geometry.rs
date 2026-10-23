@@ -83,7 +83,10 @@ mod tests {
     #[test]
     fn intersect_gives_the_shared_part_or_none() {
         let a = Rect::new(0.0, 0.0, 10.0, 10.0);
-        assert_eq!(a.intersect(&Rect::new(5.0, 5.0, 10.0, 10.0)), Some(Rect::new(5.0, 5.0, 5.0, 5.0)));
+        assert_eq!(
+            a.intersect(&Rect::new(5.0, 5.0, 10.0, 10.0)),
+            Some(Rect::new(5.0, 5.0, 5.0, 5.0))
+        );
         assert_eq!(a.intersect(&Rect::new(10.0, 0.0, 5.0, 5.0)), None);
     }
 }

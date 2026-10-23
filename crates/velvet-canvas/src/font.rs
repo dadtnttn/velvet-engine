@@ -38,7 +38,9 @@ struct Inner {
 
 impl fmt::Debug for Font {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Font").field("units_per_em", &self.inner.units_per_em).finish()
+        f.debug_struct("Font")
+            .field("units_per_em", &self.inner.units_per_em)
+            .finish()
     }
 }
 
@@ -49,7 +51,15 @@ impl Font {
         let units_per_em = font.units_per_em().unwrap_or(1000.0);
         let ascent = font.ascent_unscaled();
         let descent = font.descent_unscaled();
-        Ok(Font { inner: Arc::new(Inner { font, units_per_em, ascent, descent, paths: Mutex::new(HashMap::new()) }) })
+        Ok(Font {
+            inner: Arc::new(Inner {
+                font,
+                units_per_em,
+                ascent,
+                descent,
+                paths: Mutex::new(HashMap::new()),
+            }),
+        })
     }
 
     /// How far the font rises above the baseline at a size (the size is the em, as in CSS).
@@ -87,8 +97,14 @@ impl Font {
         for paragraph in text.split('\n') {
             let mut line = String::new();
             for word in paragraph.split(' ') {
-                let candidate = if line.is_empty() { word.to_string() } else { format!("{line} {word}") };
-                if self.measure(&candidate, size, letter_spacing) <= max_width || line.is_empty() && word.is_empty() {
+                let candidate = if line.is_empty() {
+                    word.to_string()
+                } else {
+                    format!("{line} {word}")
+                };
+                if self.measure(&candidate, size, letter_spacing) <= max_width
+                    || line.is_empty() && word.is_empty()
+                {
                     line = candidate;
                     continue;
                 }
@@ -99,7 +115,9 @@ impl Font {
                 let mut piece = String::new();
                 for c in word.chars() {
                     piece.push(c);
-                    if self.measure(&piece, size, letter_spacing) > max_width && piece.chars().count() > 1 {
+                    if self.measure(&piece, size, letter_spacing) > max_width
+                        && piece.chars().count() > 1
+                    {
                         piece.pop();
                         lines.push(std::mem::take(&mut piece));
                         piece.push(c);
@@ -117,7 +135,12 @@ impl Font {
     }
 
     /// The glyphs of a line: each glyph's path (in font units, y down) and its pen position in logical pixels.
-    pub(crate) fn layout(&self, text: &str, size: f32, letter_spacing: f32) -> Vec<(Option<tiny_skia::Path>, f32)> {
+    pub(crate) fn layout(
+        &self,
+        text: &str,
+        size: f32,
+        letter_spacing: f32,
+    ) -> Vec<(Option<tiny_skia::Path>, f32)> {
         let scale = self.scale(size);
         let mut out = Vec::new();
         let mut pen = 0.0;
@@ -135,8 +158,15 @@ impl Font {
     }
 
     fn glyph_path(&self, id: GlyphId) -> Option<tiny_skia::Path> {
-        let mut paths = self.inner.paths.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-        paths.entry(id).or_insert_with(|| outline_path(&self.inner.font, id)).clone()
+        let mut paths = self
+            .inner
+            .paths
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        paths
+            .entry(id)
+            .or_insert_with(|| outline_path(&self.inner.font, id))
+            .clone()
     }
 }
 
@@ -145,10 +175,14 @@ fn outline_path(font: &FontArc, id: GlyphId) -> Option<tiny_skia::Path> {
     let outline = font.outline(id)?;
     let mut b = tiny_skia::PathBuilder::new();
     let mut current: Option<ab_glyph::Point> = None;
-    let near = |a: ab_glyph::Point, b: ab_glyph::Point| (a.x - b.x).abs() < 1e-3 && (a.y - b.y).abs() < 1e-3;
+    let near = |a: ab_glyph::Point, b: ab_glyph::Point| {
+        (a.x - b.x).abs() < 1e-3 && (a.y - b.y).abs() < 1e-3
+    };
     for curve in &outline.curves {
         let start = match curve {
-            OutlineCurve::Line(p0, _) | OutlineCurve::Quad(p0, _, _) | OutlineCurve::Cubic(p0, _, _, _) => *p0,
+            OutlineCurve::Line(p0, _)
+            | OutlineCurve::Quad(p0, _, _)
+            | OutlineCurve::Cubic(p0, _, _, _) => *p0,
         };
         if !current.is_some_and(|c| near(c, start)) {
             if current.is_some() {
@@ -204,7 +238,16 @@ pub struct TextStyle {
 
 impl TextStyle {
     pub fn new(font: &Font, size: f32, color: Color) -> Self {
-        Self { font: font.clone(), size, color, align: Align::Left, line_height: 1.25, letter_spacing: 0.0, outline: None, shadow: None }
+        Self {
+            font: font.clone(),
+            size,
+            color,
+            align: Align::Left,
+            line_height: 1.25,
+            letter_spacing: 0.0,
+            outline: None,
+            shadow: None,
+        }
     }
 
     pub fn align(mut self, align: Align) -> Self {
@@ -254,7 +297,8 @@ impl TextStyle {
 
     /// The lines of text that fit a width in this style.
     pub fn wrap(&self, text: &str, max_width: f32) -> Vec<String> {
-        self.font.wrap(text, self.size, self.letter_spacing, max_width)
+        self.font
+            .wrap(text, self.size, self.letter_spacing, max_width)
     }
 
     /// From the top of a line box to its baseline.
@@ -270,7 +314,10 @@ pub(crate) mod tests {
     use super::*;
 
     pub(crate) fn test_font() -> Font {
-        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/Nunito-ExtraBold.ttf");
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/Nunito-ExtraBold.ttf"
+        );
         Font::from_bytes(std::fs::read(path).expect("the test font")).expect("a font")
     }
 
@@ -287,7 +334,8 @@ pub(crate) mod tests {
     #[test]
     fn wrap_keeps_every_line_inside_the_width() {
         let font = test_font();
-        let text = "Permiso de entrada emitido por el Ministerio de Puertas, Pasos y Sellos de Velmira";
+        let text =
+            "Permiso de entrada emitido por el Ministerio de Puertas, Pasos y Sellos de Velmira";
         let lines = font.wrap(text, 18.0, 0.0, 200.0);
         assert!(lines.len() > 1);
         for line in &lines {

@@ -32,8 +32,12 @@ impl fmt::Debug for Svg {
 impl Svg {
     /// Parses an SVG document.
     pub fn parse(text: &str) -> Result<Svg, SvgError> {
-        let tree = usvg::Tree::from_str(text, &usvg::Options::default()).map_err(|e| SvgError(e.to_string()))?;
-        Ok(Svg { tree, rendered: RefCell::new(None) })
+        let tree = usvg::Tree::from_str(text, &usvg::Options::default())
+            .map_err(|e| SvgError(e.to_string()))?;
+        Ok(Svg {
+            tree,
+            rendered: RefCell::new(None),
+        })
     }
 
     /// The document's own size (its width and height, or its view box).
@@ -47,7 +51,9 @@ impl Svg {
         let mut rendered = self.rendered.borrow_mut();
         let fresh = !matches!(&*rendered, Some(p) if p.width() == pw && p.height() == ph);
         if fresh {
-            let Some(mut pixmap) = tiny_skia::Pixmap::new(pw.max(1), ph.max(1)) else { return };
+            let Some(mut pixmap) = tiny_skia::Pixmap::new(pw.max(1), ph.max(1)) else {
+                return;
+            };
             let (w, h) = self.size();
             let transform = tiny_skia::Transform::from_scale(pw as f32 / w, ph as f32 / h);
             resvg::render(&self.tree, transform, &mut pixmap.as_mut());
@@ -68,7 +74,9 @@ mod tests {
         let svg = Svg::parse(r##"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="10"><rect width="20" height="10" fill="#ff0000"/></svg>"##).unwrap();
         assert_eq!(svg.size(), (20.0, 10.0));
         let mut seen = None;
-        svg.pixels_for(40, 20, |p| seen = Some((p.width(), p.height(), p.pixel(20, 10).map(|c| c.red()))));
+        svg.pixels_for(40, 20, |p| {
+            seen = Some((p.width(), p.height(), p.pixel(20, 10).map(|c| c.red())))
+        });
         assert_eq!(seen, Some((40, 20, Some(255))));
         assert!(Svg::parse("<not svg").is_err());
     }

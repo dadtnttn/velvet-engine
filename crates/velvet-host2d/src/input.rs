@@ -3,8 +3,8 @@
 
 use std::collections::HashSet;
 
-pub use winit::keyboard::KeyCode;
 use velvet_canvas::Point;
+pub use winit::keyboard::KeyCode;
 
 /// A pointer button.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -22,9 +22,15 @@ pub enum InputEvent {
     /// The pointer left the picture (into the bars, or out of the window).
     PointerLeft,
     /// A button went down on a point of the picture (never in the bars).
-    PointerDown { button: Button, at: Point },
+    PointerDown {
+        button: Button,
+        at: Point,
+    },
     /// A button went up; `at` is held to the picture's edge when the pointer is in the bars, so a drag always ends.
-    PointerUp { button: Button, at: Point },
+    PointerUp {
+        button: Button,
+        at: Point,
+    },
     /// The wheel turned: positive away from the player, in lines.
     Wheel(f32),
     KeyDown(KeyCode),
@@ -74,7 +80,16 @@ impl Input {
 
     /// The wheel's turn since the last step.
     pub fn wheel(&self) -> f32 {
-        self.events.iter().filter_map(|e| if let InputEvent::Wheel(d) = e { Some(*d) } else { None }).sum()
+        self.events
+            .iter()
+            .filter_map(|e| {
+                if let InputEvent::Wheel(d) = e {
+                    Some(*d)
+                } else {
+                    None
+                }
+            })
+            .sum()
     }
 
     /// Records an event (the host does this; tests and bots can too) and updates the state.
@@ -117,7 +132,10 @@ mod tests {
     #[test]
     fn events_last_one_step_and_the_state_stays() {
         let mut input = Input::new();
-        input.push(InputEvent::PointerDown { button: Button::Left, at: Point::new(10.0, 20.0) });
+        input.push(InputEvent::PointerDown {
+            button: Button::Left,
+            at: Point::new(10.0, 20.0),
+        });
         input.push(InputEvent::KeyDown(KeyCode::Space));
         assert!(input.button_down(Button::Left));
         assert!(input.key_pressed(KeyCode::Space));

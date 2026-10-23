@@ -38,5 +38,7 @@ mod stage;
 pub use camera::{Camera, Ray};
 pub use offscreen::{render_rgba, Offscreen};
 pub use render::StageRenderer;
-pub use stage::{Blend, Card, CardId, Fog, Hit, Light, Picture, PictureId, Space, Stage, MAX_LIGHTS};
+pub use stage::{
+    Blend, Card, CardId, Fog, Hit, Light, Picture, PictureId, Space, Stage, MAX_LIGHTS,
+};
 pub use velvet_math::{Vec2, Vec3};
