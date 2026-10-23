@@ -1,10 +1,10 @@
 use super::{fp, hud::Hud, runes, visual, Dungeon};
 #[path = "scene/pozo_scene.rs"]
 mod pozo_scene;
-#[path = "scene/tendero.rs"]
-mod tendero;
 #[path = "scene/runas_scene.rs"]
 mod runas_scene;
+#[path = "scene/tendero.rs"]
+mod tendero;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use velvet_dungeon::*;
 use velvet_math::{Mat4, Vec3};
@@ -2239,6 +2239,10 @@ impl Scene {
                                 run.elapsed,
                                 run.rune_changed_at[index],
                             );
+                        } else if let (Exit, Some(art)) = (s.kind, carved) {
+                            art.draw_way_up(&mut draws, a.position, yaw, run.won, run.elapsed);
+                        } else if let (Entrance, Some(art)) = (s.kind, carved) {
+                            art.draw_way_out(&mut draws, a.position, yaw, run.elapsed);
                         } else if s.kind == Exit {
                             self.draw(
                                 &mut draws,
@@ -2288,7 +2292,9 @@ impl Scene {
                                 [1.0, 0.78, 0.40],
                             );
                         }
-                        if s.kind != Seal && s.kind != Rest && !(s.kind == Memory && carved.is_some())
+                        if s.kind != Seal
+                            && s.kind != Rest
+                            && !(matches!(s.kind, Memory | Entrance | Exit) && carved.is_some())
                         {
                             let float_height = if s.kind == Exit { 1.15 } else { 1.55 };
                             self.draw(
@@ -2304,6 +2310,12 @@ impl Scene {
                     }
                 }
                 if s.kind != Seal {
+                    // The hand-made mine's way up glows the Heart's red until it is still.
+                    let color = if s.kind == Exit && run.authored.is_some() && !run.won {
+                        [0.85, 0.22, 0.18]
+                    } else {
+                        color
+                    };
                     lights.push(PointLight3D::new(
                         a.position + Vec3::Y * 1.1,
                         color,

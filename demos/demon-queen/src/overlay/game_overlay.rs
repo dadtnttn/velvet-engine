@@ -158,6 +158,9 @@ pub(super) fn over_picture(
     if let Some(hv) = &game.hypno {
         super::hipno_overlay::over_picture(font, v, pic, hv, time, s);
     }
+    if let Some(tv) = &game.turno {
+        super::turno_overlay::over_picture(font, v, pic, tv, game.accent, time, s);
+    }
     if let Some((words, color, age)) = &game.stamp {
         draw_stamp(
             font,
@@ -630,6 +633,8 @@ pub(super) fn draw_plate(
     );
     if !game.chips.is_empty() {
         draw_chips(font, v, pic, frame, game, time, s);
+    } else if let Some(tv) = &game.turno {
+        super::turno_overlay::draw_buttons(font, v, plate, tv, accent, time, s);
     } else if !game.keys.is_empty() {
         draw_keys_row(font, v, plate, game, accent, time, s);
     }
@@ -1201,11 +1206,16 @@ pub(super) fn draw_wall(
     v: &mut Vec<MapVertex>,
     frame: Rect,
     game: &GameView,
+    client_face: Option<Uv>,
     time: f32,
     s: f32,
 ) {
     if let Some(hv) = &game.hypno {
         super::hipno_overlay::draw_column(font, v, frame, hv, time, s);
+        return;
+    }
+    if let Some(tv) = &game.turno {
+        super::turno_overlay::draw_column(font, v, frame, tv, client_face, time, s);
         return;
     }
     let Some(noise) = game.noise else {

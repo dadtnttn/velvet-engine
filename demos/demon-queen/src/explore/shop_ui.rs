@@ -46,6 +46,7 @@ impl App {
     pub(super) fn venue_key(&mut self, code: KeyCode) {
         use venue::Page;
         let now = (self.elapsed * 1000.0) as u32;
+        self.venue.today = self.world_day();
         let page = self.venue.page;
         // Her book's pages turn with the menus' sounds: a tick to choose, a chime to take.
         match code {
@@ -65,17 +66,20 @@ impl App {
             | KeyCode::Digit2
             | KeyCode::Digit3
             | KeyCode::Digit4 => ui_sfx::play(UiSfx::Select),
-            KeyCode::KeyH | KeyCode::KeyE | KeyCode::KeyP => ui_sfx::play(UiSfx::Page),
+            KeyCode::KeyR | KeyCode::KeyL | KeyCode::KeyE | KeyCode::KeyP => {
+                ui_sfx::play(UiSfx::Page)
+            }
             _ => {}
         }
         match code {
             KeyCode::Enter | KeyCode::NumpadEnter | KeyCode::Space => {
                 self.venue.act_at(&mut self.gold, now);
-                self.after_venue_act();
+                if !self.after_loan_act() {
+                    self.after_venue_act();
+                }
                 self.persist_3d_state(true);
             }
             KeyCode::KeyF => self.close_shop(),
-            KeyCode::KeyH if page == Page::Girls => self.venue.talk(),
             // Her elixir, from the first page, once she has offered it.
             KeyCode::KeyE if page == Page::Girls && self.venue.progress.elixir_offered => {
                 self.venue.show(Page::Offer, now);
@@ -129,6 +133,87 @@ impl App {
                 self.venue.navigate(1)
             }
             KeyCode::KeyP if page == Page::Offer => self.venue.open_leaflet(now),
+            // Rosalía's desk, from the first page (the account, paying, the loan, the house's work).
+            KeyCode::KeyL | KeyCode::KeyR if matches!(page, Page::Girls | Page::Ask) => {
+                self.venue.open_desk(now);
+            }
+            KeyCode::ArrowLeft | KeyCode::ArrowUp | KeyCode::KeyA | KeyCode::KeyW
+                if matches!(page, Page::Desk | Page::Clients) =>
+            {
+                self.venue.navigate(-1)
+            }
+            KeyCode::ArrowRight
+            | KeyCode::ArrowDown
+            | KeyCode::KeyD
+            | KeyCode::KeyS
+            | KeyCode::Tab
+                if matches!(page, Page::Desk | Page::Clients) =>
+            {
+                self.venue.navigate(1)
+            }
+            KeyCode::Digit1
+            | KeyCode::Digit2
+            | KeyCode::Digit3
+            | KeyCode::Digit4
+            | KeyCode::Digit5
+            | KeyCode::Digit6
+                if matches!(page, Page::Desk | Page::Clients) =>
+            {
+                let pick = match code {
+                    KeyCode::Digit1 => 0,
+                    KeyCode::Digit2 => 1,
+                    KeyCode::Digit3 => 2,
+                    KeyCode::Digit4 => 3,
+                    KeyCode::Digit5 => 4,
+                    _ => 5,
+                };
+                let len = if page == Page::Clients {
+                    venue::ROSTER.len()
+                } else {
+                    self.venue.desk_actions().len()
+                };
+                if pick < len {
+                    self.venue.today = self.world_day();
+                    self.venue.choice = pick;
+                    self.venue.act_at(&mut self.gold, now);
+                    if !self.after_loan_act() {
+                        self.after_venue_act();
+                    }
+                    self.persist_3d_state(true);
+                }
+            }
+            KeyCode::ArrowLeft | KeyCode::ArrowUp | KeyCode::KeyA | KeyCode::KeyW
+                if page == Page::Loan =>
+            {
+                self.venue.navigate(-1)
+            }
+            KeyCode::ArrowRight
+            | KeyCode::ArrowDown
+            | KeyCode::KeyD
+            | KeyCode::KeyS
+            | KeyCode::Tab
+                if page == Page::Loan =>
+            {
+                self.venue.navigate(1)
+            }
+            KeyCode::Digit1 | KeyCode::Digit2 | KeyCode::Digit3 | KeyCode::Digit4
+                if page == Page::Loan =>
+            {
+                let pick = match code {
+                    KeyCode::Digit1 => 0,
+                    KeyCode::Digit2 => 1,
+                    KeyCode::Digit3 => 2,
+                    _ => 3,
+                };
+                if pick < self.venue.loan_actions().len() {
+                    self.venue.choice = pick;
+                    self.venue.act_at(&mut self.gold, now);
+                    if !self.after_loan_act() {
+                        self.after_venue_act();
+                    }
+                    self.persist_3d_state(true);
+                }
+            }
             KeyCode::KeyP if page == Page::Leaflet => {
                 self.venue.back(now);
             }
@@ -140,7 +225,14 @@ impl App {
     pub(super) fn open_venue_book(&mut self) {
         self.open_shop();
         let now = (self.elapsed * 1000.0) as u32;
+        self.venue.today = self.world_day();
         self.venue.open_book(now);
+        if self.venue.collecting() && self.venue.progress.debt_way.is_empty() {
+            self.float_chiquita_cue(
+                "—Ahí está. La sonrisa de cobrar. Ya sabía yo que «tres días» era una amenaza.",
+                super::mascot::Cue::Scold,
+            );
+        }
         // The book is Rosalía's: the village shopkeeper says nothing here.
         self.shop_said = None;
         if self.venue.page == venue::Page::Offer && self.venue.progress.elixirs_bought == 0 {
@@ -451,7 +543,39 @@ impl App {
                         self.venue.offer_from = venue::Page::Girls;
                     }
                 }
-                Some(Hit::Talk) => self.venue.talk(),
+                Some(Hit::Loan(i)) => {
+                    self.venue.today = self.world_day();
+                    self.venue.choice = i;
+                    self.venue.act_at(&mut self.gold, now);
+                    if !self.after_loan_act() {
+                        self.after_venue_act();
+                    }
+                }
+                Some(Hit::LoanPick(i)) => {
+                    self.venue.choice = i;
+                    self.venue.notice.clear();
+                }
+                Some(Hit::Desk) => self.venue.open_desk(now),
+                Some(Hit::Client(i)) => {
+                    // A card not chosen is only picked; the chosen one is served.
+                    if self.venue.choice == i {
+                        self.venue.act_at(&mut self.gold, now);
+                        if !self.after_loan_act() {
+                            self.after_venue_act();
+                        }
+                    } else {
+                        self.venue.choice = i;
+                        self.venue.notice.clear();
+                    }
+                }
+                Some(Hit::DeskRow(i)) => {
+                    self.venue.today = self.world_day();
+                    self.venue.choice = i;
+                    self.venue.act_at(&mut self.gold, now);
+                    if !self.after_loan_act() {
+                        self.after_venue_act();
+                    }
+                }
                 Some(Hit::Close) => {
                     if !self.venue.back(now) {
                         self.close_shop();
@@ -556,10 +680,15 @@ impl App {
         for (id, ..) in &goods {
             self.inventory.remove(id);
         }
-        self.gold = self.gold.saturating_add(total);
+        let cut = self.rosalia_cut(total);
+        self.gold = self.gold.saturating_add(total - cut);
         self.shop_selection = 0;
         self.shop_quantity = 1;
-        self.shop_notice = Some(format!("Vendiste {pieces} piezas por {total} oro."));
+        self.shop_notice = Some(if cut > 0 {
+            format!("Vendiste {pieces} piezas por {total} oro ({cut} para Rosalía).")
+        } else {
+            format!("Vendiste {pieces} piezas por {total} oro.")
+        });
         self.shop_said = Some((
             "—¡Buena jornada, Majestad! Lo peso, lo pago y a la vagoneta.".to_owned(),
             self.elapsed,
@@ -637,13 +766,23 @@ impl App {
                     return false;
                 }
                 let reward = sell_reward;
-                self.gold = self.gold.saturating_add(reward);
+                // Paying Rosalía in the mine: what comes from the shaft goes to her first.
+                let cut = if dungeon::pozo::value(&id).is_some() {
+                    self.rosalia_cut(reward)
+                } else {
+                    0
+                };
+                self.gold = self.gold.saturating_add(reward - cut);
                 if owned == quantity {
                     self.inventory.remove(&id);
                 } else if let Some(amount) = self.inventory.get_mut(&id) {
                     *amount -= quantity;
                 }
-                self.shop_notice = Some(format!("Vendiste {quantity} × {name}."));
+                self.shop_notice = Some(if cut > 0 {
+                    format!("Vendiste {quantity} × {name} ({cut} oro para Rosalía).")
+                } else {
+                    format!("Vendiste {quantity} × {name}.")
+                });
                 self.ui_sound(dungeon::sound::Sfx::Coins, 0.7);
                 if self.shop_product_indices().is_empty() {
                     self.shop_selection = 0;

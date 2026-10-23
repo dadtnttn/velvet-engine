@@ -23,6 +23,10 @@ pub(super) const GUESTS: [(&str, &str); 3] = [
     ("Maren", "noche_maren"),
 ];
 
+/// Dates with a girl (`cita_<girl>`, `citas.md`) before her night can go further, to her Caricias
+/// (`corte.md` asks the same number on that option).
+pub(super) const CARICIAS_CITAS: i32 = 2;
+
 /// The guests' faces on their cards (portrait and mood in retratos.json).
 const GUEST_FACES: [(&str, &str); 3] = [
     ("lira", "sonrojada"),
@@ -327,9 +331,26 @@ impl App {
                         } else {
                             name
                         };
-                        let mut c = match self.guest_ready(i) {
-                            Ok(()) => card(name, "Que venga esta noche.", "heart", false),
-                            Err(why) => card(name, why, "heart", true),
+                        // With a date route (Lira, Nyxara): how far she is from her Caricias.
+                        let dates = match i {
+                            0 => Some(self.story.get("cita_lira")),
+                            1 => Some(self.story.get("cita_nyxara")),
+                            _ => None,
+                        };
+                        let mut c = match (self.guest_ready(i), dates) {
+                            (Ok(()), Some(n)) if n >= CARICIAS_CITAS => {
+                                card(name, "Que venga esta noche · caricias abiertas.", "heart", false)
+                            }
+                            (Ok(()), Some(n)) => card(
+                                name,
+                                &format!(
+                                    "Que venga esta noche · caricias tras {CARICIAS_CITAS} citas ({n}/{CARICIAS_CITAS})."
+                                ),
+                                "heart",
+                                false,
+                            ),
+                            (Ok(()), None) => card(name, "Que venga esta noche.", "heart", false),
+                            (Err(why), _) => card(name, why, "heart", true),
                         };
                         // Her face in the card's window, once the Queen knows it.
                         if name != "· · ·" {
@@ -670,5 +691,19 @@ impl App {
             mascot: true,
             queen: face("gorou", Some("sonrojada")),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_nights_ask_as_many_dates_as_the_cards_say() {
+        let text = std::fs::read_to_string(guion::folder().join("corte.md")).expect("corte.md");
+        for girl in ["lira", "nyxara"] {
+            let want = format!("[cita_{girl} >= {CARICIAS_CITAS}]");
+            assert_eq!(text.matches(&want).count(), 2, "{want}");
+        }
     }
 }

@@ -1,6 +1,7 @@
 //! Non-explicit salon menu: companion requests, client hospitality jobs, and room rentals.
 //! Economy is stored in the exploration checkpoint; UI selection is transient.
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::sync::OnceLock;
 
 fn default_libido() -> u32 {
@@ -34,6 +35,26 @@ pub struct Progress {
     pub elixirs_bought: u32,
     /// One is drunk and not yet spent: the seal can take its shape with a girl.
     pub elixir_active: bool,
+    /// Gold owed to Rosalía: her loan and her cut (0, nothing owed).
+    pub debt: u32,
+    /// The world's day (`dia_mundo`) the debt falls due.
+    pub debt_due: i32,
+    /// How the Queen pays it once it is due: `""` (not chosen yet), [`WAY_MINE`], [`WAY_HOUSE`]
+    /// or [`WAY_BANNED`].
+    pub debt_way: String,
+    /// Shifts worked in the house to pay it (they take turns of the clients' scenes).
+    pub shifts_worked: u32,
+    /// Loans taken so far.
+    pub loans: u32,
+    /// What the last loan lent (her ledger shows the loan, her cut and what is paid).
+    pub debt_lent: u32,
+    /// The house's jobs are open to her: she worked a debt off once (a shift or the shaft).
+    pub jobs_open: bool,
+    /// Jobs done for pay: shifts and shaft errands.
+    pub jobs_shifts: u32,
+    pub jobs_errands: u32,
+    /// Times each client of the house was served (by his id).
+    pub served: BTreeMap<String, u32>,
 }
 
 impl Default for Progress {
@@ -50,6 +71,16 @@ impl Default for Progress {
             elixir_offered: false,
             elixirs_bought: 0,
             elixir_active: false,
+            debt: 0,
+            debt_due: 0,
+            debt_way: String::new(),
+            shifts_worked: 0,
+            loans: 0,
+            debt_lent: 0,
+            jobs_open: false,
+            jobs_shifts: 0,
+            jobs_errands: 0,
+            served: BTreeMap::new(),
         }
     }
 }
@@ -57,6 +88,45 @@ impl Default for Progress {
 /// Rosalía's elixir: the price of the first (her welcome) and of the rest.
 pub const ELIXIR_WELCOME: u32 = 10;
 pub const ELIXIR_PRICE: u32 = 40;
+
+/// Rosalía lends like a usurer (the user, 2026-10-22): when the Queen is short of gold at the
+/// desk she offers one of these, to be paid back with her cut within a few days. Once due, the
+/// Queen chooses how: the mine's earnings go to her till, shifts in the house, or none, and
+/// the door stays shut until it is paid.
+pub const LOANS: [u32; 2] = [100, 250];
+/// Days to pay it back.
+pub const LOAN_DAYS: i32 = 3;
+/// What one shift in the house takes off the debt (or pays, as a job of the house).
+pub const SHIFT_PAY: u32 = 80;
+/// The shaft errand as a job of the house: gold of ore to dig for her wagon, and her pay for it.
+pub const ERRAND_QUOTA: u32 = 120;
+pub const ERRAND_PAY: u32 = 160;
+pub const WAY_MINE: &str = "mina";
+pub const WAY_HOUSE: &str = "casa";
+pub const WAY_BANNED: &str = "vetada";
+
+/// What is owed back for a loan: the loan and her 30 %.
+pub fn owed_for(amount: u32) -> u32 {
+    amount + amount * 3 / 10
+}
+
+/// What the loan page offers now.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum LoanAction {
+    /// Take this much.
+    Borrow(u32),
+    /// Pay back all that is owed.
+    Repay,
+    /// Once due: the mine's earnings go to Rosalía.
+    Mine,
+    /// Once due: work shifts in the house.
+    House,
+    /// Once due: neither; the door stays shut until it is paid.
+    Refuse,
+    /// Paying in the house: one shift now.
+    Shift,
+    Back,
+}
 
 /// The book's pages: the girls side by side, what to ask of the one chosen, Rosalía's offer and
 /// the elixir's leaflet (its side effects, read from the offer).
@@ -67,6 +137,99 @@ pub enum Page {
     Ask,
     Offer,
     Leaflet,
+    /// Rosalía's loan: the offer, what is owed, and once due, how it will be paid.
+    Loan,
+    /// Rosalía's desk: the Queen's account with the house, paying it, the loan, the house's jobs.
+    Desk,
+    /// The house's clients, to serve one (once a debt was worked off).
+    Clients,
+}
+
+/// The house's clients as Rosalía's book shows them (the shift minigame's are `turno::CLIENTS`):
+/// who he is, a line on him, what he asks for, his guion scene (`turno_<n>`, its minigame), his
+/// colour and whether he can be served yet (his clips are made).
+pub struct ClientCard {
+    pub id: &'static str,
+    pub name: &'static str,
+    pub title: &'static str,
+    pub about: &'static str,
+    pub act: &'static str,
+    pub scene: i32,
+    pub accent: u32,
+    pub ready: bool,
+}
+
+pub const ROSTER: [ClientCard; 5] = [
+    ClientCard {
+        id: "bram",
+        name: "Bram",
+        title: "Soldado novato",
+        about: "Tímido, pecoso y obediente. Tiembla al pagar.",
+        act: "La mamada",
+        scene: 1,
+        accent: 0xff6ea0,
+        ready: true,
+    },
+    ClientCard {
+        id: "rus",
+        name: "Rus",
+        title: "Goblin juguetón",
+        about: "Chistes malos y manos rápidas. Paga en monedas sueltas.",
+        act: "La cubana",
+        scene: 4,
+        accent: 0x8fd46a,
+        ready: true,
+    },
+    ClientCard {
+        id: "gorm",
+        name: "Gorm",
+        title: "Ogro de las flores",
+        about: "Enorme, torpe y muy tierno. Trae flores del camino.",
+        act: "El primer asalto",
+        scene: 5,
+        accent: 0xc9a36a,
+        ready: true,
+    },
+    ClientCard {
+        id: "varg",
+        name: "Varg",
+        title: "Lobo de la luna",
+        about: "Un caballero con colmillos. Aúlla bajito.",
+        act: "Por detrás",
+        scene: 6,
+        accent: 0x9fb4c9,
+        ready: true,
+    },
+    ClientCard {
+        id: "kael",
+        name: "Kael",
+        title: "Elfo oscuro",
+        about: "Embajador arrogante. Pide «lo mejor de la casa».",
+        act: "Pronto",
+        scene: 7,
+        accent: 0xb48cff,
+        ready: false,
+    },
+];
+
+/// What Rosalía's desk offers now.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum DeskAction {
+    /// No debt: borrow (her notes); with one: her ledger (the loan page).
+    Loan,
+    /// Pay what is owed: all of it if the purse has it, else what it has.
+    Pay,
+    /// Work it off in the shaft: dig its worth for her wagon (or back down to finish it).
+    Mine,
+    /// Work it off in the house: a shift now.
+    House,
+    /// The house's clients: serve one, for pay (open once a debt was worked off).
+    Clients,
+    /// The shaft for the house: [`ERRAND_QUOTA`] of ore for her wagon, [`ERRAND_PAY`] for it.
+    Errand,
+    /// Something the house will offer later.
+    Soon,
+    Back,
 }
 
 pub const OFFER_DECLINE: usize = 1;
@@ -106,6 +269,16 @@ pub struct Menu {
     pub drink: bool,
     /// The page to go back to after the offer.
     pub offer_from: Page,
+    /// The world's day now (`dia_mundo`), set by the game before the book is used.
+    pub today: i32,
+    /// A shift in the house was chosen: the game plays its scene.
+    pub shift: bool,
+    /// She would not pay: the game sees her out of the house.
+    pub expelled: bool,
+    /// Down the shaft for Rosalía: the quota, the pay (0: a debt) and whether it works a debt off.
+    pub to_mine: Option<(u32, u32, bool)>,
+    /// A client chosen on his card: his guion scene (`turno_<n>`), served now.
+    pub client_shift: Option<i32>,
 }
 
 /// One entry of a venue's data file. Some of its fields are there for the writers and the web
@@ -222,6 +395,9 @@ impl Menu {
             let len = match self.page {
                 Page::Ask => self.asking().len(),
                 Page::Offer => 3,
+                Page::Loan => self.loan_actions().len(),
+                Page::Desk => self.desk_actions().len(),
+                Page::Clients => ROSTER.len(),
                 _ => 0,
             };
             if len > 0 {
@@ -237,12 +413,20 @@ impl Menu {
         self.notice.clear();
     }
 
-    /// The book opens at the desk: Rosalía's offer first, the first time after a girl.
+    /// The book opens at the desk: a debt that fell due first (Rosalía collects), then her offer,
+    /// the first time after a girl.
     pub fn open_book(&mut self, now_ms: u32) {
         self.open = true;
         self.select_tab(0);
         self.drink = false;
-        if self.progress.visits >= 1 && !self.progress.elixir_offered {
+        self.shift = false;
+        self.expelled = false;
+        self.to_mine = None;
+        self.client_shift = None;
+        if self.collecting() {
+            self.show(Page::Loan, now_ms);
+            self.offer_from = Page::Girls;
+        } else if self.progress.visits >= 1 && !self.progress.elixir_offered {
             self.show(Page::Offer, now_ms);
             self.offer_from = Page::Girls;
         } else {
@@ -277,6 +461,549 @@ impl Menu {
                 self.show(Page::Offer, now_ms);
                 self.choice = OFFER_LEAFLET;
                 true
+            }
+            Page::Loan => {
+                let from = self.offer_from;
+                self.show(from, now_ms);
+                true
+            }
+            Page::Desk => {
+                self.show(Page::Girls, now_ms);
+                true
+            }
+            Page::Clients => {
+                self.show(Page::Desk, now_ms);
+                self.choice = self
+                    .desk_actions()
+                    .iter()
+                    .position(|a| matches!(a, DeskAction::Clients | DeskAction::House))
+                    .unwrap_or(0);
+                true
+            }
+        }
+    }
+
+    /// Rosalía's desk, from the first page.
+    pub fn open_desk(&mut self, now_ms: u32) {
+        self.show(Page::Desk, now_ms);
+    }
+
+    /// Her desk's rows, in order.
+    pub fn desk_actions(&self) -> Vec<DeskAction> {
+        use DeskAction::*;
+        let p = &self.progress;
+        if p.debt == 0 {
+            return vec![Clients, Errand, Loan, Soon, Back];
+        }
+        if p.debt_way == WAY_MINE {
+            return vec![Mine, Pay, Loan, Back];
+        }
+        if p.debt_way == WAY_HOUSE {
+            return vec![House, Pay, Loan, Back];
+        }
+        vec![Pay, Mine, House, Loan, Back]
+    }
+
+    /// Her desk's rows as the book draws them, and whether each is for adults.
+    pub fn desk_rows(&self, gold: u32) -> Vec<(Asking, bool)> {
+        let p = &self.progress;
+        let debt = p.debt;
+        let open = p.jobs_open;
+        let row = |label: String, hint: String, icon: &str, locked: bool| Asking {
+            label,
+            hint,
+            icon: icon.to_owned(),
+            locked,
+            awake: false,
+            back: false,
+        };
+        let shut = || "Al saldar una deuda trabajando".to_owned();
+        let days = self.days_left();
+        self.desk_actions()
+            .into_iter()
+            .map(|a| match a {
+                DeskAction::Loan if debt == 0 => (
+                    row(
+                        "Pedir un préstamo".into(),
+                        format!(
+                            "{} o {} oro · devuelves +30 % en {LOAN_DAYS} días",
+                            LOANS[0], LOANS[1]
+                        ),
+                        "coin",
+                        false,
+                    ),
+                    false,
+                ),
+                DeskAction::Loan => (
+                    row(
+                        "Su libro de cuentas".into(),
+                        "Lo prestado, su 30 % y lo pagado".into(),
+                        "candle",
+                        false,
+                    ),
+                    false,
+                ),
+                DeskAction::Pay => (
+                    if gold >= debt {
+                        row(
+                            format!("Pagar {debt} oro"),
+                            "Lo tacha de su libro y quedas en paz".into(),
+                            "coin",
+                            false,
+                        )
+                    } else if gold > 0 {
+                        row(
+                            format!("Abonar {gold} oro"),
+                            format!("Todo lo que llevas · quedarían {}", debt - gold),
+                            "coin",
+                            false,
+                        )
+                    } else {
+                        row("Pagar".into(), "No llevas oro encima".into(), "coin", true)
+                    },
+                    false,
+                ),
+                DeskAction::Mine if p.debt_way == WAY_MINE => (
+                    row(
+                        "Volver al pozo".into(),
+                        format!("Tu encargo sigue: {debt} oro en mineral"),
+                        "pick",
+                        false,
+                    ),
+                    false,
+                ),
+                DeskAction::Mine => (
+                    row(
+                        "Saldarla en el pozo".into(),
+                        format!("Picar {debt} oro en mineral para ella"),
+                        "pick",
+                        false,
+                    ),
+                    false,
+                ),
+                DeskAction::House => (
+                    row(
+                        if p.debt_way == WAY_HOUSE {
+                            "Atender a un cliente".into()
+                        } else {
+                            "Saldarla en la casa".into()
+                        },
+                        if open {
+                            format!("Eliges cliente · −{SHIFT_PAY} por turno")
+                        } else {
+                            format!("Un cliente con máscara · −{SHIFT_PAY} por turno")
+                        },
+                        "mask",
+                        false,
+                    ),
+                    true,
+                ),
+                DeskAction::Clients => (
+                    row(
+                        "Clientes de la casa".into(),
+                        if open {
+                            format!("Elige a quién atender · +{SHIFT_PAY} y propina")
+                        } else {
+                            shut()
+                        },
+                        "mask",
+                        !open,
+                    ),
+                    true,
+                ),
+                DeskAction::Errand => (
+                    row(
+                        "Encargo en el pozo".into(),
+                        if open {
+                            format!("Picar {ERRAND_QUOTA} oro en mineral · cobras {ERRAND_PAY}")
+                        } else {
+                            shut()
+                        },
+                        "pick",
+                        !open,
+                    ),
+                    false,
+                ),
+                DeskAction::Soon => (
+                    row(
+                        "Favores de Rosalía".into(),
+                        "Pronto · la casa crece".into(),
+                        "candle",
+                        true,
+                    ),
+                    false,
+                ),
+                DeskAction::Back => (
+                    Asking {
+                        back: true,
+                        ..row("Volver".into(), "A las chicas".into(), "back", false)
+                    },
+                    false,
+                ),
+            })
+            .map(|(mut a, adult)| {
+                if days < 0 && matches!(a.icon.as_str(), "coin") && !a.locked && debt > 0 {
+                    a.hint = format!("{} · plazo vencido", a.hint);
+                }
+                (a, adult)
+            })
+            .collect()
+    }
+
+    /// Rosalía's line at her desk (or over her clients).
+    pub fn desk_line(&self) -> &'static str {
+        let p = &self.progress;
+        if self.page == Page::Clients {
+            return if p.debt > 0 {
+                "—Cada uno, un pellizco menos de deuda. Elija con cariño… o con hambre."
+            } else {
+                "—Todos pagan bien, mi reina. Y todos se van contentos. Bueno… casi todos."
+            };
+        }
+        if p.debt == 0 {
+            if p.jobs_open {
+                "—Mi mejor trabajadora. No ponga esa cara, es un cumplido. ¿Qué le apetece hoy?"
+            } else {
+                "—Su cuenta está limpia, mi reina. Si alguna noche le falta oro, ya sabe dónde está mi libro."
+            }
+        } else if p.debt_way == WAY_MINE {
+            "—Mi vagoneta la espera en el pozo. Hasta que no esté llena, el enano no sube la jaula."
+        } else if p.debt_way == WAY_HOUSE {
+            "—Las chicas le guardan la barra. Un turno, y un pellizco menos."
+        } else if self.overdue() {
+            "—Vencida, cariño. Oro, pico o la casa. Usted elige… mientras pueda elegir."
+        } else {
+            "—Puede pagarme cuando quiera. Todo, o a poquitos. Yo lo apunto todo, ya lo sabe."
+        }
+    }
+
+    /// Enter on her desk.
+    fn act_desk(&mut self, gold: &mut u32, now_ms: u32) {
+        let actions = self.desk_actions();
+        let Some(&action) = actions.get(self.choice) else {
+            return;
+        };
+        let shut = "—Primero salde una deuda trabajando, cariño. Luego hablamos de sueldo.";
+        match action {
+            DeskAction::Loan => {
+                self.show(Page::Loan, now_ms);
+                self.offer_from = Page::Desk;
+            }
+            DeskAction::Pay => {
+                let p = &mut self.progress;
+                if *gold == 0 {
+                    self.notice = "No llevas oro encima.".into();
+                    return;
+                }
+                let paid = (*gold).min(p.debt);
+                *gold -= paid;
+                p.debt -= paid;
+                if p.debt == 0 {
+                    p.debt_way.clear();
+                    self.notice =
+                        format!("Deuda saldada: {paid} oro. Rosalía lo tacha de su libro.");
+                } else {
+                    self.notice = format!("Abonas {paid} oro. Quedan {}.", p.debt);
+                }
+                self.choice = 0;
+            }
+            DeskAction::Mine => {
+                let p = &mut self.progress;
+                p.debt_way = WAY_MINE.to_owned();
+                self.to_mine = Some((p.debt, 0, true));
+            }
+            DeskAction::House => {
+                self.progress.debt_way = WAY_HOUSE.to_owned();
+                // Once she knows the house, she picks the client; before, the next in turn.
+                if self.progress.jobs_open {
+                    self.show(Page::Clients, now_ms);
+                } else {
+                    self.shift = true;
+                }
+            }
+            DeskAction::Clients => {
+                if self.progress.jobs_open {
+                    self.show(Page::Clients, now_ms);
+                } else {
+                    self.notice = shut.into();
+                }
+            }
+            DeskAction::Errand => {
+                if self.progress.jobs_open {
+                    self.to_mine = Some((ERRAND_QUOTA, ERRAND_PAY, false));
+                } else {
+                    self.notice = shut.into();
+                }
+            }
+            DeskAction::Soon => {
+                self.notice = "—Pronto, mi reina. La casa crece… y usted con ella.".into();
+            }
+            DeskAction::Back => {
+                self.back(now_ms);
+            }
+        }
+    }
+
+    /// Enter on a client's card: his shift (the game plays his scene, then his minigame).
+    fn act_clients(&mut self) {
+        let Some(c) = ROSTER.get(self.choice) else {
+            return;
+        };
+        if !c.ready {
+            self.notice = format!("—{} aún no ha pedido cita, mi reina. Pronto.", c.name);
+            return;
+        }
+        self.client_shift = Some(c.scene);
+    }
+
+    /// Times this client has been served.
+    pub fn served(&self, id: &str) -> u32 {
+        self.progress.served.get(id).copied().unwrap_or(0)
+    }
+
+    /// A shaft errand came to an end: met (a debt written off, or its pay), or given up (a debt's:
+    /// what was sent up comes off it, and the house shuts until it is paid). What the game says.
+    pub fn errand_done(
+        &mut self,
+        met: bool,
+        pay: u32,
+        debt: bool,
+        sent: u32,
+        gold: &mut u32,
+    ) -> String {
+        let p = &mut self.progress;
+        match (met, debt) {
+            (true, true) => {
+                let owed = p.debt;
+                p.debt = 0;
+                p.debt_way.clear();
+                p.jobs_open = true;
+                format!(
+                    "Deuda saldada en el pozo
+La vagoneta de Rosalía sube llena: {owed} oro menos. Su casa te ofrece trabajo."
+                )
+            }
+            (true, false) => {
+                *gold = gold.saturating_add(pay);
+                p.jobs_errands += 1;
+                format!(
+                    "Encargo del pozo cumplido
++{pay} oro de Rosalía."
+                )
+            }
+            (false, true) => {
+                let off = sent.min(p.debt);
+                p.debt -= off;
+                if p.debt == 0 {
+                    p.debt_way.clear();
+                    return "Encargo abandonado
+Lo que subiste ya cubría la deuda: Rosalía la da por saldada."
+                        .into();
+                }
+                p.debt_way = WAY_BANNED.to_owned();
+                format!(
+                    "Encargo abandonado
+Rosalía se queda lo que subiste (−{off}) y te veta la casa hasta que pagues {}.",
+                    p.debt
+                )
+            }
+            (false, false) => "Encargo abandonado
+La casa no paga lo que no se termina."
+                .into(),
+        }
+    }
+
+    /// The debt fell due and how to pay it is not chosen yet.
+    pub fn overdue(&self) -> bool {
+        self.progress.debt > 0 && self.today > self.progress.debt_due
+    }
+
+    /// Rosalía wants her gold before anything else: due and not being paid off in the mine.
+    pub fn collecting(&self) -> bool {
+        self.overdue() && self.progress.debt_way != WAY_MINE
+    }
+
+    /// What has been paid off the last loan so far.
+    pub fn debt_paid(&self) -> u32 {
+        let p = &self.progress;
+        if p.debt_lent == 0 {
+            return 0;
+        }
+        owed_for(p.debt_lent).saturating_sub(p.debt)
+    }
+
+    /// Days left to pay (0 on the last one; negative once due).
+    pub fn days_left(&self) -> i32 {
+        self.progress.debt_due - self.today
+    }
+
+    /// The loan page's buttons, in order.
+    pub fn loan_actions(&self) -> Vec<LoanAction> {
+        let p = &self.progress;
+        if p.debt == 0 {
+            let mut out: Vec<LoanAction> = LOANS.iter().map(|&a| LoanAction::Borrow(a)).collect();
+            out.push(LoanAction::Back);
+            return out;
+        }
+        if p.debt_way == WAY_HOUSE {
+            return vec![LoanAction::Shift, LoanAction::Repay, LoanAction::Back];
+        }
+        if self.overdue() && p.debt_way.is_empty() {
+            return vec![LoanAction::Mine, LoanAction::House, LoanAction::Refuse];
+        }
+        vec![LoanAction::Repay, LoanAction::Back]
+    }
+
+    /// Whether a button can be taken with this gold.
+    pub fn loan_enabled(&self, action: LoanAction, gold: u32) -> bool {
+        match action {
+            LoanAction::Repay => gold >= self.progress.debt,
+            _ => true,
+        }
+    }
+
+    /// Rosalía's line on the loan page.
+    pub fn loan_line(&self) -> &'static str {
+        let p = &self.progress;
+        if p.debt == 0 {
+            if p.loans == 0 {
+                "—¿Sin oro, mi reina? Qué contratiempo… Yo le presto. Tres días. Y si no puede devolverlo, ya encontraremos la manera. Aquí todo se paga, de un modo u otro."
+            } else {
+                "—¿Otra vez corta de oro? La casa confía en usted, mi reina. Casi tanto como en su… capacidad de pago."
+            }
+        } else if p.debt_way == WAY_HOUSE {
+            "—Las chicas le han dejado sitio en la barra. Un turno, y un pellizco menos de deuda. Usted elige al cliente… más o menos."
+        } else if self.overdue() && p.debt_way.is_empty() {
+            "—El plazo venció, cariño. No me ponga esa cara. Hay tres maneras de arreglarlo: el pico, la casa… o la calle."
+        } else if p.debt_way == WAY_MINE {
+            "—Mi amigo el enano me guarda lo que usted le vende. Pico, pico, y estamos en paz."
+        } else {
+            "—Sin prisa, mi reina. Bueno… con un poquito de prisa. El reloj corre, y mis intereses también."
+        }
+    }
+
+    /// The loan page's top line: the deal or the debt.
+    pub fn loan_title(&self) -> &'static str {
+        let p = &self.progress;
+        if p.debt == 0 {
+            "PRÉSTAMO DE LA CASA"
+        } else if p.debt_way == WAY_HOUSE {
+            "TURNOS EN LA CASA"
+        } else if self.overdue() && p.debt_way != WAY_MINE {
+            "PLAZO VENCIDO"
+        } else {
+            "SU DEUDA"
+        }
+    }
+
+    /// A shift worked: its pay comes off the debt. What it took off.
+    pub fn shift_done(&mut self) -> u32 {
+        let p = &mut self.progress;
+        let paid = SHIFT_PAY.min(p.debt);
+        p.debt -= paid;
+        p.shifts_worked += 1;
+        // A debt worked off once: the house offers her work from then on.
+        p.jobs_open = true;
+        if p.debt == 0 {
+            p.debt_way.clear();
+        }
+        paid
+    }
+
+    /// A client's tip after a shift: it goes to the debt first. What it took off.
+    pub fn take_tip(&mut self, tip: u32) -> u32 {
+        let p = &mut self.progress;
+        let off = tip.min(p.debt);
+        p.debt -= off;
+        if p.debt == 0 {
+            p.debt_way.clear();
+        }
+        off
+    }
+
+    /// Paying it off in the mine: what Rosalía takes of `earned` (all of it, up to the debt).
+    pub fn takes_from_sale(&mut self, earned: u32) -> u32 {
+        let p = &mut self.progress;
+        if p.debt_way != WAY_MINE || p.debt == 0 {
+            return 0;
+        }
+        let cut = earned.min(p.debt);
+        p.debt -= cut;
+        if p.debt == 0 {
+            p.debt_way.clear();
+        }
+        cut
+    }
+
+    /// Paid at the door with her own gold: whether it was enough (the door opens again).
+    pub fn pay_at_door(&mut self, gold: &mut u32) -> bool {
+        let p = &mut self.progress;
+        if *gold < p.debt {
+            return false;
+        }
+        *gold -= p.debt;
+        p.debt = 0;
+        p.debt_way.clear();
+        true
+    }
+
+    /// Kept out of the house: she would not pay and still owes.
+    pub fn banned(&self) -> bool {
+        self.progress.debt > 0 && self.progress.debt_way == WAY_BANNED
+    }
+
+    /// Enter on the loan page.
+    fn act_loan(&mut self, gold: &mut u32, now_ms: u32) {
+        let actions = self.loan_actions();
+        let Some(&action) = actions.get(self.choice) else {
+            return;
+        };
+        let p = &mut self.progress;
+        match action {
+            LoanAction::Borrow(amount) => {
+                *gold = gold.saturating_add(amount);
+                p.debt = owed_for(amount);
+                p.debt_due = self.today + LOAN_DAYS;
+                p.debt_way.clear();
+                p.loans += 1;
+                p.debt_lent = amount;
+                let owed = p.debt;
+                let from = self.offer_from;
+                self.show(from, now_ms);
+                self.notice = format!(
+                    "Rosalía te presta {amount} oro. Le devuelves {owed} en {LOAN_DAYS} días."
+                );
+            }
+            LoanAction::Repay => {
+                if *gold < p.debt {
+                    self.notice = format!("Te faltan {} de oro.", p.debt - *gold);
+                    return;
+                }
+                *gold -= p.debt;
+                let paid = p.debt;
+                p.debt = 0;
+                p.debt_way.clear();
+                self.show(Page::Girls, now_ms);
+                self.notice = format!("Deuda saldada: {paid} oro. Rosalía sonríe y lo apunta.");
+            }
+            LoanAction::Mine => {
+                // Down the shaft at once, to dig its worth for her wagon.
+                p.debt_way = WAY_MINE.to_owned();
+                self.to_mine = Some((p.debt, 0, true));
+            }
+            LoanAction::House => {
+                p.debt_way = WAY_HOUSE.to_owned();
+                self.show(Page::Loan, now_ms);
+            }
+            LoanAction::Refuse => {
+                p.debt_way = WAY_BANNED.to_owned();
+                self.expelled = true;
+            }
+            LoanAction::Shift => {
+                self.shift = true;
+            }
+            LoanAction::Back => {
+                self.back(now_ms);
             }
         }
     }
@@ -415,20 +1142,23 @@ impl Menu {
         None
     }
 
-    pub fn talk(&mut self) {
-        if self.tab == 2 && self.has_room() {
-            self.progress.hours = self.progress.hours.saturating_add(8);
-            self.progress.energy = 100;
-            self.notice = "Has descansado ocho horas. Energía restaurada al máximo.".into();
-        } else if let Some(e) = self.entries().get(self.selected) {
-            self.notice = e.quote.clone();
-        }
-    }
-
     /// Enter on the page on show. `now_ms`: the game's clock, for the next page's entrance.
     pub fn act_at(&mut self, gold: &mut u32, now_ms: u32) {
         if self.tab != 0 {
             self.act(gold);
+            return;
+        }
+        // A debt due comes first: Rosalía collects before anything else is served.
+        if matches!(self.page, Page::Girls | Page::Ask) && self.overdue() {
+            if self.collecting() {
+                self.show(Page::Loan, now_ms);
+                self.offer_from = Page::Girls;
+            } else {
+                self.notice = format!(
+                    "Primero la deuda: aún le debes {} oro a Rosalía.",
+                    self.progress.debt
+                );
+            }
             return;
         }
         match self.page {
@@ -437,6 +1167,9 @@ impl Menu {
                     self.show(Page::Ask, now_ms);
                 }
             }
+            Page::Loan => self.act_loan(gold, now_ms),
+            Page::Desk => self.act_desk(gold, now_ms),
+            Page::Clients => self.act_clients(),
             Page::Ask => {
                 let asking = self.asking();
                 let Some(pick) = asking.get(self.choice).cloned() else {
@@ -460,7 +1193,16 @@ impl Menu {
                     return;
                 }
                 if *gold < self.girl_price() {
-                    self.notice = "No tienes suficiente oro.".into();
+                    if self.progress.debt == 0 {
+                        // Short of gold: Rosalía notices, and lends.
+                        self.show(Page::Loan, now_ms);
+                        self.offer_from = Page::Ask;
+                    } else {
+                        self.notice = format!(
+                            "No tienes suficiente oro (y ya le debes {} a Rosalía).",
+                            self.progress.debt
+                        );
+                    }
                     return;
                 }
                 self.asked = Some(ask.id.clone());
@@ -586,11 +1328,6 @@ mod tests {
         assert_eq!(gold, 130, "merchant gives 60 gold");
         // Cannot do same job twice
         assert!(m.blocked(gold).is_some());
-
-        // Resting in room
-        m.select_tab(2);
-        m.talk();
-        assert_eq!(m.progress.energy, 100);
     }
 
     #[test]
@@ -662,6 +1399,120 @@ mod tests {
         assert!(gold < before);
     }
 
+    /// Nina picked with the gold short: the loan page opens; `pick` is taken on it.
+    fn borrow(m: &mut Menu, gold: &mut u32, pick: usize) {
+        m.open_book(0);
+        m.selected = 0;
+        m.act_at(gold, 1);
+        assert_eq!(m.page, Page::Ask);
+        m.choice = 0;
+        m.act_at(gold, 2);
+        assert_eq!(m.page, Page::Loan, "short of gold: Rosalía lends");
+        m.choice = pick;
+        m.act_at(gold, 3);
+    }
+
+    #[test]
+    fn short_of_gold_rosalia_lends_and_it_is_paid_back_with_her_cut() {
+        let mut m = Menu::default();
+        let mut gold = 10;
+        borrow(&mut m, &mut gold, 0);
+        assert_eq!(gold, 10 + LOANS[0]);
+        assert_eq!(m.progress.debt, owed_for(LOANS[0]));
+        assert_eq!(m.progress.debt, 130);
+        assert_eq!(m.progress.debt_due, LOAN_DAYS);
+        assert_eq!(m.page, Page::Ask, "back where the girl was being asked");
+        // Within the days she pays from the loan page.
+        m.show(Page::Loan, 4);
+        assert_eq!(m.loan_actions(), vec![LoanAction::Repay, LoanAction::Back]);
+        gold = 200;
+        m.choice = 0;
+        m.act_at(&mut gold, 5);
+        assert_eq!(gold, 70);
+        assert_eq!(m.progress.debt, 0);
+    }
+
+    #[test]
+    fn once_due_she_chooses_the_mine_the_house_or_the_street() {
+        let mut gold = 0;
+        // The mine: what she sells goes to Rosalía until it is paid; the book serves again.
+        let mut m = Menu::default();
+        borrow(&mut m, &mut gold, 1);
+        assert_eq!(m.progress.debt, 325);
+        m.today = LOAN_DAYS + 1;
+        m.open_book(10);
+        assert_eq!(m.page, Page::Loan, "due: she collects first");
+        assert_eq!(
+            m.loan_actions(),
+            vec![LoanAction::Mine, LoanAction::House, LoanAction::Refuse]
+        );
+        m.choice = 0;
+        m.act_at(&mut gold, 11);
+        assert_eq!(m.progress.debt_way, WAY_MINE);
+        assert!(!m.collecting());
+        assert_eq!(m.takes_from_sale(200), 200);
+        assert_eq!(m.takes_from_sale(200), 125);
+        assert_eq!(m.progress.debt, 0);
+        assert_eq!(m.takes_from_sale(50), 0, "paid: the sales are hers again");
+        assert!(m.progress.debt_way.is_empty());
+
+        // The house: shifts, each one off the debt.
+        let mut m = Menu::default();
+        let mut gold = 0;
+        borrow(&mut m, &mut gold, 0);
+        m.today = LOAN_DAYS + 1;
+        m.open_book(10);
+        m.choice = 1;
+        m.act_at(&mut gold, 11);
+        assert_eq!(m.progress.debt_way, WAY_HOUSE);
+        assert_eq!(m.page, Page::Loan);
+        assert_eq!(m.loan_actions()[0], LoanAction::Shift);
+        m.choice = 0;
+        m.act_at(&mut gold, 12);
+        assert!(m.shift, "the game plays the shift's scene");
+        assert_eq!(m.shift_done(), SHIFT_PAY);
+        assert_eq!(m.shift_done(), 130 - SHIFT_PAY);
+        assert_eq!(m.progress.debt, 0);
+        assert_eq!(m.progress.shifts_worked, 2);
+
+        // Neither: out, and the door stays shut until she pays at it.
+        let mut m = Menu::default();
+        let mut gold = 0;
+        borrow(&mut m, &mut gold, 0);
+        m.today = LOAN_DAYS + 1;
+        m.open_book(10);
+        m.choice = 2;
+        m.act_at(&mut gold, 11);
+        assert!(m.expelled);
+        assert!(m.banned());
+        gold = 50;
+        assert!(!m.pay_at_door(&mut gold));
+        gold = 150;
+        assert!(m.pay_at_door(&mut gold));
+        assert_eq!(gold, 20);
+        assert!(!m.banned());
+    }
+
+    #[test]
+    fn a_debt_due_blocks_the_girls_until_it_is_settled() {
+        let mut m = Menu::default();
+        let mut gold = 0;
+        borrow(&mut m, &mut gold, 0);
+        m.progress.debt_way = WAY_MINE.to_owned();
+        m.today = LOAN_DAYS + 1;
+        gold = 500;
+        m.open_book(10);
+        assert_eq!(
+            m.page,
+            Page::Girls,
+            "paying in the mine: the book opens as usual"
+        );
+        m.act_at(&mut gold, 11);
+        assert_eq!(m.page, Page::Girls, "but nothing is served");
+        assert!(m.notice.contains("deuda"));
+        assert_eq!(gold, 500);
+    }
+
     #[test]
     fn the_leaflet_opens_from_the_offer_and_goes_back_to_it_without_buying() {
         let mut m = Menu::default();
@@ -684,5 +1535,52 @@ mod tests {
         m.act_at(&mut gold, 4);
         assert_eq!(m.page, Page::Offer);
         assert_eq!(m.progress.elixirs_bought, 0);
+    }
+
+    #[test]
+    fn rosalias_desk_takes_gold_sends_her_down_the_shaft_and_opens_the_jobs() {
+        let mut m = Menu::default();
+        m.open_desk(1);
+        assert_eq!(
+            m.desk_actions(),
+            vec![
+                DeskAction::Clients,
+                DeskAction::Errand,
+                DeskAction::Loan,
+                DeskAction::Soon,
+                DeskAction::Back
+            ]
+        );
+        // the clients stay shut until a debt is worked off
+        m.choice = 0;
+        let mut gold = 0;
+        m.act_at(&mut gold, 2);
+        assert_eq!(m.page, Page::Desk);
+        // with a debt: pay what she has, a little at a time
+        m.progress.debt = 130;
+        m.progress.debt_lent = 100;
+        assert_eq!(m.desk_actions()[0], DeskAction::Pay);
+        let mut gold = 50;
+        m.choice = 0;
+        m.act_at(&mut gold, 3);
+        assert_eq!((gold, m.progress.debt), (0, 80));
+        // down the shaft for the rest
+        m.choice = 1;
+        m.act_at(&mut gold, 4);
+        assert_eq!(m.to_mine, Some((80, 0, true)));
+        assert_eq!(m.progress.debt_way, WAY_MINE);
+        // given up: what was sent up comes off, and the house shuts
+        let note = m.errand_done(false, 0, true, 30, &mut gold);
+        assert!(note.contains("veta"), "{note}");
+        assert_eq!(m.progress.debt, 50);
+        assert!(m.banned());
+        // met: written off, and the house offers work
+        m.progress.debt_way = WAY_MINE.to_owned();
+        m.errand_done(true, 0, true, 50, &mut gold);
+        assert_eq!(m.progress.debt, 0);
+        assert!(m.progress.jobs_open && !m.banned());
+        // a paid errand pays
+        m.errand_done(true, ERRAND_PAY, false, ERRAND_QUOTA, &mut gold);
+        assert_eq!((gold, m.progress.jobs_errands), (ERRAND_PAY, 1));
     }
 }

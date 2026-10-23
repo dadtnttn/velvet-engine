@@ -257,7 +257,18 @@ impl App {
         // what she has at home, for the Tendero's stall
         self.dungeon.purse = self.gold;
         self.dungeon.update(input, dt);
+        // Fallen to a champion of the mine: she is carried up and its scene plays (`mina.md`).
+        if let Some(boss) = self.dungeon.take_fallen_to() {
+            let scene = format!("mina.{boss}");
+            if guion::library().find(&scene, None).is_some() {
+                self.leave_dungeon();
+                self.start_talk_at(&scene);
+                return;
+            }
+        }
         self.settle_mining_things();
+        // Rosalía's errand down the shaft: settled once she is out.
+        self.settle_errand();
         // The dungeon's sounds, heard from the Queen's eyes.
         let sounds = self.dungeon.take_sounds();
         self.poll_audio_boot();

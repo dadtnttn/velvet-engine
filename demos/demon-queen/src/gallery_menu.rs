@@ -40,7 +40,7 @@ struct AlbumDef {
 /// The dates' album.
 const MEMORIES: usize = 1;
 
-const ALBUMS: [AlbumDef; 7] = [
+const ALBUMS: [AlbumDef; 8] = [
     AlbumDef {
         es: "Prólogo",
         en: "Prologue",
@@ -142,6 +142,50 @@ const ALBUMS: [AlbumDef; 7] = [
             en: "Another deal",
             dir: "tienda/escena",
         }],
+        memories: false,
+    },
+    // The mine's champions, after a defeat she turned round (data/guiones/mina.md).
+    AlbumDef {
+        es: "Mina",
+        en: "Mine",
+        icon: Icon::Mine,
+        scenes: &[
+            SceneDef {
+                es: "El Herrero Hueco",
+                en: "The Hollow Smith",
+                dir: "mina_vn/herrero",
+            },
+            SceneDef {
+                es: "La Bibliotecaria",
+                en: "The Librarian",
+                dir: "mina_vn/bibliotecaria",
+            },
+            SceneDef {
+                es: "El Señor de la Cripta",
+                en: "The Lord of the Crypt",
+                dir: "mina_vn/senor",
+            },
+            SceneDef {
+                es: "El Centinela del Tesoro",
+                en: "The Treasure Sentinel",
+                dir: "mina_vn/centinela",
+            },
+            SceneDef {
+                es: "El Custodio del Sello",
+                en: "The Seal's Custodian",
+                dir: "mina_vn/custodio",
+            },
+            SceneDef {
+                es: "El Guardián del Corazón",
+                en: "The Heart's Guardian",
+                dir: "mina_vn/guardian",
+            },
+            SceneDef {
+                es: "El Corazón",
+                en: "The Heart",
+                dir: "mina_vn/corazon",
+            },
+        ],
         memories: false,
     },
 ];

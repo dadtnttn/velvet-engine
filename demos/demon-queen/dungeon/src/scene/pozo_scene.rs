@@ -9,7 +9,7 @@ use std::collections::HashMap;
 /// Depth bands of the shaft's meshes.
 const BAND: i32 = 6;
 
-/// One thing showing in an open face of rock: an ore's nugget, a gem, a chest's corner.
+/// One thing showing in an open face of rock: an ore's stud, a gem's crystal, a chest's corner.
 #[derive(Clone, Copy)]
 struct Nugget {
     at: Vec3,
@@ -18,7 +18,22 @@ struct Nugget {
     glow: f32,
     size: f32,
     chest: bool,
+    /// A crystal leans toward `axis` (zero: straight out).
+    axis: Vec3,
 }
+
+/// The painted strata (`tools/pozo_texturas.py`), in `Rock::ALL`'s order; then the planks.
+const ROCK_TEXTURES: [&str; 8] = [
+    "pozo_tierra",
+    "pozo_piedra",
+    "pozo_pizarra",
+    "pozo_granito",
+    "pozo_basalto",
+    "pozo_obsidiana",
+    "pozo_abisal",
+    "pozo_corazon",
+];
+const PLANKS: usize = 8;
 
 /// What moves a part of the head-frame, and where it shows.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -54,7 +69,10 @@ pub(super) struct Headframe {
 /// open front toward +z; the script prints them).
 const HUB: Vec3 = Vec3::new(0.0, 5.22, -0.75);
 const WHEEL_R: f32 = 0.72;
-const LANTERNS: [Vec3; 2] = [Vec3::new(-0.891, 1.98, 1.321), Vec3::new(0.891, 1.98, 1.321)];
+const LANTERNS: [Vec3; 2] = [
+    Vec3::new(-0.891, 1.98, 1.321),
+    Vec3::new(0.891, 1.98, 1.321),
+];
 const CAGE_TOP: f32 = 2.67;
 
 impl Headframe {
@@ -123,8 +141,8 @@ impl Headframe {
 /// What the shaft keeps on the GPU.
 pub(super) struct PozoArt {
     seed: u64,
-    /// earth, stone, dark rock, planks
-    textures: [Option<TextureHandle>; 4],
+    /// the strata's painted rock ([`ROCK_TEXTURES`]), then the planks
+    textures: [Option<TextureHandle>; 9],
     bands: HashMap<(i32, usize), MeshHandle>,
     nuggets: HashMap<i32, Vec<Nugget>>,
     built: HashMap<i32, u64>,
@@ -236,12 +254,14 @@ impl PozoArt {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
     ) -> Self {
-        let textures = [
-            load_texture(renderer, device, queue, "brown_mud_rocks_01"),
-            load_texture(renderer, device, queue, "rock_face_04"),
-            load_texture(renderer, device, queue, "dark_rock_02"),
-            load_texture(renderer, device, queue, "old_planks_02"),
-        ];
+        let textures = std::array::from_fn(|i| {
+            load_texture(
+                renderer,
+                device,
+                queue,
+                ROCK_TEXTURES.get(i).copied().unwrap_or("old_planks_02"),
+            )
+        });
         let mut art = Self {
             seed: pozo.seed,
             textures,
@@ -279,7 +299,7 @@ impl PozoArt {
                 );
             }
         }
-        let dark = [1.3, 1.26, 1.2];
+        let dark = [0.82, 0.78, 0.74];
         let span = hi - lo;
         for (corner, u, n) in [
             (Vec3::new(lo, 0.0, lo), Vec3::new(0.0, 0.0, span), Vec3::X),
@@ -308,7 +328,7 @@ impl PozoArt {
                 );
             }
         }
-        for (mesh, texture) in [(stone, 1usize), (planks, 3), (walls, 2)] {
+        for (mesh, texture) in [(stone, 1usize), (planks, PLANKS), (walls, 0)] {
             if let Ok(handle) = renderer.upload_mesh(device, &mesh) {
                 self.room.push((handle, texture));
             }
@@ -323,7 +343,7 @@ impl PozoArt {
         renderer: &mut Wgpu3DRenderer,
         device: &wgpu::Device,
     ) {
-        let mut meshes = [empty_mesh(), empty_mesh(), empty_mesh()];
+        let mut meshes: [Mesh3D; 8] = std::array::from_fn(|_| empty_mesh());
         let mut nuggets = Vec::new();
         for k in band * BAND..(band + 1) * BAND {
             for x in -1..=WIDTH {
@@ -334,15 +354,19 @@ impl PozoArt {
                     let inside = pozo::in_shaft(x, z);
                     let block = pozo.block(x.clamp(0, WIDTH - 1), k, z.clamp(0, WIDTH - 1));
                     let wear = if inside { pozo.wear([x, k, z]) } else { 0.0 };
-                    let base = block.rock.color();
-                    let shade = (0.84 + 0.2 * hash3(x, k, z, 7))
+                    // the painted rock carries its colour: the block only shades it, and an ore's
+                    // block takes a little of the ore's
+                    let shade = (0.64 + 0.12 * hash3(x, k, z, 7))
                         * if inside { 1.0 } else { 0.62 }
                         * (1.0 - 0.5 * wear);
-                    let color = [base[0] * shade, base[1] * shade, base[2] * shade];
-                    let texture = if inside { block.rock.texture() } else { 2 };
-                    // the scanned textures are dark (the mine lifts them too): the darkest most
-                    let lift = [1.25, 1.35, 2.3][texture];
-                    let color = [color[0] * lift, color[1] * lift, color[2] * lift];
+                    let tint = match block.find {
+                        Some(Find::Ore(i)) => {
+                            let o = pozo::ORES[i].color;
+                            [0.62 + 0.45 * o[0], 0.62 + 0.45 * o[1], 0.62 + 0.45 * o[2]]
+                        }
+                        _ => [1.0, 1.0, 1.0],
+                    };
+                    let texture = block.rock.texture();
                     for (offset, normal) in SIDES {
                         let (nx, nk, nz) = (x + offset[0], k + offset[1], z + offset[2]);
                         let open = if nk < 0 {
@@ -355,24 +379,58 @@ impl PozoArt {
                         }
                         let n = Vec3::new(normal[0], normal[1], normal[2]);
                         let (corner, u, v) = face(x, k, z, n);
+                        // floors catch the lamps, ceilings stay in shadow
+                        let side = if n.y > 0.5 {
+                            1.1
+                        } else if n.y < -0.5 {
+                            0.74
+                        } else {
+                            0.96
+                        };
+                        let color = [
+                            tint[0] * shade * side,
+                            tint[1] * shade * side,
+                            tint[2] * shade * side,
+                        ];
                         quad(&mut meshes[texture], corner, u, v, n, color);
                         if !inside {
                             continue;
                         }
                         let center = corner + (u + v) * 0.5;
                         match block.find {
-                            Some(Find::Ore(i)) => {
+                            Some(Find::Ore(i)) if pozo::ORES[i].glow >= 0.5 => {
+                                // a gem: a cluster of crystals leaning out of the rock
                                 let o = &pozo::ORES[i];
-                                for j in 0..4 {
+                                let count = 3 + (hash3(x, k, z, 31) * 3.0) as u32;
+                                for j in 0..count {
                                     let du = hash3(x, k, z, 11 + j * 3) - 0.5;
                                     let dv = hash3(x, k, z, 12 + j * 3) - 0.5;
+                                    let lean = u * (du * 0.9) + v * (dv * 0.9);
                                     nuggets.push(Nugget {
-                                        at: center + u * (du * 0.75) + v * (dv * 0.75),
+                                        at: center + u * (du * 0.45) + v * (dv * 0.45),
                                         normal: n,
                                         color: o.color,
                                         glow: o.glow,
-                                        size: 0.07 + 0.06 * hash3(x, k, z, 13 + j * 3),
+                                        size: 0.1 + 0.12 * hash3(x, k, z, 13 + j * 3),
                                         chest: false,
+                                        axis: lean,
+                                    });
+                                }
+                            }
+                            Some(Find::Ore(i)) => {
+                                // a metal: its block takes its colour, studs of it set in the face
+                                let o = &pozo::ORES[i];
+                                for j in 0..9 {
+                                    let du = hash3(x, k, z, 11 + j * 3) - 0.5;
+                                    let dv = hash3(x, k, z, 12 + j * 3) - 0.5;
+                                    nuggets.push(Nugget {
+                                        at: center + u * (du * 0.8) + v * (dv * 0.8),
+                                        normal: n,
+                                        color: o.color,
+                                        glow: o.glow,
+                                        size: 0.05 + 0.08 * hash3(x, k, z, 13 + j * 3),
+                                        chest: false,
+                                        axis: Vec3::ZERO,
                                     });
                                 }
                             }
@@ -383,6 +441,7 @@ impl PozoArt {
                                 glow: 1.0,
                                 size: 0.2,
                                 chest: false,
+                                axis: Vec3::ZERO,
                             }),
                             Some(Find::Fossil) => nuggets.push(Nugget {
                                 at: center,
@@ -391,6 +450,7 @@ impl PozoArt {
                                 glow: 0.0,
                                 size: 0.16,
                                 chest: false,
+                                axis: Vec3::ZERO,
                             }),
                             Some(Find::Chest) => nuggets.push(Nugget {
                                 at: center,
@@ -399,6 +459,7 @@ impl PozoArt {
                                 glow: 0.0,
                                 size: 0.3,
                                 chest: true,
+                                axis: Vec3::ZERO,
                             }),
                             _ => {}
                         }
@@ -546,13 +607,23 @@ impl Scene {
         let iron = [0.16, 0.15, 0.15];
         self.push_box(
             draws,
-            oriented(at + Vec3::Y * 0.15, Vec3::X, Vec3::Y, Vec3::new(0.22, 0.05, 0.22)),
+            oriented(
+                at + Vec3::Y * 0.15,
+                Vec3::X,
+                Vec3::Y,
+                Vec3::new(0.22, 0.05, 0.22),
+            ),
             iron,
             0.0,
         );
         self.push_box(
             draws,
-            oriented(at - Vec3::Y * 0.15, Vec3::X, Vec3::Y, Vec3::new(0.24, 0.05, 0.24)),
+            oriented(
+                at - Vec3::Y * 0.15,
+                Vec3::X,
+                Vec3::Y,
+                Vec3::new(0.24, 0.05, 0.24),
+            ),
             iron,
             0.0,
         );
@@ -562,7 +633,12 @@ impl Scene {
             [1.0, 0.78, 0.42],
             3.2,
         );
-        lights.push(PointLight3D::new(at, [1.0, 0.66, 0.32], 5.5 * flicker, reach));
+        lights.push(PointLight3D::new(
+            at,
+            [1.0, 0.66, 0.32],
+            5.5 * flicker,
+            reach,
+        ));
     }
 
     /// The head-frame (tools/castillete_blender.py). In the mine all of it at `foot` facing `yaw`;
@@ -624,7 +700,13 @@ impl Scene {
                 self.timber(draws, frame.wood, pa, pb, 0.3, 0.7);
             }
             let hook = root.transform_point3(Vec3::new(0.0, CAGE_TOP, 0.0));
-            self.beam(draws, hook, Vec3::new(hook.x, foot.y + top, hook.z), 0.035, rope);
+            self.beam(
+                draws,
+                hook,
+                Vec3::new(hook.x, foot.y + top, hook.z),
+                0.035,
+                rope,
+            );
         } else {
             // the rope over the wheel's front and down to the cage
             let over = root.transform_point3(HUB + Vec3::new(0.0, 0.0, WHEEL_R));
@@ -688,27 +770,38 @@ impl Scene {
             .headframe
             .as_ref()
             .map_or((None, None), |h| (h.wood, h.iron));
-        let mut part = |transform: Mat4, color: [f32; 3], texture: Option<TextureHandle>, glow: f32| {
-            let mut material = Material3D::rgb(color[0], color[1], color[2]);
-            if glow > 0.0 {
-                material = material.with_emission(glow);
-            }
-            draws.push(MeshDraw3D {
-                mesh: self.cube,
-                transform,
-                material,
-                texture,
-            });
-        };
+        let mut part =
+            |transform: Mat4, color: [f32; 3], texture: Option<TextureHandle>, glow: f32| {
+                let mut material = Material3D::rgb(color[0], color[1], color[2]);
+                if glow > 0.0 {
+                    material = material.with_emission(glow);
+                }
+                draws.push(MeshDraw3D {
+                    mesh: self.cube,
+                    transform,
+                    material,
+                    texture,
+                });
+            };
         // the haft, wood with a leather grip at the fist
         part(
-            oriented((a + b) * 0.5, right, blade, Vec3::new(0.036, (b - a).length(), 0.036)),
+            oriented(
+                (a + b) * 0.5,
+                right,
+                blade,
+                Vec3::new(0.036, (b - a).length(), 0.036),
+            ),
             [1.1, 0.86, 0.66],
             wood,
             0.0,
         );
         part(
-            oriented(hand + blade * 0.02, right, blade, Vec3::new(0.044, 0.14, 0.044)),
+            oriented(
+                hand + blade * 0.02,
+                right,
+                blade,
+                Vec3::new(0.044, 0.14, 0.044),
+            ),
             [0.26, 0.15, 0.09],
             None,
             0.0,
@@ -737,7 +830,12 @@ impl Scene {
             // and its point
             let end = mid + across * (length * 0.5 + tip * 0.45) * along.signum();
             part(
-                oriented(end, right, across, Vec3::new(thick * 0.55, tip, thick * 0.6)),
+                oriented(
+                    end,
+                    right,
+                    across,
+                    Vec3::new(thick * 0.55, tip, thick * 0.6),
+                ),
                 metal,
                 iron,
                 glow,
@@ -833,11 +931,23 @@ impl Scene {
                 }
                 let mut material = Material3D::rgb(n.color[0], n.color[1], n.color[2]);
                 if n.glow > 0.0 {
-                    material = material.with_emission(n.glow * 1.4);
+                    material = material.with_emission(n.glow * 1.8);
+                } else {
+                    material = material.with_emission(0.12);
                 }
+                // a gem's crystals lean out of the rock; a metal's studs stand straight out
+                let up = (n.normal + n.axis).normalize_or_zero();
+                let side = up.cross(x).normalize_or_zero();
+                let x = side.cross(up).normalize_or_zero();
+                let gem = n.glow >= 0.5;
                 draws.push(MeshDraw3D {
                     mesh: self.crystal,
-                    transform: oriented(n.at, x, n.normal, Vec3::new(n.size, n.size * 1.5, n.size)),
+                    transform: oriented(
+                        n.at + up * n.size * if gem { 0.3 } else { 0.02 },
+                        x,
+                        up,
+                        Vec3::new(n.size, n.size * if gem { 2.2 } else { 0.7 }, n.size),
+                    ),
                     material,
                     texture: None,
                 });
@@ -852,19 +962,33 @@ impl Scene {
             }
         }
         glows.sort_by(|a, b| a.0.total_cmp(&b.0));
-        for (_, at, color, glow) in glows.into_iter().take(5) {
-            lights.push(PointLight3D::new(at, color, 0.9 * glow, 3.2));
+        // the nearest gems light the rock round them
+        glows.dedup_by(|a, b| (a.1 - b.1).length_squared() < 0.36);
+        for (_, at, color, glow) in glows.into_iter().take(8) {
+            lights.push(PointLight3D::new(at, color, 1.4 * glow, 4.2));
         }
-        let wood = art.textures[3];
+        let wood = art.textures[PLANKS];
         let w = WIDTH as f32;
         let (lo, hi) = (-LEDGE as f32, (WIDTH + LEDGE) as f32);
         let flicker = |k: f32| 0.88 + 0.12 * (run.elapsed * 7.0 + k).sin();
         // the rim of the shaft: timbers round its mouth
         for (a, b) in [
-            (Vec3::new(-0.15, 0.08, -0.15), Vec3::new(w + 0.15, 0.08, -0.15)),
-            (Vec3::new(-0.15, 0.08, w + 0.15), Vec3::new(w + 0.15, 0.08, w + 0.15)),
-            (Vec3::new(-0.15, 0.08, -0.15), Vec3::new(-0.15, 0.08, w + 0.15)),
-            (Vec3::new(w + 0.15, 0.08, -0.15), Vec3::new(w + 0.15, 0.08, w + 0.15)),
+            (
+                Vec3::new(-0.15, 0.08, -0.15),
+                Vec3::new(w + 0.15, 0.08, -0.15),
+            ),
+            (
+                Vec3::new(-0.15, 0.08, w + 0.15),
+                Vec3::new(w + 0.15, 0.08, w + 0.15),
+            ),
+            (
+                Vec3::new(-0.15, 0.08, -0.15),
+                Vec3::new(-0.15, 0.08, w + 0.15),
+            ),
+            (
+                Vec3::new(w + 0.15, 0.08, -0.15),
+                Vec3::new(w + 0.15, 0.08, w + 0.15),
+            ),
         ] {
             self.timber(&mut draws, wood, a, b, 0.28, 0.75);
         }
@@ -913,7 +1037,13 @@ impl Scene {
                 .min_by(|a, b| (a - w * 0.5).abs().total_cmp(&(b - w * 0.5).abs()))
                 .unwrap_or(w * 0.5);
             let hook = Vec3::new(x, ROOM_HEIGHT - 0.35, z);
-            self.beam(&mut draws, hook, hook - Vec3::Y * 1.2, 0.02, [0.2, 0.19, 0.18]);
+            self.beam(
+                &mut draws,
+                hook,
+                hook - Vec3::Y * 1.2,
+                0.02,
+                [0.2, 0.19, 0.18],
+            );
             self.lantern(
                 &mut draws,
                 &mut lights,
@@ -925,7 +1055,7 @@ impl Scene {
         // rings of timber down the shaft every ten metres, in its walls (the rock hides them
         // until she digs to them), a lamp at their corners
         let deepest = pozo.deepest.max(0);
-        let mut ring = 10;
+        let mut ring = 5;
         while ring <= pozo.depth_shown() {
             let y = -(ring as f32) + 0.18;
             if (ring - depth as i32).abs() < 40 {
@@ -938,7 +1068,12 @@ impl Scene {
                     self.timber(&mut draws, wood, a, b, 0.36, 0.7);
                 }
                 if ring <= deepest + 1 {
-                    for (x, z) in [(0.35, 0.35), (w - 0.35, 0.35), (0.35, w - 0.35), (w - 0.35, w - 0.35)] {
+                    for (x, z) in [
+                        (0.35, 0.35),
+                        (w - 0.35, 0.35),
+                        (0.35, w - 0.35),
+                        (w - 0.35, w - 0.35),
+                    ] {
                         let k = ring.min(deepest);
                         let bx = (x as i32).clamp(0, WIDTH - 1);
                         let bz = (z as i32).clamp(0, WIDTH - 1);
@@ -952,15 +1087,15 @@ impl Scene {
                             );
                             lights.push(PointLight3D::new(
                                 at,
-                                [1.0, 0.62, 0.3],
-                                2.2 * flicker(ring as f32 + x),
-                                9.0,
+                                [1.0, 0.66, 0.34],
+                                2.8 * flicker(ring as f32 + x),
+                                10.0,
                             ));
                         }
                     }
                 }
             }
-            ring += 10;
+            ring += 5;
         }
         // the miner's ladder down the west wall, as deep as she has dug
         let (top, bottom) = (
@@ -1012,9 +1147,9 @@ impl Scene {
             eye + Vec3::Y * 0.12 + (camera.target - camera.position).normalize_or_zero() * 0.05;
         lights.push(PointLight3D::new(
             lamp,
-            [1.0, 0.86, 0.66],
-            if run.torch { 4.0 } else { 3.0 },
-            if run.torch { 15.0 } else { 11.0 },
+            [1.0, 0.88, 0.7],
+            if run.torch { 5.0 } else { 3.8 },
+            if run.torch { 17.0 } else { 13.0 },
         ));
         // the block she aims at: its edges lit
         if let Some(b) = pozo.target {
@@ -1080,19 +1215,19 @@ impl Scene {
         environment.clear_color = [fog[0], fog[1], fog[2], 1.0];
         environment.celestial = Celestial3D::default();
         // the room round the mouth is lamp-lit; the shaft darkens as it goes down
-        let ambient = 0.085 - 0.03 * (depth / 40.0).clamp(0.0, 1.0)
-            + 0.06 * (1.0 - depth / 6.0).clamp(0.0, 1.0);
+        let ambient = 0.12 - 0.03 * (depth / 40.0).clamp(0.0, 1.0)
+            + 0.05 * (1.0 - depth / 6.0).clamp(0.0, 1.0);
         environment.lighting = Lighting3D {
             direction_to_light: Vec3::new(-0.3, 0.8, 0.2).normalize_or_zero(),
-            key_color: [ambient * 0.5, ambient * 0.46, ambient * 0.42],
-            ambient_color: [ambient, ambient * 0.94, ambient * 0.88],
-            bounce_color: [0.01, 0.008, 0.006],
+            key_color: [ambient * 0.7, ambient * 0.64, ambient * 0.58],
+            ambient_color: [ambient, ambient * 0.95, ambient * 0.9],
+            bounce_color: [0.05, 0.04, 0.03],
             shadow_extent: 20.0,
         };
         environment.atmosphere = Atmosphere3D {
             fog_color: fog,
-            fog_start: 8.0,
-            fog_end: 40.0,
+            fog_start: 14.0,
+            fog_end: 55.0,
             fog_density: 0.02,
             height_falloff: 0.0,
         };

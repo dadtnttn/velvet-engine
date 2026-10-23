@@ -1239,6 +1239,38 @@ mod tests {
     /// A named champion: it falls, its own reward bursts out onto the floor with the rest and
     /// reaches her; and the forge's master rains embers on her while she is in his room.
     #[test]
+    fn falling_beside_a_champion_names_it_for_its_scene() {
+        use crate::Dungeon;
+        use velvet_dungeon::controller::Input;
+        if !available() {
+            return;
+        }
+        let mut run = Dungeon::mine().unwrap();
+        let mine = run.authored.clone().unwrap();
+        let (&id, _) = mine
+            .champions
+            .iter()
+            .find(|(_, c)| c.power == Power::Sparks)
+            .expect("the smith");
+        let index = run.actors.iter().position(|a| a.spawn == id).unwrap();
+        let home = run.actors[index].position;
+        let y = run
+            .map
+            .capsule_floor(home + Vec3::new(2.0, 0.4, 0.0), 0.28)
+            .unwrap_or(home.y);
+        run.controller.position = Vec3::new(home.x + 2.0, y, home.z);
+        run.health = 0.0;
+        run.update(Input::default(), 1.0 / 60.0);
+        assert_eq!(run.take_fallen_to(), Some("herrero"));
+        assert_eq!(run.take_fallen_to(), None, "taken once");
+        assert!(run.health > 0.0, "she is back at the sanctuary");
+        // far from every champion, a fall is only a fall
+        run.health = 0.0;
+        run.update(Input::default(), 1.0 / 60.0);
+        assert_eq!(run.take_fallen_to(), None);
+    }
+
+    #[test]
     fn champions_fight_and_pay() {
         use crate::{combat::Fx, Dungeon};
         use velvet_dungeon::controller::Input;
@@ -1550,12 +1582,18 @@ mod tests {
             .find(|s| s.kind == SpawnKind::Rest)
             .unwrap()
             .position;
-        assert!(walk_reach(&run.map, font, 2.0) < 2.0, "the altar's top is boxed in");
+        assert!(
+            walk_reach(&run.map, font, 2.0) < 2.0,
+            "the altar's top is boxed in"
+        );
         run.checkpoint = font;
         run.health = 0.0;
         run.update(Input::default(), 1.0 / 60.0);
         let back = run.controller.position;
-        assert!(walk_reach(&run.map, back, 2.0) >= 2.0, "she walks away from {back:?}");
+        assert!(
+            walk_reach(&run.map, back, 2.0) >= 2.0,
+            "she walks away from {back:?}"
+        );
         assert!(horizontal(back - font).length() < 4.0, "by the sanctuary");
         // up on the altar, pushing to walk
         run.controller = velvet_dungeon::controller::Controller::new(font);
@@ -1597,9 +1635,15 @@ mod tests {
         }
         assert_eq!(run.map.obstacles.len(), 6, "legs, winch and cart");
         let leg = shaft + turn_y(Vec3::new(1.3, 0.0, 1.3), yaw);
-        assert!(run.map.capsule_floor(leg, PLAYER_RADIUS).is_none(), "a leg is solid");
+        assert!(
+            run.map.capsule_floor(leg, PLAYER_RADIUS).is_none(),
+            "a leg is solid"
+        );
         // in front of its open side she stands, near enough to go down
         let front = shaft + turn_y(Vec3::new(0.0, 0.0, 2.1), yaw);
-        assert!(run.map.capsule_floor(front + Vec3::Y * 0.3, PLAYER_RADIUS).is_some());
+        assert!(run
+            .map
+            .capsule_floor(front + Vec3::Y * 0.3, PLAYER_RADIUS)
+            .is_some());
     }
 }

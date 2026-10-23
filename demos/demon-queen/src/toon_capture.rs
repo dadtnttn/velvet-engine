@@ -1084,6 +1084,198 @@ pub(super) fn capture(out: &Path) -> Result<()> {
         save(&mut app, out, "burdel-07-libro-despierto")?;
         return Ok(());
     }
+    if std::env::args().any(|a| a == "--deuda") {
+        // Rosalía's loan: short of gold for Nina (the offer), the debt within its days, the day it
+        // falls due (the three ways), paying in the house, and the door shut to a Queen who would
+        // not pay.
+        app.nature_mode = true;
+        app.village_entered = true;
+        app.player = village::entrance();
+        // Not her first night: no welcome over the book.
+        app.story = guion::Vars::default();
+        app.story.values.insert("burdel_bienvenida".to_owned(), 1);
+        app.enter_brothel();
+        app.queen_thought = None;
+        app.gold = 12;
+        let desk = brothel::plan()
+            .hotspots
+            .iter()
+            .find(|h| h.id == "recepcionista")
+            .map(|h| (h.x, h.z))
+            .unwrap();
+        if let Some(inside) = app.brothel.as_mut() {
+            inside.walker = brothel::Walker {
+                x: desk.0,
+                z: desk.1 + 0.2,
+                level: 0,
+                on_stair: false,
+            };
+            inside.rope_open = true;
+            app.player = inside.position();
+            app.camera_focus = app.player;
+        }
+        app.player_yaw = std::f32::consts::PI;
+        let wait = |app: &mut App, secs: f32| {
+            for _ in 0..(secs * 30.0).round() as usize {
+                app.tick(1.0 / 30.0);
+                app.render_frame();
+            }
+        };
+        wait(&mut app, 1.0);
+        // The house as the game shows it, its girls at their places.
+        save(&mut app, out, "deuda-000-dentro")?;
+        app.venue = venue::Menu::default();
+        app.open_venue_book();
+        wait(&mut app, 1.3);
+        save(&mut app, out, "deuda-00a-libro")?;
+        app.venue_key(KeyCode::Enter);
+        wait(&mut app, 0.3);
+        app.venue_key(KeyCode::Enter);
+        wait(&mut app, 1.3);
+        save(&mut app, out, "deuda-00-prestamo")?;
+        app.venue_key(KeyCode::ArrowRight);
+        wait(&mut app, 0.4);
+        save(&mut app, out, "deuda-00b-segundo")?;
+        app.venue_key(KeyCode::ArrowLeft);
+        eprintln!("[deuda-qa] page {:?}", app.venue.page);
+        app.venue_key(KeyCode::Digit2);
+        wait(&mut app, 0.6);
+        eprintln!(
+            "[deuda-qa] gold {} debt {} due {}",
+            app.gold, app.venue.progress.debt, app.venue.progress.debt_due
+        );
+        // Her desk with the debt: pay, the shaft, the house, her ledger, the jobs (shut).
+        app.venue_key(KeyCode::KeyR);
+        wait(&mut app, 1.3);
+        save(&mut app, out, "deuda-01-mostrador")?;
+        // A day later, with part of it paid: her ledger from the desk.
+        app.close_shop();
+        app.set_world_phase(0.95);
+        app.set_world_phase(0.3);
+        app.venue.progress.debt -= 60;
+        app.open_venue_book();
+        app.venue_key(KeyCode::KeyR);
+        app.venue_key(KeyCode::Digit4);
+        wait(&mut app, 1.3);
+        save(&mut app, out, "deuda-01b-un-dia")?;
+        app.venue.progress.debt += 60;
+        // Three days later: due.
+        app.close_shop();
+        for _ in 0..venue::LOAN_DAYS {
+            app.set_world_phase(0.95);
+            app.set_world_phase(0.3);
+        }
+        eprintln!("[deuda-qa] day {}", app.world_day());
+        app.open_venue_book();
+        wait(&mut app, 1.3);
+        save(&mut app, out, "deuda-02-vencida")?;
+        // The shaft: straight down, the errand on the HUD, the cage shut until it is met.
+        app.venue_key(KeyCode::Digit1);
+        for _ in 0..90 {
+            app.tick(1.0 / 30.0);
+            app.render_frame();
+        }
+        eprintln!(
+            "[deuda-qa] mine {} pozo {} errand {:?}",
+            app.dungeon_mode,
+            app.dungeon.pozo.is_some(),
+            app.dungeon
+                .errand
+                .as_ref()
+                .map(|e| (e.quota, e.done, e.debt))
+        );
+        if let Some(e) = app.dungeon.errand.as_mut() {
+            e.done = e.quota * 2 / 5;
+            e.blocks = 38;
+            e.pieces = 6;
+        }
+        app.dungeon.interact();
+        for _ in 0..20 {
+            app.tick(1.0 / 30.0);
+            app.render_frame();
+        }
+        save(&mut app, out, "deuda-03-pozo")?;
+        eprintln!(
+            "[deuda-qa] cage held: still down {}",
+            app.dungeon.pozo.is_some()
+        );
+        if let Some(e) = app.dungeon.errand.as_mut() {
+            let left = e.quota - e.done;
+            e.add(left);
+        }
+        for _ in 0..20 {
+            app.tick(1.0 / 30.0);
+            app.render_frame();
+        }
+        save(&mut app, out, "deuda-03b-cumplido")?;
+        app.dungeon.interact();
+        for _ in 0..30 {
+            app.tick(1.0 / 30.0);
+            app.render_frame();
+        }
+        eprintln!(
+            "[deuda-qa] out {} debt {} way {:?} jobs {}",
+            app.dungeon.pozo.is_none(),
+            app.venue.progress.debt,
+            app.venue.progress.debt_way,
+            app.venue.progress.jobs_open
+        );
+        save(&mut app, out, "deuda-03c-fuera")?;
+        // Back at her desk: a clean slate, and the house's jobs open.
+        app.leave_dungeon();
+        app.enter_brothel();
+        app.queen_thought = None;
+        if let Some(inside) = app.brothel.as_mut() {
+            inside.walker = brothel::Walker {
+                x: desk.0,
+                z: desk.1 + 0.2,
+                level: 0,
+                on_stair: false,
+            };
+            inside.rope_open = true;
+            app.player = inside.position();
+            app.camera_focus = app.player;
+        }
+        wait(&mut app, 0.5);
+        app.open_venue_book();
+        app.venue_key(KeyCode::KeyR);
+        wait(&mut app, 1.3);
+        save(&mut app, out, "deuda-05-mostrador-limpio")?;
+        // Her clients: the cards, one picked, and served.
+        app.venue_key(KeyCode::Digit1);
+        wait(&mut app, 1.4);
+        save(&mut app, out, "deuda-06-clientes")?;
+        app.venue_key(KeyCode::ArrowRight);
+        app.venue_key(KeyCode::ArrowRight);
+        wait(&mut app, 0.6);
+        save(&mut app, out, "deuda-06b-gorm")?;
+        let gold_before = app.gold;
+        app.venue_key(KeyCode::Enter);
+        wait(&mut app, 1.5);
+        eprintln!(
+            "[deuda-qa] served gorm {} gold +{} book open {}",
+            app.venue.served("gorm"),
+            app.gold - gold_before,
+            app.venue.open
+        );
+        save(&mut app, out, "deuda-07-cliente")?;
+        // Seen out instead: the door.
+        app.close_shop();
+        app.venue.progress.debt = 130;
+        app.venue.progress.debt_way = venue::WAY_BANNED.to_owned();
+        app.leave_brothel();
+        wait(&mut app, 0.5);
+        app.gold = 0;
+        app.try_enter_brothel();
+        wait(&mut app, 1.0);
+        save(&mut app, out, "deuda-04-vetada")?;
+        eprintln!(
+            "[deuda-qa] banned {} inside {}",
+            app.venue.banned(),
+            app.brothel.is_some()
+        );
+        return Ok(());
+    }
     if std::env::args().any(|a| a == "--elixir") {
         // Rosalía's book and her elixir: the girls and what to ask of Nina before any visit, the
         // offer after the first, the Queen drinking it at the desk (the 3D close shot and its 2D
@@ -1319,11 +1511,7 @@ pub(super) fn capture(out: &Path) -> Result<()> {
                 save(&mut app, out, "escort-00-book")?;
                 app.venue.selected = 1;
                 save(&mut app, out, "escort-01-book-alba")?;
-                app.venue.selected = 2;
-                app.venue.talk();
-                save(&mut app, out, "escort-02-book-noa-talk")?;
                 app.venue.selected = 0;
-                app.venue.notice.clear();
             }
             app.venue.act(&mut app.gold);
             app.after_venue_act();
@@ -5515,6 +5703,13 @@ pub(super) fn capture(out: &Path) -> Result<()> {
                     .parse()
                     .unwrap_or(0),
             ),
+            // `turno-<client>[-2]`: a shift of the house (bram, rus, gorm, varg); `-2` picks the second ending.
+            w if w.starts_with("turno") => play_scene::Game::Turno(
+                play_scene::turno::CLIENTS
+                    .iter()
+                    .position(|c| w.contains(c.id))
+                    .unwrap_or(0) as u8,
+            ),
             _ => play_scene::Game::Alba,
         };
         if game == play_scene::Game::Hipno {
@@ -5558,6 +5753,86 @@ pub(super) fn capture(out: &Path) -> Result<()> {
         shot(&mut app, "rules")?;
         if game == play_scene::Game::Hipno {
             hipno_qa(&mut app, out, &which, save)?;
+        } else if matches!(game, play_scene::Game::Turno(_)) {
+            // Played on her beat (a few misses on purpose), the other view once, held back a
+            // while, until he picks the first ending.
+            let (mut flipped, mut missed, mut bridged, mut pressed, mut cut) =
+                (false, 0, false, false, false);
+            for i in 0..6000 {
+                let Some(q) = qa(&app) else { break };
+                if q.choosing || q.phase != "play" {
+                    break;
+                }
+                // One press a beat (a second one in the same window is off the beat).
+                if q.beat_in > 0.1 {
+                    pressed = false;
+                }
+                if q.beat_in < 0.04 && !pressed {
+                    pressed = true;
+                    if missed < 2 && q.heat > 0.1 {
+                        step(&mut app, 0.3);
+                        missed += 1;
+                    }
+                    key(&mut app, KeyCode::Space, true);
+                    key(&mut app, KeyCode::Space, false);
+                    if missed == 2 {
+                        missed += 1;
+                        step(&mut app, 0.1);
+                        shot(&mut app, "miss")?;
+                    }
+                }
+                if !flipped && q.heat > 0.12 {
+                    shot(&mut app, "pov")?;
+                    key(&mut app, KeyCode::KeyV, true);
+                    key(&mut app, KeyCode::KeyV, false);
+                    flipped = true;
+                    step(&mut app, 0.5);
+                    shot(&mut app, "lado")?;
+                }
+                if !cut && q.heat > 0.185 {
+                    cut = true;
+                    step(&mut app, 0.5);
+                    shot(&mut app, "corte")?;
+                }
+                if !bridged && q.beat_in.is_infinite() && q.heat > 0.3 {
+                    bridged = true;
+                    step(&mut app, 1.5);
+                    shot(&mut app, "bridge")?;
+                }
+                key(&mut app, KeyCode::ShiftLeft, i % 400 > 300);
+                step(&mut app, 1.0 / 30.0);
+            }
+            key(&mut app, KeyCode::ShiftLeft, false);
+            step(&mut app, 0.6);
+            shot(&mut app, "choose")?;
+            let second = which.ends_with("-2");
+            let pick = if second {
+                KeyCode::Digit2
+            } else {
+                KeyCode::Digit1
+            };
+            key(&mut app, pick, true);
+            key(&mut app, pick, false);
+            step(&mut app, 2.5);
+            shot(&mut app, "final")?;
+            eprintln!(
+                "[play-qa] {which}: ending clip {}",
+                qa(&app).map_or("-", |q| q.clip)
+            );
+            step(&mut app, 3.5);
+            eprintln!(
+                "[play-qa] {which}: then {}",
+                qa(&app).map_or("-", |q| q.clip)
+            );
+            shot(&mut app, "final2")?;
+            for _ in 0..200 {
+                if qa(&app).is_some_and(|q| q.ended) {
+                    break;
+                }
+                step(&mut app, 0.1);
+            }
+            step(&mut app, 1.4);
+            shot(&mut app, "card")?;
         } else if matches!(game, play_scene::Game::Tienda(_)) {
             // Hurried with Space half way, then sealed.
             key(&mut app, KeyCode::Space, true);
@@ -6580,6 +6855,30 @@ pub(super) fn capture(out: &Path) -> Result<()> {
             save(&mut app, out, "court-41-maren-caricias")?;
             app.caricias = None;
         }
+        if shots.contains(&"divan") {
+            // The alcove's red divan: Lira after two dates (open), Nyxara after one (not yet),
+            // Maren not met; Lira picked opens her Caricias.
+            app.story.values.insert("cita_lira".into(), 2);
+            app.story.values.insert("cita_nyxara".into(), 1);
+            app.story.values.insert("prisionera_n".into(), 0);
+            app.open_divan();
+            wait(&mut app, 1.4);
+            save(&mut app, out, "court-divan")?;
+            app.court_key(KeyCode::ArrowRight);
+            app.court_key(KeyCode::Enter);
+            wait(&mut app, 0.8);
+            save(&mut app, out, "court-divan-nyxara")?;
+            app.court_key(KeyCode::ArrowLeft);
+            app.court_key(KeyCode::Enter);
+            wait(&mut app, 1.0);
+            eprintln!(
+                "[court-qa] divan: caricias open {} court {}",
+                app.caricias_open(),
+                app.court.is_some()
+            );
+            save(&mut app, out, "court-divan-caricias")?;
+            app.caricias = None;
+        }
         if shots.contains(&"citas") {
             // The vanity's dates: the page as it opens (Nyxara still waits for affection), Lira's
             // first date played through (its choice, the memory coming on, the end card), the page
@@ -6862,6 +7161,51 @@ pub(super) fn capture(out: &Path) -> Result<()> {
             app.court_key(KeyCode::Enter);
             wait(&mut app, 0.3);
             save(&mut app, out, "court-06b-bought")?;
+            app.close_court();
+        }
+        if shots.contains(&"ratos") {
+            // A while with Nyxara: her lessons page with her affection and the way to it, the page of
+            // whiles, one played (+1 her affection), then the page again («hoy ya»).
+            app.story.values.insert("afecto_nyxara".into(), 2);
+            eprintln!("[court-qa] lessons: {}", app.open_lessons());
+            if let Some(c) = app.court.as_mut() {
+                c.choice = court::lecciones().lecciones.len();
+            }
+            wait(&mut app, 0.9);
+            save(&mut app, out, "court-ratos-1-lessons")?;
+            app.court_key(KeyCode::Enter);
+            wait(&mut app, 0.9);
+            save(&mut app, out, "court-ratos-2-page")?;
+            let before = app.story.get("afecto_nyxara");
+            app.court_key(KeyCode::Enter);
+            wait(&mut app, 0.6);
+            let mut shot = 3;
+            for _ in 0..40 {
+                if app.talk.is_none() {
+                    break;
+                }
+                wait(&mut app, 0.5);
+                if shot < 7 {
+                    save(&mut app, out, &format!("court-ratos-{shot}-scene"))?;
+                    shot += 1;
+                }
+                app.talk_confirm();
+            }
+            eprintln!(
+                "[court-qa] ratos: afecto_nyxara {} -> {} hoy {} te {}",
+                before,
+                app.story.get("afecto_nyxara"),
+                app.story.get("nyx_rato_hoy"),
+                app.story.get("nyx_rato_te")
+            );
+            app.open_lessons();
+            if let Some(c) = app.court.as_mut() {
+                c.choice = court::lecciones().lecciones.len();
+            }
+            app.court_key(KeyCode::Enter);
+            app.court_key(KeyCode::Enter);
+            wait(&mut app, 0.6);
+            save(&mut app, out, "court-ratos-8-today")?;
             app.close_court();
         }
         if shots.contains(&"lecciones") {
@@ -7955,13 +8299,16 @@ pub(super) fn capture(out: &Path) -> Result<()> {
             app.player = app.dungeon.controller.position;
             save(&mut app, out, &format!("mina-cofre-{tier}"))?;
         }
-        // The seal's stones (I and II set right, III unlit), the memory stone and the font.
+        // The seal's stones (I and II set right, III unlit), the memory stone, the font, the way out
+        // at the mouth and the one the Heart opens.
         app.dungeon.sigils = [1, 2, 0];
         for (index, angle) in [(0usize, 1.0f32), (1, 2.0), (2, 0.0)] {
             app.dungeon.rune_start_angle[index] = angle * std::f32::consts::FRAC_PI_2;
             app.dungeon.rune_target_angle[index] = angle * std::f32::consts::FRAC_PI_2;
         }
-        for view in ["runa_0", "runa_1", "runa_2", "memoria", "pila"] {
+        for view in [
+            "runa_0", "runa_1", "runa_2", "memoria", "pila", "salida", "fin",
+        ] {
             if !only
                 .as_deref()
                 .is_some_and(|o| o.split(',').any(|v| v == view))
@@ -7973,6 +8320,8 @@ pub(super) fn capture(out: &Path) -> Result<()> {
                 match view {
                     "memoria" => s.kind == velvet_dungeon::gameplay::SpawnKind::Memory,
                     "pila" => s.kind == velvet_dungeon::gameplay::SpawnKind::Rest,
+                    "salida" => s.kind == velvet_dungeon::gameplay::SpawnKind::Entrance,
+                    "fin" => s.kind == velvet_dungeon::gameplay::SpawnKind::Exit,
                     v => {
                         s.kind == velvet_dungeon::gameplay::SpawnKind::Seal
                             && s.definition == format!("sigil_{}", &v[5..])
@@ -8002,6 +8351,12 @@ pub(super) fn capture(out: &Path) -> Result<()> {
             app.dungeon.controller.pitch = rise.atan2(3.4);
             app.player = app.dungeon.controller.position;
             save(&mut app, out, &format!("mina-{view}"))?;
+            if view == "fin" {
+                // Once the Heart is still: unchained, gold.
+                app.dungeon.won = true;
+                save(&mut app, out, "mina-fin-abierta")?;
+                app.dungeon.won = false;
+            }
         }
         // The chart, as if she had walked it all, from the loading hall.
         app.dungeon.visited = (0..app.dungeon.map.rooms.len()).collect();

@@ -54,12 +54,13 @@ mod hipno_overlay;
 mod mage_overlay;
 mod persona;
 mod persona_screens;
+mod turno_overlay;
 pub(crate) use game_overlay::{chip_hit as game_chip_hit, pose_hit as game_pose_hit};
 pub(crate) use mage_overlay::{hit as mage_hit, MageLine, MageOption, MageView};
 mod scene_overlay;
 pub(crate) use scene_overlay::{
     pose_hit as scene_pose_hit, prompt_hit as scene_prompt_hit, GameChip, GameRules, GameShout,
-    GameView, HypnoView, SceneLine, ScenePrompt, SceneResult, SceneView,
+    GameView, HypnoView, SceneLine, ScenePrompt, SceneResult, SceneView, TurnoView,
 };
 
 /// The intimate scenes' picture on the screen (x, y, width, height in the logical 1080p).
@@ -2448,6 +2449,14 @@ impl MapOverlay {
             .and_then(|view| view.game.as_ref())
             .and_then(|game| game.face.clone())
             .and_then(|p| self.portraits.ensure(queue, &p));
+        // A shift's client, on his stamina's medallion.
+        let client_face = self
+            .scene
+            .as_ref()
+            .and_then(|view| view.game.as_ref())
+            .and_then(|game| game.turno.as_ref())
+            .and_then(|turno| turno.face.clone())
+            .and_then(|p| self.portraits.ensure(queue, &p));
         // Rosalía's book: each girl's face, and Rosalía's own.
         let book_face = |portraits: &mut PortraitAtlas, who: &str| {
             super::guion::portraits()
@@ -2458,7 +2467,24 @@ impl MapOverlay {
                 })
                 .and_then(|p| portraits.ensure(queue, &p))
         };
+        // On her clients' page, theirs (`clientes` in retratos.json).
+        let roster_face = |portraits: &mut PortraitAtlas, id: &str| {
+            super::guion::portraits()
+                .find("clientes", Some(id))
+                .map(|p| PortraitRef {
+                    image: p.image,
+                    crop: p.crop,
+                })
+                .and_then(|p| portraits.ensure(queue, &p))
+        };
         let (venue_faces, host_face) = match venue.filter(|menu| menu.open) {
+            Some(menu) if menu.page == super::venue::Page::Clients => (
+                super::venue::ROSTER
+                    .iter()
+                    .map(|c| roster_face(&mut self.portraits, c.id))
+                    .collect::<Vec<_>>(),
+                book_face(&mut self.portraits, "rosalia"),
+            ),
             Some(menu) => (
                 menu.entries()
                     .iter()
@@ -2838,7 +2864,7 @@ impl MapOverlay {
                         view,
                         &scene_faces,
                         quote_face,
-                        game_face,
+                        [game_face, client_face],
                         self.scene_picture.has_frame(),
                         ui_time,
                     ),

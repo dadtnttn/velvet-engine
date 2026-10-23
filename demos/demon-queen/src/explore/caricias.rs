@@ -53,7 +53,7 @@ pub(crate) struct ZoneDef {
 }
 
 /// In the order a touch looks for them (the small ones first).
-pub(crate) static ZONES: [ZoneDef; 11] = [
+pub(crate) static ZONES: [ZoneDef; 12] = [
     ZoneDef {
         id: "labios",
         name: "Labios",
@@ -142,6 +142,15 @@ pub(crate) static ZONES: [ZoneDef; 11] = [
         gain: 8.0,
         kiss: false,
     },
+    // (only who has one: Nemi)
+    ZoneDef {
+        id: "cola",
+        name: "Cola",
+        min: 30.0,
+        spd: [50.0, 420.0],
+        gain: 6.0,
+        kiss: false,
+    },
 ];
 
 fn zone_index(id: &str) -> Option<usize> {
@@ -216,7 +225,9 @@ pub(crate) static TOOLS: [Tool; 6] = [
         gain: 1.4,
         spd: 1.0,
         fine: &[],
-        ok: &["pecho", "cadera", "muslos", "cintura", "mano", "hombro"],
+        ok: &[
+            "pecho", "cadera", "muslos", "cintura", "mano", "hombro", "cola",
+        ],
         both: false,
         margin: 56.0,
         force: 1.4,
@@ -231,7 +242,7 @@ pub(crate) static TOOLS: [Tool; 6] = [
         gain: 2.2,
         spd: 1.0,
         fine: &[],
-        ok: &["pecho", "cadera", "muslos", "mejilla"],
+        ok: &["pecho", "cadera", "muslos", "mejilla", "cola"],
         both: false,
         margin: 34.0,
         force: 1.8,
@@ -290,6 +301,10 @@ pub(crate) struct Rig {
     mid: f32,
     hair_pivot: f32,
     hair_amp: f32,
+    /// Her tail, if she has one: where it turns (art px) and how far it swings. Its weight is the
+    /// hair mask's green channel (the hair's is the red one).
+    tail: Option<[f32; 2]>,
+    tail_amp: f32,
     breasts: [[f32; 4]; 2],
     head: [f32; 4],
     chest: [f32; 4],
@@ -407,6 +422,8 @@ pub(crate) static LIRA: Girl = Girl {
         mid: 850.0,
         hair_pivot: 250.0,
         hair_amp: 0.35,
+        tail: None,
+        tail_amp: 1.0,
         breasts: [[775.0, 515.0, 80.0, 80.0], [935.0, 515.0, 80.0, 80.0]],
         head: [850.0, 200.0, 130.0, 165.0],
         chest: [850.0, 520.0, 240.0, 220.0],
@@ -685,6 +702,8 @@ pub(crate) static NYXARA: Girl = Girl {
         mid: 888.0,
         hair_pivot: 300.0,
         hair_amp: 1.0,
+        tail: None,
+        tail_amp: 1.0,
         breasts: [[812.0, 505.0, 92.0, 100.0], [965.0, 505.0, 92.0, 100.0]],
         head: [888.0, 210.0, 135.0, 165.0],
         chest: [888.0, 520.0, 250.0, 230.0],
@@ -974,6 +993,8 @@ pub(crate) static MAREN: Girl = Girl {
         mid: 900.0,
         hair_pivot: 210.0,
         hair_amp: 0.7,
+        tail: None,
+        tail_amp: 1.0,
         breasts: [[805.0, 460.0, 72.0, 66.0], [982.0, 478.0, 70.0, 66.0]],
         head: [900.0, 165.0, 105.0, 135.0],
         chest: [895.0, 470.0, 230.0, 200.0],
@@ -1200,11 +1221,171 @@ pub(crate) static MAREN: Girl = Girl {
     clips: &[("", "caricias/maren/final/final")],
 };
 
+/// Nemi, the maid with the tail (2026-10-23, from tools/escena-demo/tocar.html): her layers were cut
+/// again from the white-background pictures (`tools/nemi_limpiar.py`), in her bath by candlelight.
+/// Her tail turns about its root (the mask's green channel); it is her weak spot.
+pub(crate) static NEMI: Girl = Girl {
+    id: "nemi",
+    name: "NEMI",
+    title: "La cola no se toca",
+    accent: 0xbe8cff,
+    fav: "cola",
+    bg: "caricias/nemi/fondo/nemi_fondo_13101",
+    pieces: &[
+        Piece {
+            id: "cofia",
+            name: "Cofia",
+            unlock: 10.0,
+            handle: [905.0, 112.0],
+            dir: [1.0, -0.4],
+            requires: &[],
+            covers: &["pelo"],
+            hair: false,
+        },
+        Piece {
+            id: "vestido",
+            name: "Vestido y delantal",
+            unlock: 38.0,
+            handle: [905.0, 600.0],
+            dir: [0.0, 1.0],
+            requires: &["cofia"],
+            covers: &["pecho", "cintura", "cadera", "hombro", "muslos"],
+            hair: false,
+        },
+        Piece {
+            id: "medias",
+            name: "Medias",
+            unlock: 50.0,
+            handle: [850.0, 960.0],
+            dir: [0.0, 1.0],
+            requires: &["vestido"],
+            covers: &["muslos"],
+            hair: false,
+        },
+        Piece {
+            id: "lenceria",
+            name: "Lencería",
+            unlock: 62.0,
+            handle: [905.0, 700.0],
+            dir: [0.0, 1.0],
+            requires: &["medias"],
+            covers: &["pecho", "cadera"],
+            hair: false,
+        },
+    ],
+    rig: Rig {
+        hair_mask: "caricias/nemi/nueva/nemi2_mascara_pelo",
+        mid: 905.0,
+        hair_pivot: 200.0,
+        hair_amp: 0.35,
+        tail: Some([1030.0, 800.0]),
+        tail_amp: 0.4,
+        breasts: [[830.0, 440.0, 58.0, 58.0], [978.0, 440.0, 58.0, 58.0]],
+        head: [905.0, 205.0, 120.0, 150.0],
+        chest: [905.0, 430.0, 250.0, 170.0],
+        thighs: [[852.0, 900.0, 70.0, 100.0], [962.0, 900.0, 70.0, 100.0]],
+        body: [905.0, 620.0, 260.0, 560.0],
+        hips: [905.0, 700.0, 250.0, 140.0],
+        shoulders: [[825.0, 330.0, 60.0, 50.0], [995.0, 330.0, 60.0, 50.0]],
+        face_rect: [820.0, 140.0, 170.0, 170.0],
+        faces: &[],
+        faces_glasses: &[],
+    },
+    zones: &[
+        ("labios", &[[893.0, 238.0], [920.0, 238.0], [920.0, 255.0], [893.0, 255.0]]),
+        ("oreja", &[[830.0, 200.0], [866.0, 212.0], [866.0, 232.0], [842.0, 224.0]]),
+        ("oreja", &[[1008.0, 196.0], [962.0, 210.0], [962.0, 230.0], [990.0, 222.0]]),
+        ("mejilla", &[[866.0, 222.0], [892.0, 222.0], [892.0, 254.0], [870.0, 250.0]]),
+        ("mejilla", &[[922.0, 222.0], [950.0, 222.0], [946.0, 250.0], [922.0, 254.0]]),
+        ("pelo", &[[858.0, 100.0], [972.0, 100.0], [975.0, 165.0], [855.0, 165.0]]),
+        ("cuello", &[[878.0, 262.0], [935.0, 262.0], [940.0, 310.0], [872.0, 310.0]]),
+        ("mano", &[[645.0, 650.0], [725.0, 650.0], [725.0, 752.0], [645.0, 752.0]]),
+        ("mano", &[[1095.0, 668.0], [1172.0, 668.0], [1172.0, 762.0], [1095.0, 762.0]]),
+        ("hombro", &[[790.0, 305.0], [870.0, 300.0], [866.0, 360.0], [784.0, 368.0]]),
+        ("hombro", &[[945.0, 300.0], [1030.0, 305.0], [1040.0, 368.0], [950.0, 360.0]]),
+        ("pecho", &[[780.0, 365.0], [1035.0, 365.0], [1038.0, 505.0], [778.0, 505.0]]),
+        ("cintura", &[[805.0, 508.0], [1005.0, 508.0], [1012.0, 630.0], [800.0, 630.0]]),
+        ("cadera", &[[778.0, 632.0], [1032.0, 632.0], [1036.0, 770.0], [774.0, 770.0]]),
+        ("muslos", &[[776.0, 772.0], [1036.0, 772.0], [1000.0, 1024.0], [812.0, 1024.0]]),
+        ("cola", &[[1030.0, 790.0], [1100.0, 805.0], [1175.0, 800.0], [1212.0, 760.0], [1218.0, 650.0], [1203.0, 562.0], [1178.0, 512.0], [1240.0, 452.0], [1252.0, 540.0], [1246.0, 650.0], [1238.0, 772.0], [1185.0, 822.0], [1100.0, 832.0], [1030.0, 815.0]]),
+    ],
+    lines: Lines {
+        start: [
+            "—¡Majestad! Me llamó de noche y… vine corriendo. Bueno, andando. Muy rápido.",
+            "—Si algo no me gusta, se lo digo. …Y si me gusta, también. Creo.",
+        ],
+        flinch: &[
+            "—¡Eh! Todavía no.",
+            "—¡Ahí no! …Aún no.",
+            "—Espere, espere, que me pongo nerviosa.",
+        ],
+        fast: &[
+            "—¡Más despacio! Que esto no es un entrenamiento.",
+            "—Despacio, Majestad. Que me tropiezo hasta quieta.",
+        ],
+        good: &[
+            "—…Eso me gusta.",
+            "—Mm… no pare.",
+            "—Así… así sí.",
+            "—No se lo cuente a Lira.",
+        ],
+        fav: &[
+            "—¡La cola no! …Bueno, la cola sí. Ahí sí.",
+            "—¡Nadie me toca la cola! …Usted sí. Siga.",
+        ],
+        sat: &["—Ahí ya… ¿otra cosa?", "—Se repite, Majestad."],
+        locked: &["—¡Eso todavía no!", "—Primero lo otro. …Creo."],
+        kiss: &[
+            "—…",
+            "—¡Majestad! …Otra vez.",
+            "—Me ha besado la Reina. Me ha besado la Reina.",
+        ],
+        undress: &[
+            ("cofia", "—¡Mi cofia! …Se me iba a caer igual."),
+            (
+                "vestido",
+                "—Los lazos… espere, que me lío… ¡ya! …El delantal tiene una mancha. ¡No mire la mancha!",
+            ),
+            ("medias", "—Una tiene un agujero. …Shh."),
+            ("lenceria", "—No… no mire. …Vale, mire."),
+        ],
+        more: "—¡Todavía llevo algo puesto! …¿No lo ve?",
+        stop: "—Majestad… ¿lo dejamos aquí por hoy? …No es usted. Es que me late muy fuerte.",
+        thanks: "—Gracias por parar. …Es usted la mejor Reina.",
+        climax: "—…Majestad. Mañana entreno el doble. …O no.",
+        rough: "—¡Eso se aprieta con cariño!",
+        pinch: &["—¡Ay! …Otra.", "—¡Ah! …Avise, que tengo reflejos de guardia."],
+        two: "—¡Las dos manos! …Me va a dejar sin defensa.",
+        timeout: "—Se apagó la vela. …Mañana patrullo a las seis.",
+    },
+    chq: &[
+        "—La cola. Hazme caso: la cola.",
+        "—Se pone nerviosa enseguida. Despacio, pero sin pararte.",
+        "—Si se tapa la cara con la cola, vas bien.",
+        "—Fue la única que lloró cuando me dormí. Trátala bien.",
+    ],
+    art: &[
+        (
+            "cofia,vestido,medias,lenceria",
+            "caricias/nemi/nueva/nemi2_capa4_cofia_alfa",
+        ),
+        (
+            "vestido,medias,lenceria",
+            "caricias/nemi/nueva/nemi2_capa3_vestido_alfa",
+        ),
+        ("medias,lenceria", "caricias/nemi/nueva/nemi2_capa2_medias_alfa"),
+        ("lenceria", "caricias/nemi/nueva/nemi2_capa1_lenceria_alfa"),
+        ("", "caricias/nemi/nueva/nemi2_base_desnuda_alfa"),
+    ],
+    clips: &[("", "caricias/nemi/final/final")],
+};
+
 pub(crate) fn girl(id: &str) -> Option<&'static Girl> {
     match id {
         "lira" => Some(&LIRA),
         "nyxara" => Some(&NYXARA),
         "maren" => Some(&MAREN),
+        "nemi" => Some(&NEMI),
         _ => None,
     }
 }
@@ -1299,6 +1480,11 @@ struct Body {
     sh: [Spring; 2],
     hair_a: [f32; 2],
     hair_v: [f32; 2],
+    /// The tail: its angle, its speed, where the hand pulls it, and how long it still wags.
+    tail_a: f32,
+    tail_v: f32,
+    tail_tgt: f32,
+    tail_wag: f32,
     jump: [f32; 2],
     spots: [Spot; 2],
     dents: Vec<Dent>,
@@ -1375,7 +1561,7 @@ pub(crate) struct Caricias {
     max_deseo: f32,
     pub time: f32,
     pub worn: Vec<bool>,
-    sat: [f32; 11],
+    sat: [f32; 12],
     pub fav_found: bool,
     pub flinches: u32,
     pub kisses: u32,
@@ -1415,11 +1601,14 @@ pub(crate) struct Caricias {
     /// What Chiquita says next (the App passes it on).
     chq_out: Vec<String>,
     sfx: Vec<UiSfx>,
-    hair: Option<(u32, u32, Vec<u8>)>,
+    /// The hair mask (width, height, and per pixel the hair's weight and the tail's).
+    hair: Option<(u32, u32, Vec<[u8; 2]>)>,
     seed: u32,
     /// The «¡SU PUNTO DÉBIL!» toast and when.
     pub toast: Option<(&'static str, f32)>,
     pub start_line_two: bool,
+    /// When each garment became ready to come off (its handle pops then).
+    ready_at: Vec<Option<f32>>,
 }
 
 const CANDLE: f32 = 180.0;
@@ -1435,8 +1624,9 @@ impl Caricias {
         )
         .ok()
         .map(|m| {
-            let l = m.to_luma8();
-            (l.width(), l.height(), l.into_raw())
+            let rgb = m.to_rgb8();
+            let px = rgb.pixels().map(|p| [p[0], p[1]]).collect();
+            (rgb.width(), rgb.height(), px)
         });
         let mut c = Self {
             girl,
@@ -1446,7 +1636,7 @@ impl Caricias {
             max_deseo: 0.0,
             time: CANDLE,
             worn: vec![true; girl.pieces.len()],
-            sat: [0.0; 11],
+            sat: [0.0; 12],
             fav_found: false,
             flinches: 0,
             kisses: 0,
@@ -1492,6 +1682,7 @@ impl Caricias {
             seed: seed.max(1),
             toast: None,
             start_line_two: false,
+            ready_at: vec![None; girl.pieces.len()],
         };
         c.kick_enter();
         c.say(girl.lines.start[0], 3);
@@ -1671,6 +1862,9 @@ impl Caricias {
         }
         b.hair_v[0] += 0.03;
         b.hair_v[1] -= 0.03;
+        b.tail_a = 0.0;
+        b.tail_v = 0.9;
+        b.tail_wag = 0.0;
         for (i, th) in b.th.iter_mut().enumerate() {
             th.v[1] += 120.0;
             th.v[0] += if i == 1 { 25.0 } else { -25.0 };
@@ -1698,6 +1892,8 @@ impl Caricias {
         self.kick_breasts(20.0, 300.0);
         self.body.hair_v[0] -= 0.05;
         self.body.hair_v[1] += 0.05;
+        let side = if self.rand() < 0.5 { -1.5 } else { 1.5 };
+        self.body.tail_v += side;
     }
 
     fn kick_climax(&mut self) {
@@ -1713,6 +1909,7 @@ impl Caricias {
         self.body.hips.v[1] -= 140.0;
         self.body.hair_v[0] -= 0.06;
         self.body.hair_v[1] += 0.06;
+        self.body.tail_wag = 3.0;
     }
 
     fn kick_undress(&mut self, id: &str) {
@@ -1725,6 +1922,10 @@ impl Caricias {
                 self.body.hair_v[1] += 0.04;
             }
             _ => self.kick_breasts(0.0, 90.0),
+        }
+        self.body.tail_v += 0.6;
+        if self.girl.rig.tail.is_some() && id == "lenceria" {
+            self.body.tail_wag = 1.2;
         }
     }
 
@@ -1775,8 +1976,8 @@ impl Caricias {
         sp.c = a;
         sp.r = tool.spot;
         sp.on = true;
-        sp.v[0] += (r1 - 0.5) * 40.0 * k;
-        sp.v[1] += 70.0 * k;
+        sp.v[0] += (r1 - 0.5) * 24.0 * k;
+        sp.v[1] += 40.0 * k;
         sp.sqv += match tool.id {
             "pellizco" => 3.2,
             "agarrar" => 1.6,
@@ -1844,16 +2045,16 @@ impl Caricias {
     fn react_zone(&mut self, zone: usize, s: f32, aw: f32, f: f32) {
         let b = &mut self.body;
         let head = |b: &mut Body, x: f32, y: f32| {
-            b.head.v[0] += x * 10.0;
-            b.head.v[1] += y * 10.0;
+            b.head.v[0] += x * 7.0;
+            b.head.v[1] += y * 7.0;
         };
         let bod = |b: &mut Body, x: f32, y: f32| {
-            b.body.v[0] += x * 4.5;
-            b.body.v[1] += y * 4.5;
+            b.body.v[0] += x * 2.6;
+            b.body.v[1] += y * 2.6;
         };
         let hips = |b: &mut Body, x: f32, y: f32| {
-            b.hips.v[0] += x * 5.5;
-            b.hips.v[1] += y * 5.5;
+            b.hips.v[0] += x * 3.2;
+            b.hips.v[1] += y * 3.2;
         };
         let sh = |b: &mut Body, side: f32, y: f32| {
             b.sh[if side < 0.0 { 0 } else { 1 }].v[1] += y * 8.0;
@@ -1924,6 +2125,12 @@ impl Caricias {
                 hips(b, 0.0, -6.0 * f);
                 bod(b, 0.0, -3.0 * f);
                 br(b, 0.0, 70.0 * f);
+            }
+            "cola" => {
+                b.tail_v += if s < 0.0 { -1.3 } else { 1.3 } * f;
+                hips(b, aw * 10.0 * f, -6.0 * f);
+                bod(b, 0.0, -4.0 * f);
+                br(b, 0.0, 90.0 * f);
             }
             _ => {}
         }
@@ -2163,6 +2370,9 @@ impl Caricias {
         self.fav_found = true;
         self.fav_t = 2.5;
         self.toast = Some(("¡SU PUNTO DÉBIL!", self.t));
+        if self.girl.rig.tail.is_some() {
+            self.body.tail_wag = 1.8;
+        }
         let l = self.girl.lines.fav;
         let l = self.pick(l);
         self.say(l, 3);
@@ -2448,6 +2658,15 @@ impl Caricias {
                 self.chq(l, true);
             }
         }
+        // a garment her desire has just made ready: its handle pops, with a sound
+        for i in 0..self.girl.pieces.len() {
+            if self.ready_at[i].is_none() && self.worn[i] && self.piece_ready(i) {
+                self.ready_at[i] = Some(self.t);
+                if self.t > 0.5 {
+                    self.sfx.push(UiSfx::Select);
+                }
+            }
+        }
         self.flinch_t = (self.flinch_t - dt).max(0.0);
         self.shake = (self.shake - dt).max(0.0);
         self.kiss_cd = (self.kiss_cd - dt).max(0.0);
@@ -2523,9 +2742,9 @@ impl Caricias {
                     let tgt = x.tgt.map_or(0.0, |t| t[j]);
                     x.v[j] += (-170.0 * (x.o[j] - tgt) - 7.0 * x.v[j]) * h;
                     x.o[j] = if j == 1 {
-                        (x.o[j] + x.v[j] * h).clamp(-20.0, 40.0)
+                        (x.o[j] + x.v[j] * h).clamp(-14.0, 26.0)
                     } else {
-                        (x.o[j] + x.v[j] * h).clamp(-24.0, 24.0)
+                        (x.o[j] + x.v[j] * h).clamp(-14.0, 14.0)
                     };
                 }
                 x.sq += (x.sq_t - x.sq) * (h * 12.0).min(1.0);
@@ -2534,33 +2753,44 @@ impl Caricias {
                 for j in 0..2 {
                     let tgt = x.tgt.map_or(0.0, |t| t[j]);
                     x.v[j] += (-210.0 * (x.o[j] - tgt) - 9.0 * x.v[j]) * h;
-                    x.o[j] = (x.o[j] + x.v[j] * h).clamp(-18.0, 18.0);
+                    x.o[j] = (x.o[j] + x.v[j] * h).clamp(-10.0, 10.0);
                 }
                 x.sq += (x.sq_t - x.sq) * (h * 12.0).min(1.0);
             }
-            spring(&mut b.body, 45.0, 5.0, -24.0, 24.0, h);
-            spring(&mut b.hips, 55.0, 5.0, -30.0, 30.0, h);
+            spring(&mut b.body, 45.0, 5.0, -14.0, 14.0, h);
+            spring(&mut b.hips, 55.0, 5.0, -16.0, 16.0, h);
             for sp in &mut b.spots {
                 let mut s = Spring { o: sp.o, v: sp.v };
-                spring(&mut s, 260.0, 9.0, -9.0, 9.0, h);
+                spring(&mut s, 260.0, 9.0, -5.0, 5.0, h);
                 sp.o = s.o;
                 sp.v = s.v;
                 sp.sqv += (-300.0 * sp.sq - 11.0 * sp.sqv) * h;
-                sp.sq = (sp.sq + sp.sqv * h).clamp(-0.12, 0.16);
+                sp.sq = (sp.sq + sp.sqv * h).clamp(-0.07, 0.09);
             }
             for s in &mut b.sh {
                 spring(s, 90.0, 7.0, -20.0, 20.0, h);
             }
             for j in 0..2 {
                 b.head.v[j] += (-70.0 * b.head.o[j] - 6.0 * b.head.v[j]) * h;
-                b.head.o[j] = (b.head.o[j] + b.head.v[j] * h).clamp(-26.0, 26.0);
+                b.head.o[j] = (b.head.o[j] + b.head.v[j] * h).clamp(-18.0, 18.0);
                 b.hair_v[j] += (-14.0 * b.hair_a[j] - 1.7 * b.hair_v[j]) * h;
                 b.hair_a[j] = (b.hair_a[j] + b.hair_v[j] * h).clamp(-0.04, 0.04);
             }
             b.jump[1] += (-120.0 * b.jump[0] - 11.0 * b.jump[1]) * h;
             b.jump[0] += b.jump[1] * h;
-            let _ = n;
+            // the tail sways on its own, wags when she is happy, follows a hand on it
+            let tt = self.t + n as f32 * h;
+            let idle =
+                (tt * 1.4).sin() * 0.012 * (1.0 + heat / 60.0) + (tt * 0.53 + 1.0).sin() * 0.006;
+            let wag = if b.tail_wag > 0.0 {
+                (tt * 11.0).sin() * 0.05 * b.tail_wag.min(1.0)
+            } else {
+                0.0
+            };
+            b.tail_v += (-95.0 * (b.tail_a - (b.tail_tgt + idle + wag)) - 4.2 * b.tail_v) * h;
+            b.tail_a = (b.tail_a + b.tail_v * h).clamp(-0.075, 0.075);
         }
+        self.body.tail_wag = (self.body.tail_wag - dt).max(0.0);
         // The hair breathes and sways on its own, more when she is worked up.
         let t = self.t;
         let k = 1.0 + heat / 100.0;
@@ -2575,9 +2805,20 @@ impl Caricias {
             x.tgt = None;
             x.sq_t = 0.0;
         }
+        self.body.tail_tgt = 0.0;
         let Some(stroke) = self.stroke.filter(|s| !s.blocked) else {
             return;
         };
+        if let Some(root) = self.girl.rig.tail {
+            if self.zone.is_some_and(|z| ZONES[z].id == "cola") {
+                let a0 = to_art(self.mouse);
+                let s0 = to_art([stroke.x0, stroke.y0]);
+                let (dx, dy) = (a0[0] - s0[0], a0[1] - s0[1]);
+                let (rx, ry) = (s0[0] - root[0], s0[1] - root[1]);
+                self.body.tail_tgt =
+                    ((rx * dy - ry * dx) / (rx * rx + ry * ry).max(1.0) * 1.3).clamp(-0.065, 0.065);
+            }
+        }
         let tool = self.tool();
         let girl: &'static Girl = self.girl;
         let rig = &girl.rig;
@@ -2605,13 +2846,13 @@ impl Caricias {
             let hold = tool.kind == Kind::Hold;
             for i in 0..2 {
                 if in_ellipse(a, rig.thighs[i]) {
-                    let (f, lim) = if hold { (0.4, 16.0) } else { (0.15, 8.0) };
+                    let (f, lim) = if hold { (0.2, 8.0) } else { (0.07, 4.0) };
                     self.body.th[i].tgt =
                         Some([(sx * f).clamp(-lim, lim), (dy * f).clamp(-lim, lim)]);
                     self.body.th[i].sq_t = if hold { 0.06 } else { 0.0 };
                 }
                 if in_ellipse(a, rig.breasts[i]) {
-                    let (f, lim) = if hold { (0.45, 28.0) } else { (0.16, 10.0) };
+                    let (f, lim) = if hold { (0.22, 13.0) } else { (0.08, 5.0) };
                     self.body.br[i].tgt =
                         Some([(sx * f).clamp(-lim, lim), (dy * f).clamp(-lim, lim)]);
                     self.body.br[i].sq_t = if hold { 0.07 } else { 0.0 };
@@ -2634,8 +2875,8 @@ impl Caricias {
                 });
             }
             if tool.id == "mano" || tool.both {
-                let ddx = (last_d[0] * 0.4).clamp(-4.0, 4.0) * if k == 1 { -1.0 } else { 1.0 };
-                let ddy = (last_d[1] * 0.4).clamp(-4.0, 4.0);
+                let ddx = (last_d[0] * 0.2).clamp(-2.0, 2.0) * if k == 1 { -1.0 } else { 1.0 };
+                let ddy = (last_d[1] * 0.2).clamp(-2.0, 2.0);
                 self.body.dents.push(Dent {
                     c: a,
                     r: [50.0, 50.0],
@@ -2795,16 +3036,18 @@ impl Caricias {
         d
     }
 
-    fn hair_weight(&self, p: [f32; 2]) -> f32 {
+    /// The hair's weight and the tail's at art point `p` (the mask's red and green).
+    fn hair_weight(&self, p: [f32; 2]) -> [f32; 2] {
         let Some((w, h, px)) = &self.hair else {
-            return 0.0;
+            return [0.0; 2];
         };
         let x = ((p[0] / ART_W) * *w as f32) as i32;
         let y = ((p[1] / ART_H) * *h as f32) as i32;
         if x < 0 || y < 0 || x >= *w as i32 || y >= *h as i32 {
-            return 0.0;
+            return [0.0; 2];
         }
-        px[(y as u32 * w + x as u32) as usize] as f32 / 255.0
+        let m = px[(y as u32 * w + x as u32) as usize];
+        [f32::from(m[0]) / 255.0, f32::from(m[1]) / 255.0]
     }
 
     /// Where art point `q` is drawn now (screen px): the deformers pushed forward, the hair swung,
@@ -2824,9 +3067,18 @@ impl Caricias {
             p[0] = c[0] + (p[0] - c[0]) * k;
             p[1] = c[1] + (p[1] - c[1]) * k;
         }
-        let hm = self.hair_weight(q);
-        if hm > 0.002 {
-            let rig = &self.girl.rig;
+        let [hm, tw] = self.hair_weight(q);
+        let rig = &self.girl.rig;
+        let tail = rig.tail.filter(|_| tw > 0.004);
+        if let Some(c) = tail {
+            // the tail turns about its root (the web page's shader, drawn forward)
+            let a = self.body.tail_a * rig.tail_amp * tw;
+            let d = [p[0] - c[0], p[1] - c[1]];
+            p = [
+                c[0] + a.cos() * d[0] - a.sin() * d[1],
+                c[1] + a.sin() * d[0] + a.cos() * d[1],
+            ];
+        } else if hm > 0.002 {
             let ang = if q[0] < rig.mid {
                 self.body.hair_a[0]
             } else {
@@ -2898,6 +3150,71 @@ impl Caricias {
         } else {
             "RITMO: bien"
         }
+    }
+
+    /// The pace under the hand for the gauge round it: how it reads (0 nothing, 1 too still, 2 good,
+    /// 3 a bit fast, 4 too fast, 5 holding, 6 not yet / over cloth) and where the needle stands
+    /// (0..1: the good band runs from 0.3 to 0.6, too fast from 0.8).
+    pub(crate) fn pace(&self) -> (u8, f32) {
+        let (Some(stroke), Some(z)) = (self.stroke, self.zone) else {
+            return (0, 0.0);
+        };
+        if stroke.blocked || self.deseo < ZONES[z].min {
+            return (6, 0.0);
+        }
+        let tool = self.tool();
+        if tool.kind == Kind::Hold {
+            return (5, 0.5);
+        }
+        let zd = &ZONES[z];
+        let (lo, hi, v) = (zd.spd[0] * tool.spd, zd.spd[1] * tool.spd, self.speed);
+        // lo·0.4 → 0.15, lo → 0.3, hi → 0.6, hi·1.8 → 0.8, beyond → 1
+        let k = if v < lo {
+            0.3 * (v / lo.max(1.0))
+        } else if v <= hi {
+            0.3 + 0.3 * (v - lo) / (hi - lo).max(1.0)
+        } else if v <= hi * 1.8 {
+            0.6 + 0.2 * (v - hi) / (hi * 0.8).max(1.0)
+        } else {
+            (0.8 + 0.2 * (v - hi * 1.8) / hi.max(1.0)).min(1.0)
+        };
+        let kind = if v > hi * 1.8 {
+            4
+        } else if v > hi {
+            3
+        } else if v < lo * 0.4 {
+            1
+        } else {
+            2
+        };
+        (kind, k)
+    }
+
+    /// How long ago garment `i` became ready to come off.
+    pub(crate) fn ready_since(&self, i: usize) -> Option<f32> {
+        self.ready_at
+            .get(i)
+            .copied()
+            .flatten()
+            .map(|at| self.t - at)
+    }
+
+    /// Each garment: the desire it asks, whether it is off, and how long ago it became ready (None
+    /// while it is not).
+    pub(crate) fn thresholds(&self) -> Vec<(f32, bool, Option<f32>)> {
+        self.girl
+            .pieces
+            .iter()
+            .enumerate()
+            .filter(|(_, p)| !p.hair)
+            .map(|(i, p)| {
+                (
+                    p.unlock,
+                    !self.worn[i],
+                    self.ready_at[i].map(|at| self.t - at),
+                )
+            })
+            .collect()
     }
 
     /// What the pointer is over, as words beside it.
@@ -3267,6 +3584,7 @@ impl App {
                         q(d[0] * 100.0),
                         q(d[1] * 100.0),
                         c.piece_ready(i),
+                        c.ready_since(i).map_or(u32::MAX, ms),
                     )
                 })
                 .collect(),
@@ -3298,6 +3616,15 @@ impl App {
             reel,
             playing: ended.is_none() && !c.paused,
             t_ms: ms(c.t),
+            pace: {
+                let (kind, k) = c.pace();
+                (kind, (k * 1000.0) as u16)
+            },
+            thresholds: c
+                .thresholds()
+                .into_iter()
+                .map(|(at, off, ready)| ((at * 10.0) as u16, off, ready.map(ms)))
+                .collect(),
         })
     }
 }
@@ -3308,7 +3635,7 @@ mod tests {
 
     #[test]
     fn every_zone_and_handle_is_on_her_art_and_the_hands_find_them() {
-        for g in [&LIRA, &NYXARA, &MAREN] {
+        for g in [&LIRA, &NYXARA, &MAREN, &NEMI] {
             for (id, poly) in g.zones {
                 assert!(zone_index(id).is_some(), "{} {id}", g.id);
                 for p in poly.iter() {
@@ -3334,6 +3661,39 @@ mod tests {
                 Some("pecho")
             );
         }
+    }
+
+    #[test]
+    fn nemis_tail_turns_about_its_root_and_her_braids_are_not_her_tail() {
+        let mut c = Caricias::new(&NEMI, 5);
+        assert!(c.hair.is_some(), "her mask loads");
+        let defs = Vec::new();
+        // the tail's tip and a braid, still
+        let tip = [1200.0, 600.0];
+        let braid = [700.0, 470.0];
+        assert!(
+            c.hair_weight(tip)[1] > 0.5,
+            "the tail is in the mask's green"
+        );
+        assert!(c.hair_weight(braid)[1] < 0.01, "the braid is no tail");
+        assert!(c.hair_weight(braid)[0] > 0.5, "the braid is hair");
+        let (tip0, braid0) = (c.warp(tip, &defs), c.warp(braid, &defs));
+        c.body.tail_a = 0.06;
+        let (tip1, braid1) = (c.warp(tip, &defs), c.warp(braid, &defs));
+        assert!(
+            (tip1[0] - tip0[0]).hypot(tip1[1] - tip0[1]) > 3.0,
+            "the tail swings"
+        );
+        assert!((braid1[0] - braid0[0]).abs() < 0.01, "the braid stays");
+        // and on the others' masks (grey) nothing is a tail
+        let lira = Caricias::new(&LIRA, 5);
+        let mut lira2 = Caricias::new(&LIRA, 5);
+        lira2.body.tail_a = 0.06;
+        let p = [700.0, 500.0];
+        assert_eq!(lira.warp(p, &defs), lira2.warp(p, &defs));
+        // her weak spot is her tail, and a hand on it moves it
+        assert_eq!(NEMI.fav, "cola");
+        assert!(NEMI.zones.iter().any(|(z, _)| *z == "cola"));
     }
 
     #[test]

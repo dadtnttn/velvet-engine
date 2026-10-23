@@ -149,13 +149,10 @@ impl Rock {
         }
     }
 
-    /// Which of the shaft's textures it wears: 0 earth, 1 stone, 2 dark rock.
+    /// Which of the shaft's painted textures it wears (`tools/pozo_texturas.py`, one a stratum, in
+    /// [`Rock::ALL`]'s order).
     pub fn texture(self) -> usize {
-        match self {
-            Rock::Tierra => 0,
-            Rock::Piedra | Rock::Pizarra | Rock::Granito => 1,
-            _ => 2,
-        }
+        Rock::ALL.iter().position(|r| *r == self).unwrap_or(0)
     }
 }
 

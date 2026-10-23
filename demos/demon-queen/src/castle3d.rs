@@ -559,6 +559,7 @@ fn verb(id: &str) -> &'static str {
         "cama" => "Descansar",
         "tocador" => "Arreglarse",
         "sofa" => "Invitar a una cita",
+        "sillon" => "Caricias",
         "balcon" => "Asomarse",
         "catalejo" => "Mirar por el catalejo",
         "mesa-guerra" => "Planear la guerra",

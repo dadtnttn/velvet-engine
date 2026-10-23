@@ -125,6 +125,11 @@ pub struct CourtView {
     pub show: Option<MemoryShow>,
     /// Pictures to load ahead (the lit girl's memories).
     pub preload: Vec<String>,
+    /// Nyxara's lessons page: her affection and the mark the next date asks (0: no date left).
+    pub affection: Option<(u8, u8)>,
+    /// Nyxara's lessons page: the way to a while with her, under her portrait (lit when `choice` is
+    /// past the cards).
+    pub extra: Option<CourtCard>,
 }
 
 /// A memory of the dates shown big: its shot, name and line, whose it is (her name and colour) and
@@ -413,6 +418,8 @@ fn typed(age: f32, delay: f32) -> usize {
 // ------------------------------------------------------------------ where things are
 
 const LEFT_X: f32 = 110.0;
+/// Under Nyxara's portrait on her lessons page: a while with her, and her affection.
+const EXTRA: Rect = Rect::new(1390.0, 684.0, 420.0, 252.0);
 const TOP_Y: f32 = 236.0;
 /// The audience: the bust's frame, the words, and the answers anchored at the foot.
 const BUST: Rect = Rect::new(110.0, 236.0, 520.0, 520.0);
@@ -478,7 +485,10 @@ pub fn hit(width: f32, height: f32, view: &CourtView, x: f32, y: f32) -> Option<
             (0..n).find(|&i| inside(ribbon_rect(n, i)))
         }
         1 | 2 => grid(view.cards.len(), true).into_iter().position(inside),
-        3 => grid(view.cards.len(), false).into_iter().position(inside),
+        3 => grid(view.cards.len(), false)
+            .into_iter()
+            .position(inside)
+            .or_else(|| (view.extra.is_some() && inside(EXTRA)).then_some(view.cards.len())),
         5 => (0..6).find(|&i| {
             let (c, r) = rune_button(i);
             (x - c[0]).powi(2) + (y - c[1]).powi(2) <= r * r
@@ -807,6 +817,10 @@ pub fn draw(
                 time,
             );
             draw_cards(font, v, view, faces, accent, false, time);
+            if let Some(card) = &view.extra {
+                let lit = view.choice as usize == view.cards.len();
+                draw_extra(font, v, card, view.affection, lit, accent, age, time);
+            }
         }
         4 | 6 => draw_talk(font, v, view, faces, accent, age, time),
         5 => {
@@ -2008,6 +2022,124 @@ fn draw_codex(font: &FontAtlas, v: &mut Vec<MapVertex>, view: &CourtView, accent
 }
 
 /// A heart about `c`, `r` from its middle to its sides.
+/// A while with Nyxara, under her portrait: what it is, «+1 AFECTO» plain to see, and her
+/// affection as ten hearts with the next date's mark ringed.
+#[allow(clippy::too_many_arguments)]
+fn draw_extra(
+    font: &FontAtlas,
+    v: &mut Vec<MapVertex>,
+    card: &CourtCard,
+    affection: Option<(u8, u8)>,
+    lit: bool,
+    accent: u32,
+    age: f32,
+    time: f32,
+) {
+    let r = EXTRA;
+    let k = entrance(age, 0.3, 0.35);
+    let locked = card.state == 1;
+    shifted(v, [0.0, (1.0 - k) * 40.0], |v| {
+        faded(v, k, |v| {
+            let lean = 12.0;
+            let q = slanted(r.x, r.y, r.w, r.h, lean);
+            fill(
+                v,
+                slanted(r.x + 12.0, r.y + 14.0, r.w, r.h, lean),
+                rgba(0x000000, 0.55),
+            );
+            if lit {
+                soft(
+                    v,
+                    r,
+                    12.0,
+                    30.0,
+                    rgba(accent, 0.42 + 0.1 * wave(time, 0.8)),
+                    true,
+                );
+            }
+            let top = if lit {
+                mix(accent, 0x000000, 0.5)
+            } else {
+                mix(accent, 0x000000, 0.78)
+            };
+            push_triangle(v, [q[0], q[1], q[2]], rgba(top, 0.97));
+            push_triangle(v, [q[0], q[2], q[3]], rgba(INK_DARK, 0.97));
+            push_outline_fringe(v, &q, rgba(INK_DARK, 0.97));
+            if lit {
+                rim(v, q, 2.5, rgba(BONE, 1.0));
+            }
+            let title_size = fitted_size(font, Face::Title, &card.title, 30.0, r.w - 60.0);
+            text_outline(
+                font,
+                v,
+                Face::Title,
+                &card.title,
+                r.x + 30.0,
+                r.y + 18.0,
+                title_size,
+                rgba(BONE, 1.0),
+                rgba(0x000000, 0.8),
+            );
+            for (j, l) in wrap(font, Face::Italic, &card.detail, 19.0, r.w - 60.0)
+                .iter()
+                .take(2)
+                .enumerate()
+            {
+                text_shadow(
+                    font,
+                    v,
+                    Face::Italic,
+                    l,
+                    r.x + 30.0,
+                    r.y + 62.0 + j as f32 * 24.0,
+                    19.0,
+                    rgba(CREAM, if locked { 0.6 } else { 0.92 }),
+                );
+            }
+            // her affection: ten hearts, the next date's mark ringed
+            if let Some((have, next)) = affection {
+                let (hx, hy) = (r.x + 44.0, r.y + 138.0);
+                for i in 0..10u8 {
+                    let c = [hx + i as f32 * 36.0, hy];
+                    let full = i < have;
+                    if next > 0 && i + 1 == next {
+                        disc(v, c, 17.0, rgba(GOLD_HI, 0.9));
+                        disc(v, c, 14.5, rgba(INK_DARK, 1.0));
+                    }
+                    heart(v, c, 11.5, rgba(INK_DARK, 1.0));
+                    heart(
+                        v,
+                        [c[0], c[1] - 0.5],
+                        9.5,
+                        rgba(if full { 0xff5d8a } else { 0x3a2c48 }, 1.0),
+                    );
+                }
+                let line = if next == 0 {
+                    format!("Afecto {have} / 10")
+                } else if have >= next {
+                    format!("Afecto {have} / 10 · ¡su próxima cita ya está abierta!")
+                } else {
+                    format!("Afecto {have} / 10 · su próxima cita pide {next}")
+                };
+                text_shadow(
+                    font,
+                    v,
+                    Face::Ui,
+                    &line,
+                    r.x + 30.0,
+                    r.y + 160.0,
+                    18.0,
+                    rgba(CREAM, 0.95),
+                );
+            }
+            chip_row(font, v, r.x + 30.0, r.y + r.h - 50.0, &card.chips, 19.0);
+        });
+    });
+    if lit && k > 0.95 {
+        pointer_down(v, [r.x + r.w * 0.5, r.y - 6.0], time);
+    }
+}
+
 fn heart(v: &mut Vec<MapVertex>, c: [f32; 2], r: f32, color: [f32; 4]) {
     disc(v, [c[0] - r * 0.48, c[1] - r * 0.2], r * 0.56, color);
     disc(v, [c[0] + r * 0.48, c[1] - r * 0.2], r * 0.56, color);

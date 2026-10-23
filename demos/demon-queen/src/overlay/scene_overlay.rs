@@ -105,6 +105,45 @@ pub struct GameView {
     pub shake: u16,
     /// The hypnotist's game: his ring and her gaze over the picture, the second column.
     pub hypno: Option<HypnoView>,
+    /// A shift in Rosalía's house: her beat's ring and his stamina.
+    pub turno: Option<TurnoView>,
+}
+
+/// «Al ritmo de la Reina» on the stage (`explore/turno.rs`).
+#[derive(Clone, Debug, Default, Hash, PartialEq)]
+pub struct TurnoView {
+    /// Her beat is going round (not during a bridge, the pick or the ending).
+    pub beating: bool,
+    /// How far the ring has closed on the next beat, 0..=1000.
+    pub ring: u16,
+    /// Since the last beat on time and off it (ms; `u32::MAX`: none yet).
+    pub hit_ms: u32,
+    pub miss_ms: u32,
+    /// His stamina, 0..=1000: full, it is over.
+    pub stamina: u16,
+    /// Shift held (holding back).
+    pub held: bool,
+    /// On the side view; the clip has both views.
+    pub side: bool,
+    pub views: bool,
+    /// The tip so far (gold).
+    pub tip: u16,
+    /// Beats on time in a row.
+    pub streak: u16,
+    /// The pips under the picture: one a loop and the last for the ending, and the one he is on.
+    pub at: u8,
+    pub steps: u8,
+    /// Who he is, what the shift is, and his face (on his stamina's medallion).
+    pub name: String,
+    pub act: String,
+    pub face: Option<PortraitRef>,
+    /// Her loop's name thrown over the picture when it changes, and since when (ms).
+    pub cut: String,
+    pub cut_ms: u32,
+    /// Since the take on show began, when it has both views (ms; `u32::MAX`: one view only).
+    pub view_new: u32,
+    /// Her first loop and he has not caught her beat yet: the hint by the ring.
+    pub teach: bool,
 }
 
 /// «No mires el anillo» on the stage (`explore/hipno.rs`).
@@ -353,7 +392,7 @@ pub(super) fn draw_scene(
     view: &SceneView,
     faces: &[Option<Uv>],
     quote_face: Option<Uv>,
-    game_face: Option<Uv>,
+    game_faces: [Option<Uv>; 2],
     has_frame: bool,
     time: f32,
 ) {
@@ -369,7 +408,7 @@ pub(super) fn draw_scene(
     };
     shifted(v, by, |v| {
         draw_stage(
-            font, v, width, height, view, faces, quote_face, game_face, has_frame, time,
+            font, v, width, height, view, faces, quote_face, game_faces, has_frame, time,
         )
     });
 }
@@ -383,10 +422,11 @@ fn draw_stage(
     view: &SceneView,
     faces: &[Option<Uv>],
     quote_face: Option<Uv>,
-    game_face: Option<Uv>,
+    game_faces: [Option<Uv>; 2],
     has_frame: bool,
     time: f32,
 ) {
+    let [game_face, client_face] = game_faces;
     let s = height / 1080.0;
     let pic = picture_rect(width, height);
     let frame = grow(pic, 12.0 * s);
@@ -456,7 +496,7 @@ fn draw_stage(
         draw_vial(font, v, frame, view, heat, time, s);
     }
     if let Some(game) = &view.game {
-        super::game_overlay::draw_wall(font, v, frame, game, time, s);
+        super::game_overlay::draw_wall(font, v, frame, game, client_face, time, s);
     }
     match &view.result {
         Some(result) => draw_result(font, v, pic, frame, result, quote_face, time, s),

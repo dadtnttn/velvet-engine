@@ -908,6 +908,21 @@ impl App {
             .is_some_and(|s| s.actors.iter().any(|a| a.who == who && a.left_at.is_none()))
     }
 
+    /// En un turno de la casa, sobre el CG de su cliente (`burdel_vn/turnos/…/t<n>_…`): el cliente
+    /// (`turno::CLIENTS`), para que la Reina hable con su máscara y la lencería de ese turno.
+    pub(super) fn stage_mask(&self) -> Option<&'static str> {
+        let bg = self.stage.as_ref()?.bg.as_deref()?;
+        let file = bg.strip_prefix("burdel_vn/turnos/")?.rsplit('/').next()?;
+        let digits: String = file
+            .strip_prefix('t')?
+            .chars()
+            .take_while(char::is_ascii_digit)
+            .collect();
+        let scene = digits.parse::<i32>().ok()?;
+        let client = super::play_scene::turno::client_of_scene(scene)?;
+        Some(super::play_scene::turno::CLIENTS[client].id)
+    }
+
     /// El escenario para el overlay.
     pub(super) fn stage_view(&self) -> Option<map_overlay::StageView> {
         let stage = self.stage.as_ref()?;

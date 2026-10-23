@@ -8,12 +8,14 @@
 //! a speech box, the elixir turning on its stage with its price, and at the card's foot a content
 //! warning (the elixir is futa content) with a button to its leaflet. The leaflet is a medicine's,
 //! side effects and all, on a folded sheet with Rosalía's stamp. Drawn in code with the overlay's
-//! painter; only the faces are pictures. A page's pieces slide in when it opens; the keys and the
-//! pointer only change their light, never their place or size.
+//! painter; only the faces are pictures. Rosalía's desk (a button on the first page) has her own
+//! page: her portrait, the Queen's account with the house on a paper card, and tilted rows to pay,
+//! work a debt off, see her ledger or borrow, and the house's jobs. A page's pieces slide in when it
+//! opens; the keys and the pointer only change their light, never their place or size.
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use super::super::venue::{Asking, Menu, Page, OFFER_LEAFLET};
+use super::super::venue::{Asking, ClientCard, LoanAction, Menu, Page, OFFER_LEAFLET, ROSTER};
 use super::persona::*;
 use super::ui_paint::*;
 use super::*;
@@ -22,7 +24,6 @@ use super::*;
 pub(crate) enum Hit {
     Item(usize),
     Action,
-    Talk,
     Close,
     /// A tile of what to ask.
     Ask(usize),
@@ -33,6 +34,16 @@ pub(crate) enum Hit {
     Leaflet,
     /// The elixir's chip on the girls' page.
     Elixir,
+    /// A button of Rosalía's loan page, taken.
+    Loan(usize),
+    /// One of her promissory notes, picked (a second click signs it).
+    LoanPick(usize),
+    /// Rosalía's desk, from the first page.
+    Desk,
+    /// A row of her desk, taken.
+    DeskRow(usize),
+    /// A client's card: picked (a second click serves him).
+    Client(usize),
 }
 
 type Uv = ([f32; 2], [f32; 2]);
@@ -49,11 +60,12 @@ struct Layout {
     s: f32,
     cards: Vec<Rect>,
     choose: Rect,
-    talk: Rect,
     close: Rect,
     elixir: Rect,
     purse: Rect,
     host: Rect,
+    /// Rosalía's desk.
+    desk: Rect,
 }
 
 fn layout(w: f32, h: f32, count: usize) -> Layout {
@@ -76,8 +88,8 @@ fn layout(w: f32, h: f32, count: usize) -> Layout {
     // The keys' row stops short of the screen's right, where Chiquita stands when she floats a line.
     let row = h - 112.0 * s;
     let close = Rect::new(w - 440.0 * s, row, 200.0 * s, 66.0 * s);
-    let talk = Rect::new(close.x - 222.0 * s, row, 200.0 * s, 66.0 * s);
-    let choose = Rect::new(talk.x - 466.0 * s, row, 440.0 * s, 66.0 * s);
+    let desk = Rect::new(close.x - 326.0 * s, row, 304.0 * s, 66.0 * s);
+    let choose = Rect::new(desk.x - 466.0 * s, row, 440.0 * s, 66.0 * s);
     let purse = Rect::new(w - 300.0 * s, 46.0 * s, 196.0 * s, 60.0 * s);
     let elixir = Rect::new(
         purse.x + purse.w - 500.0 * s,
@@ -90,11 +102,11 @@ fn layout(w: f32, h: f32, count: usize) -> Layout {
         s,
         cards,
         choose,
-        talk,
         close,
         elixir,
         purse,
         host,
+        desk,
     }
 }
 
@@ -247,16 +259,35 @@ pub(crate) fn hit(w: f32, h: f32, x: f32, y: f32, menu: &Menu) -> Option<Hit> {
             if l.choose.contains(x, y) {
                 return Some(Hit::Action);
             }
-            if l.talk.contains(x, y) {
-                return Some(Hit::Talk);
-            }
             if l.close.contains(x, y) {
                 return Some(Hit::Close);
             }
             if menu.progress.elixir_offered && l.elixir.contains(x, y) {
                 return Some(Hit::Elixir);
             }
+            if l.desk.contains(x, y) {
+                return Some(Hit::Desk);
+            }
             None
+        }
+        Page::Desk => {
+            let l = desk_layout(w, h, desk_count(menu));
+            l.rows
+                .iter()
+                .position(|r| inside_turned(*r, TILE_ANGLE, x, y))
+                .map(Hit::DeskRow)
+        }
+        Page::Clients => {
+            let l = clients_layout(w, h, ROSTER.len());
+            if let Some(i) =
+                (0..l.cards.len()).find(|&i| inside_turned(l.cards[i], CLIENT_TILT[i], x, y))
+            {
+                return Some(Hit::Client(i));
+            }
+            if l.serve.contains(x, y) {
+                return Some(Hit::Client(menu.choice));
+            }
+            l.back.contains(x, y).then_some(Hit::Close)
         }
         Page::Ask => {
             let l = ask_layout(w, h, menu.asking().len());
@@ -289,6 +320,117 @@ pub(crate) fn hit(w: f32, h: f32, x: f32, y: f32, menu: &Menu) -> Option<Hit> {
             let l = leaflet_layout(w, h);
             l.back.contains(x, y).then_some(Hit::Close)
         }
+        Page::Loan => {
+            let l = loan_layout(w, h, menu);
+            if l.sign.contains(x, y) && menu.progress.debt == 0 {
+                return matches!(
+                    menu.loan_actions().get(menu.choice),
+                    Some(LoanAction::Borrow(_))
+                )
+                .then_some(Hit::Loan(menu.choice));
+            }
+            let i = l
+                .targets
+                .iter()
+                .position(|(r, angle)| inside_turned(*r, *angle, x, y))?;
+            // A note not yet chosen is only picked; the chosen one (or any row) is taken.
+            let note = matches!(menu.loan_actions().get(i), Some(LoanAction::Borrow(_)));
+            Some(if note && i != menu.choice {
+                Hit::LoanPick(i)
+            } else {
+                Hit::Loan(i)
+            })
+        }
+    }
+}
+
+/// The loan page: Rosalía on the left as on the offer (her portrait shorter, so her word fits under
+/// it). On the right, before any loan, her two promissory notes side by side and «Firmar» under
+/// them; with a debt, her ledger's page and, under it, a tilted row for each thing that can be
+/// done about it. Below the top third nothing that matters sits at the screen's right, where
+/// Chiquita floats her lines.
+struct LoanLayout {
+    s: f32,
+    portrait: Rect,
+    /// With a debt: her ledger's page.
+    ledger: Rect,
+    /// One per action, as it is drawn and clicked: a note, a row or the back button, and its tilt.
+    targets: Vec<(Rect, f32)>,
+    /// Before a loan: sign the chosen note.
+    sign: Rect,
+}
+
+/// How far each promissory note leans.
+const NOTE_TILT: [f32; 2] = [-0.035, 0.028];
+
+fn loan_layout(w: f32, h: f32, menu: &Menu) -> LoanLayout {
+    let o = offer_layout(w, h);
+    let s = o.s;
+    let portrait = Rect::new(o.portrait.x, o.portrait.y, o.portrait.w, 640.0 * s);
+    let x0 = o.card.x;
+    let right = (w - 470.0 * s).min(x0 + 690.0 * s);
+    let actions = menu.loan_actions();
+    if menu.progress.debt == 0 {
+        let gap = 36.0 * s;
+        let nw = ((right - x0 - gap) * 0.5).min(340.0 * s);
+        let nh = 590.0 * s;
+        let mut targets: Vec<(Rect, f32)> = (0..2)
+            .map(|i| {
+                (
+                    Rect::new(
+                        x0 + i as f32 * (nw + gap),
+                        118.0 * s + i as f32 * 18.0 * s,
+                        nw,
+                        nh,
+                    ),
+                    NOTE_TILT[i],
+                )
+            })
+            .collect();
+        let foot = 118.0 * s + nh + 64.0 * s;
+        let sign = Rect::new(x0, foot, 420.0 * s, 72.0 * s);
+        targets.push((
+            Rect::new(sign.x + sign.w + 28.0 * s, foot, 230.0 * s, 72.0 * s),
+            0.0,
+        ));
+        targets.truncate(actions.len());
+        return LoanLayout {
+            s,
+            portrait,
+            ledger: Rect::new(x0, 0.0, 0.0, 0.0),
+            targets,
+            sign,
+        };
+    }
+    let choosing = menu.overdue() && menu.progress.debt_way.is_empty();
+    let ledger = Rect::new(
+        x0,
+        92.0 * s,
+        right - x0,
+        if choosing { 410.0 } else { 480.0 } * s,
+    );
+    let row_h = if choosing { 112.0 } else { 104.0 } * s;
+    let gap = 22.0 * s;
+    let top = ledger.y + ledger.h + 46.0 * s;
+    let targets = (0..actions.len())
+        .map(|i| {
+            (
+                Rect::new(
+                    x0 + 10.0 * s + i as f32 * 22.0 * s,
+                    top + i as f32 * (row_h + gap),
+                    right - x0 - 70.0 * s,
+                    row_h,
+                ),
+                TILE_ANGLE,
+            )
+        })
+        .collect();
+    LoanLayout {
+        s,
+        portrait,
+        ledger,
+        targets,
+        sign: Rect::new(0.0, 0.0, 0.0, 0.0),
     }
 }
 
@@ -952,7 +1094,1579 @@ pub(super) fn draw(
         Page::Ask => draw_ask(font, v, w, h, menu, gold, pointer, faces, time),
         Page::Offer => draw_offer(font, v, w, h, menu, gold, pointer, host_face, time, liquid),
         Page::Leaflet => draw_leaflet(font, v, w, h, menu, pointer, time),
+        Page::Loan => draw_loan(font, v, w, h, menu, gold, pointer, host_face, time),
+        Page::Desk => draw_desk(font, v, w, h, menu, gold, pointer, host_face, time),
+        Page::Clients => draw_clients(font, v, w, h, menu, gold, pointer, faces, host_face, time),
     }
+}
+
+/// Paper of Rosalía's: warm cream with a fine brown edge, on the page's black outline and shadow.
+fn paper(v: &mut Vec<MapVertex>, r: Rect, lift: f32, lit: bool, s: f32) {
+    soft(
+        v,
+        Rect::new(r.x + 14.0 * s, r.y + (20.0 + lift) * s, r.w, r.h),
+        10.0 * s,
+        (22.0 + lift) * s,
+        rgba(SHADOW, 0.75),
+        false,
+    );
+    panel(
+        v,
+        grow(r, 5.0 * s),
+        12.0 * s,
+        Panel::fill(0x0b0508, 0x0b0508, 1.0),
+    );
+    if lit {
+        panel(
+            v,
+            grow(r, 6.0 * s),
+            13.0 * s,
+            Panel::fill(GOLD_HI, GOLD_DEEP, 1.0),
+        );
+    }
+    panel(
+        v,
+        r,
+        8.0 * s,
+        Panel::fill(0xfdf6e8, 0xeedcbe, 1.0).rim(0x9a7a56, 0.9, 1.6 * s),
+    );
+}
+
+/// A paper not chosen, dimmed under a veil of the page's dark.
+fn veil(v: &mut Vec<MapVertex>, r: Rect, s: f32) {
+    panel(v, r, 8.0 * s, Panel::fill(0x1a0a18, 0x1a0a18, 0.32));
+}
+
+/// A band across the top of a paper: her red, with its title.
+fn paper_band(font: &FontAtlas, v: &mut Vec<MapVertex>, r: Rect, title: &str, tag: &str, s: f32) {
+    let band = Rect::new(r.x, r.y, r.w, 70.0 * s);
+    panel(v, band, 8.0 * s, Panel::fill(0xb81a44, 0x7a0a2a, 1.0));
+    panel(
+        v,
+        Rect::new(r.x, band.y + band.h - 10.0 * s, r.w, 10.0 * s),
+        0.0,
+        Panel::fill(0x7a0a2a, 0x7a0a2a, 1.0),
+    );
+    text_outline(
+        font,
+        v,
+        Face::Title,
+        title,
+        r.x + 24.0 * s,
+        r.y + 13.0 * s,
+        40.0 * s,
+        rgba(0xfff4ea, 1.0),
+        rgba(0x3a0618, 1.0),
+    );
+    if !tag.is_empty() {
+        let tw = text_width(font, Face::Ui, tag, 18.0 * s);
+        text(
+            font,
+            v,
+            Face::Ui,
+            tag,
+            r.x + r.w - tw - 20.0 * s,
+            r.y + 26.0 * s,
+            18.0 * s,
+            rgba(0xffd6e0, 0.95),
+        );
+    }
+}
+
+/// A dotted leader from `x0` to `x1` on the line `y`, as in an account book.
+fn leader(v: &mut Vec<MapVertex>, x0: f32, x1: f32, y: f32, s: f32) {
+    let step = 11.0 * s;
+    let mut x = x0;
+    while x < x1 {
+        disc(v, [x, y], 1.8 * s, rgba(LEAF_INK, 0.45));
+        x += step;
+    }
+}
+
+/// Rosalía's wax seal: a red blot with her initial.
+fn wax_seal(font: &FontAtlas, v: &mut Vec<MapVertex>, c: [f32; 2], r: f32, s: f32) {
+    burst(
+        v,
+        c,
+        r * 0.9,
+        r * 1.08,
+        14,
+        0.3,
+        rgba(0xa0102e, 1.0),
+        rgba(0x5a0418, 1.0),
+        2.0 * s,
+    );
+    disc(v, c, r * 0.78, rgba(0xc2183c, 1.0));
+    disc(v, c, r * 0.62, rgba(0x9a0c2c, 1.0));
+    let tw = text_width(font, Face::Title, "R", r * 0.95);
+    text(
+        font,
+        v,
+        Face::Title,
+        "R",
+        c[0] - tw * 0.5,
+        c[1] - r * 0.52,
+        r * 0.95,
+        rgba(0xffc4d0, 0.9),
+    );
+}
+
+/// The days to pay, as boxes on the paper: those already gone crossed out in red.
+#[allow(clippy::too_many_arguments)]
+fn day_boxes(
+    font: &FontAtlas,
+    v: &mut Vec<MapVertex>,
+    x: f32,
+    y: f32,
+    gone: i32,
+    late: bool,
+    size: f32,
+    s: f32,
+) {
+    use super::super::venue::LOAN_DAYS;
+    for d in 0..LOAN_DAYS {
+        let r = Rect::new(x + d as f32 * (size + 10.0 * s), y, size, size);
+        panel(
+            v,
+            r,
+            4.0 * s,
+            Panel::fill(0xfffaf0, 0xf2e4c8, 1.0).rim(LEAF_INK, 0.7, 1.6 * s),
+        );
+        let n = format!("{}", d + 1);
+        let tw = text_width(font, Face::Ui, &n, size * 0.42);
+        text(
+            font,
+            v,
+            Face::Ui,
+            &n,
+            r.x + (r.w - tw) * 0.5,
+            r.y + size * 0.26,
+            size * 0.42,
+            rgba(LEAF_INK, 0.75),
+        );
+        if d < gone || late {
+            let red = rgba(LEAF_RED, 0.9);
+            let m = 7.0 * s;
+            wire(
+                v,
+                [r.x + m, r.y + m],
+                [r.x + r.w - m, r.y + r.h - m],
+                4.0 * s,
+                red,
+                red,
+                0.0,
+                false,
+            );
+            wire(
+                v,
+                [r.x + r.w - m, r.y + m],
+                [r.x + m, r.y + r.h - m],
+                4.0 * s,
+                red,
+                red,
+                0.0,
+                false,
+            );
+        }
+    }
+}
+
+/// A pile of gold: `count` coins in stacks of five, side by side, their foot at `base`.
+fn coin_pile(v: &mut Vec<MapVertex>, base: [f32; 2], count: u32, r: f32) {
+    let stacks = count.div_ceil(5);
+    for k in 0..stacks {
+        let in_stack = (count - k * 5).min(5);
+        let x = base[0] + k as f32 * r * 1.7;
+        for i in 0..in_stack {
+            let wobble = if i % 2 == 0 { 0.0 } else { r * 0.12 };
+            coin(v, [x + wobble, base[1] - r - i as f32 * r * 0.42], r, 1.0);
+        }
+    }
+}
+
+/// One of her promissory notes: what she lends now, what goes back to her, in how many days, the
+/// small print and her seal.
+#[allow(clippy::too_many_arguments)]
+fn promissory_note(
+    font: &FontAtlas,
+    v: &mut Vec<MapVertex>,
+    r: Rect,
+    amount: u32,
+    number: u32,
+    lit: bool,
+    hover: bool,
+    s: f32,
+) {
+    use super::super::venue::{owed_for, LOAN_DAYS};
+    paper(v, r, if lit { 10.0 } else { 0.0 }, lit, s);
+    paper_band(font, v, r, "PAGARÉ", &format!("Nº {number:02}"), s);
+    let x = r.x + 24.0 * s;
+    let ink = rgba(LEAF_INK, 1.0);
+    text(
+        font,
+        v,
+        Face::Italic,
+        "La casa le presta",
+        x,
+        r.y + 88.0 * s,
+        24.0 * s,
+        rgba(LEAF_INK, 0.8),
+    );
+    // The gold, and how much.
+    coin_pile(v, [x + 30.0 * s, r.y + 250.0 * s], amount / 25, 22.0 * s);
+    let big = 78.0 * s;
+    let amount_text = format!("{amount}");
+    let ax = x + if amount > 100 { 120.0 } else { 86.0 } * s;
+    text(
+        font,
+        v,
+        Face::Title,
+        &amount_text,
+        ax,
+        r.y + 138.0 * s,
+        big,
+        ink,
+    );
+    text(
+        font,
+        v,
+        Face::Italic,
+        "oro, al momento",
+        ax + 4.0 * s,
+        r.y + 224.0 * s,
+        21.0 * s,
+        rgba(LEAF_INK, 0.75),
+    );
+    // A torn line, then what goes back to her.
+    let mut dx = r.x + 18.0 * s;
+    while dx < r.x + r.w - 18.0 * s {
+        wire(
+            v,
+            [dx, r.y + 282.0 * s],
+            [dx + 9.0 * s, r.y + 282.0 * s],
+            2.0 * s,
+            rgba(LEAF_INK, 0.35),
+            rgba(LEAF_INK, 0.35),
+            0.0,
+            false,
+        );
+        dx += 16.0 * s;
+    }
+    text(
+        font,
+        v,
+        Face::Ui,
+        "SE DEVUELVE",
+        x,
+        r.y + 300.0 * s,
+        18.0 * s,
+        rgba(LEAF_INK, 0.7),
+    );
+    let owed = format!("{}", owed_for(amount));
+    text(
+        font,
+        v,
+        Face::Title,
+        &owed,
+        x,
+        r.y + 324.0 * s,
+        58.0 * s,
+        rgba(LEAF_RED, 1.0),
+    );
+    let ow = text_width(font, Face::Title, &owed, 58.0 * s);
+    text(
+        font,
+        v,
+        Face::Italic,
+        "oro (+30 %)",
+        x + ow + 12.0 * s,
+        r.y + 352.0 * s,
+        22.0 * s,
+        rgba(LEAF_RED, 0.85),
+    );
+    text(
+        font,
+        v,
+        Face::Ui,
+        &format!("EN {LOAN_DAYS} DÍAS"),
+        x,
+        r.y + 404.0 * s,
+        18.0 * s,
+        rgba(LEAF_INK, 0.7),
+    );
+    day_boxes(font, v, x, r.y + 430.0 * s, 0, false, 40.0 * s, s);
+    wax_seal(
+        font,
+        v,
+        [r.x + r.w - 58.0 * s, r.y + 448.0 * s],
+        36.0 * s,
+        s,
+    );
+    // The small print, across its foot.
+    let fine = "Letra pequeña: vencido el plazo, la clienta elige cómo pagar: la mina, la casa o la calle. La casa no perdona… pero tampoco olvida.";
+    let mut y = r.y + 498.0 * s;
+    for line in wrap(font, Face::Italic, fine, 15.0 * s, r.w - 48.0 * s) {
+        text(
+            font,
+            v,
+            Face::Italic,
+            &line,
+            x,
+            y,
+            15.0 * s,
+            rgba(LEAF_INK, 0.72),
+        );
+        y += 15.0 * s * 1.35;
+    }
+    if !lit && !hover {
+        veil(v, r, s);
+    }
+}
+
+/// Her ledger's page for the Queen's debt: the loan, her cut, what is paid, what is owed, the
+/// days, and a stamp when it fell due or how it is being paid.
+fn ledger_page(font: &FontAtlas, v: &mut Vec<MapVertex>, r: Rect, menu: &Menu, s: f32) {
+    use super::super::venue::{owed_for, LOAN_DAYS, WAY_HOUSE, WAY_MINE};
+    let p = &menu.progress;
+    paper(v, r, 0.0, false, s);
+    paper_band(
+        font,
+        v,
+        r,
+        "CUENTA DE LA CASA",
+        &format!("Nº {:02}", p.loans.max(1)),
+        s,
+    );
+    let x = r.x + 30.0 * s;
+    let right = r.x + r.w - 30.0 * s;
+    text(
+        font,
+        v,
+        Face::Italic,
+        "Clienta: «la de los cuernos»",
+        x,
+        r.y + 84.0 * s,
+        23.0 * s,
+        rgba(LEAF_INK, 0.8),
+    );
+    // The account, line by line.
+    let mut rows: Vec<(String, String)> = Vec::new();
+    if p.debt_lent > 0 {
+        rows.push(("Préstamo".into(), format!("{} oro", p.debt_lent)));
+        rows.push((
+            "Interés de la casa (30 %)".into(),
+            format!("{} oro", owed_for(p.debt_lent) - p.debt_lent),
+        ));
+        let paid = menu.debt_paid();
+        if paid > 0 {
+            let how = if p.debt_way == WAY_MINE {
+                "Pagado en la mina"
+            } else if p.debt_way == WAY_HOUSE || p.shifts_worked > 0 {
+                "Pagado en turnos"
+            } else {
+                "Pagado"
+            };
+            rows.push((how.into(), format!("−{paid} oro")));
+        }
+    } else {
+        rows.push(("Deuda".into(), format!("{} oro", p.debt)));
+    }
+    let size = 25.0 * s;
+    let mut y = r.y + 126.0 * s;
+    for (label, amount) in &rows {
+        text(font, v, Face::Body, label, x, y, size, rgba(LEAF_INK, 0.95));
+        let lw = text_width(font, Face::Body, label, size);
+        let aw = text_width(font, Face::Ui, amount, size);
+        leader(
+            v,
+            x + lw + 12.0 * s,
+            right - aw - 12.0 * s,
+            y + size * 0.78,
+            s,
+        );
+        text(
+            font,
+            v,
+            Face::Ui,
+            amount,
+            right - aw,
+            y,
+            size,
+            rgba(LEAF_INK, 0.95),
+        );
+        y += 40.0 * s;
+    }
+    // The total, under a double rule.
+    for k in 0..2 {
+        let ly = y + 4.0 * s + k as f32 * 6.0 * s;
+        wire(
+            v,
+            [x, ly],
+            [right, ly],
+            2.0 * s,
+            rgba(LEAF_INK, 0.6),
+            rgba(LEAF_INK, 0.6),
+            0.0,
+            false,
+        );
+    }
+    y += 22.0 * s;
+    let total_y = y;
+    text(
+        font,
+        v,
+        Face::Title,
+        "DEBE",
+        x,
+        y + 14.0 * s,
+        40.0 * s,
+        rgba(LEAF_INK, 1.0),
+    );
+    let total = format!("{} oro", p.debt);
+    let tw = text_width(font, Face::Title, &total, 62.0 * s);
+    text(
+        font,
+        v,
+        Face::Title,
+        &total,
+        right - tw,
+        y,
+        62.0 * s,
+        rgba(LEAF_RED, 1.0),
+    );
+    // What is paid of it, as a bar.
+    let owed = owed_for(p.debt_lent);
+    let paid = menu.debt_paid();
+    if paid > 0 && owed > 0 {
+        let bar_y = y + 86.0 * s;
+        let label = format!("Pagado {paid} de {owed} oro");
+        let lw = text_width(font, Face::Ui, &label, 17.0 * s);
+        text(
+            font,
+            v,
+            Face::Ui,
+            &label,
+            right - lw,
+            bar_y - 24.0 * s,
+            17.0 * s,
+            rgba(LEAF_INK, 0.75),
+        );
+        let track = Rect::new(x, bar_y, right - x, 14.0 * s);
+        panel(
+            v,
+            track,
+            7.0 * s,
+            Panel::fill(0xe6d4b4, 0xdcc8a4, 1.0).rim(LEAF_INK, 0.4, 1.2 * s),
+        );
+        let f = paid as f32 / owed as f32;
+        panel(
+            v,
+            Rect::new(track.x, track.y, (track.w * f).max(track.h), track.h),
+            7.0 * s,
+            Panel::fill(0xd23a5a, LEAF_RED, 1.0),
+        );
+    }
+    // The days: boxes, crossed as they go, and what it means.
+    let due = menu.overdue();
+    let left = menu.days_left();
+    let gone = (LOAN_DAYS - left).clamp(0, LOAN_DAYS);
+    let by = r.y + r.h - 74.0 * s;
+    text(
+        font,
+        v,
+        Face::Ui,
+        "PLAZO",
+        x,
+        by + 11.0 * s,
+        18.0 * s,
+        rgba(LEAF_INK, 0.7),
+    );
+    day_boxes(font, v, x + 78.0 * s, by, gone, due, 40.0 * s, s);
+    let when = if due {
+        let late = -left;
+        if late == 1 {
+            "Venció ayer".to_owned()
+        } else {
+            format!("Venció hace {late} días")
+        }
+    } else {
+        match left {
+            0 => "Vence hoy".to_owned(),
+            1 => "Vence mañana".to_owned(),
+            d => format!("Vence en {d} días"),
+        }
+    };
+    let when_ink = if due || left == 0 { LEAF_RED } else { LEAF_INK };
+    text(
+        font,
+        v,
+        Face::Italic,
+        &when,
+        x + 78.0 * s + 3.0 * 50.0 * s + 12.0 * s,
+        by + 6.0 * s,
+        26.0 * s,
+        rgba(when_ink, 1.0),
+    );
+    wax_seal(
+        font,
+        v,
+        [r.x + r.w - 54.0 * s, r.y + r.h - 56.0 * s],
+        34.0 * s,
+        s,
+    );
+    // The stamp, slapped across the total between «DEBE» and the sum.
+    let stamp_at = [r.x + r.w * 0.43, total_y + 32.0 * s];
+    if p.debt_way == WAY_MINE {
+        stamp(font, v, stamp_at, "EN LA MINA", "lo cobra el enano", 1.0, s);
+    } else if p.debt_way == WAY_HOUSE {
+        stamp(font, v, stamp_at, "EN LA CASA", "turno a turno", 1.0, s);
+    } else if due {
+        stamp(font, v, stamp_at, "VENCIDO", "Rosalía cobra hoy", 1.0, s);
+    }
+}
+
+/// One row of what can be done about the debt, as the ask page's tiles show it.
+fn loan_row(menu: &Menu, action: LoanAction, gold: u32) -> Asking {
+    use super::super::venue::SHIFT_PAY;
+    let debt = menu.progress.debt;
+    let (label, hint, icon) = match action {
+        LoanAction::Borrow(a) => (format!("Pedir {a}"), String::new(), "coin"),
+        LoanAction::Repay => (
+            format!("Devolver {debt} oro"),
+            if gold >= debt {
+                "Rosalía lo tacha de su libro".to_owned()
+            } else {
+                format!("Te faltan {} de oro", debt - gold)
+            },
+            "coin",
+        ),
+        LoanAction::Mine => (
+            "El pozo".to_owned(),
+            format!("Picar {debt} oro en mineral para ella"),
+            "pick",
+        ),
+        LoanAction::House => (
+            "La casa".to_owned(),
+            format!("Turnos con máscara · −{SHIFT_PAY} por turno"),
+            "mask",
+        ),
+        LoanAction::Refuse => (
+            "La calle".to_owned(),
+            "No pagas y no vuelves a entrar".to_owned(),
+            "door",
+        ),
+        LoanAction::Shift => (
+            "Hacer un turno".to_owned(),
+            format!("Un cliente, con máscara · −{SHIFT_PAY}"),
+            "mask",
+        ),
+        LoanAction::Back => ("Ahora no".to_owned(), "Volver al libro".to_owned(), "back"),
+    };
+    Asking {
+        label,
+        hint,
+        icon: icon.to_owned(),
+        locked: !menu.loan_enabled(action, gold),
+        awake: false,
+        back: matches!(action, LoanAction::Back),
+    }
+}
+
+/// Rosalía's loan: before any loan her two promissory notes to choose from; with a debt her
+/// ledger's page and what can be done about it (once due: the mine, the house or the street).
+#[allow(clippy::too_many_arguments)]
+fn draw_loan(
+    font: &FontAtlas,
+    v: &mut Vec<MapVertex>,
+    w: f32,
+    h: f32,
+    menu: &Menu,
+    gold: u32,
+    pointer: Option<(f32, f32)>,
+    host_face: Option<Uv>,
+    time: f32,
+) {
+    let actions = menu.loan_actions();
+    let l = loan_layout(w, h, menu);
+    let s = l.s;
+    let age = time - menu.page_at_ms as f32 / 1000.0;
+    let rose = 0xd83c78;
+    let due = menu.overdue() && menu.progress.debt_way.is_empty();
+    let accent = if due { 0xe8a030 } else { rose };
+    backdrop(
+        v,
+        w,
+        h,
+        if due { 0x5a2a08 } else { 0x6a0a3a },
+        if due { 0xe8a030 } else { 0xff4f9a },
+        age,
+        time,
+        s,
+    );
+    cut_in(v, l.portrait, host_face, rose, age, s);
+    let pr = l.portrait;
+    let subtitle = if menu.progress.debt == 0 {
+        "La casa también presta"
+    } else if menu.collecting() {
+        "La casa cobra"
+    } else {
+        "La casa apunta"
+    };
+    let name_a = entrance(age, 0.2, 0.3);
+    faded(v, name_a, |v| {
+        shifted(v, [(1.0 - name_a) * -60.0 * s, 0.0], |v| {
+            turned(v, [pr.x, pr.y + pr.h], -0.1, |v| {
+                shout(
+                    font,
+                    v,
+                    Face::Title,
+                    "Rosalía",
+                    pr.x + 20.0 * s,
+                    pr.y + pr.h - 150.0 * s,
+                    100.0 * s,
+                    0xffffff,
+                    rose,
+                    1.0,
+                );
+                text_outline(
+                    font,
+                    v,
+                    Face::Italic,
+                    subtitle,
+                    pr.x + 34.0 * s,
+                    pr.y + pr.h - 36.0 * s,
+                    32.0 * s,
+                    rgba(0xffc8dc, 1.0),
+                    rgba(0x0b0508, 0.9),
+                );
+            });
+        });
+    });
+    speech_box(
+        font,
+        v,
+        [pr.x + 30.0 * s, h - 118.0 * s],
+        (l.targets.first().map_or(w * 0.42, |(r, _)| r.x) - pr.x - 70.0 * s).min(640.0 * s),
+        "Rosalía",
+        menu.loan_line(),
+        rose,
+        -0.02,
+        entrance(age, 0.42, 0.25),
+        s,
+    );
+
+    let hover = |r: Rect, angle: f32| pointer.is_some_and(|(x, y)| inside_turned(r, angle, x, y));
+    if menu.progress.debt == 0 {
+        // Her two notes, sliding in one after the other; the chosen one lifted, gold-edged.
+        for (i, &act) in actions.iter().enumerate() {
+            let LoanAction::Borrow(amount) = act else {
+                continue;
+            };
+            let (r, angle) = l.targets[i];
+            let a = entrance(age, 0.14 + 0.08 * i as f32, 0.34);
+            let lit = menu.choice == i;
+            let lift = if lit { -16.0 * s } else { 0.0 };
+            faded(v, a, |v| {
+                shifted(v, [(1.0 - a) * 320.0 * s, lift], |v| {
+                    turned(v, center(r), angle, |v| {
+                        promissory_note(
+                            font,
+                            v,
+                            r,
+                            amount,
+                            menu.progress.loans + 1 + i as u32,
+                            lit,
+                            hover(r, angle),
+                            s,
+                        );
+                    });
+                });
+            });
+            if lit && a > 0.95 {
+                cursor(v, [r.x - 16.0 * s, r.y + r.h * 0.5 + lift], 34.0 * s, time);
+            }
+        }
+        let can = matches!(actions.get(menu.choice), Some(LoanAction::Borrow(_)));
+        let sign_label = match actions.get(menu.choice) {
+            Some(LoanAction::Borrow(a)) => format!("Firmar · {a} oro"),
+            _ => "Firmar el pagaré".to_owned(),
+        };
+        let sh = pointer.is_some_and(|(x, y)| l.sign.contains(x, y));
+        button(
+            font,
+            v,
+            l.sign,
+            "Enter",
+            &sign_label,
+            can,
+            sh,
+            can,
+            accent,
+            time,
+            s,
+        );
+        if let Some(&(back, _)) = l.targets.get(actions.len().saturating_sub(1)) {
+            let lit = matches!(actions.get(menu.choice), Some(LoanAction::Back));
+            button(
+                font,
+                v,
+                back,
+                "Esc",
+                "Ahora no",
+                lit,
+                hover(back, 0.0),
+                true,
+                accent,
+                time,
+                s,
+            );
+            if lit {
+                cursor(
+                    v,
+                    [back.x - 14.0 * s, back.y + back.h * 0.5],
+                    30.0 * s,
+                    time,
+                );
+            }
+        }
+    } else {
+        // Her ledger's page, then the rows.
+        let c = l.ledger;
+        let a = entrance(age, 0.12, 0.34);
+        faded(v, a, |v| {
+            shifted(v, [(1.0 - a) * 320.0 * s, 0.0], |v| {
+                turned(v, center(c), -0.02, |v| ledger_page(font, v, c, menu, s));
+            });
+        });
+        for (i, &act) in actions.iter().enumerate() {
+            let (r, angle) = l.targets[i];
+            let row = loan_row(menu, act, gold);
+            let a = entrance(age, 0.22 + 0.07 * i as f32, 0.3);
+            let lit = i == menu.choice;
+            let adult = matches!(act, LoanAction::House | LoanAction::Shift);
+            faded(v, a, |v| {
+                shifted(v, [(1.0 - a) * 280.0 * s, 0.0], |v| {
+                    turned(v, center(r), angle, |v| {
+                        tile(font, v, r, &row, lit, hover(r, angle), accent, time, s);
+                        if adult {
+                            let th = 30.0 * s;
+                            let tw = warn_tag_width(font, "+18", th);
+                            warn_tag(
+                                font,
+                                v,
+                                Rect::new(r.x + r.w - tw - 18.0 * s, r.y + 16.0 * s, tw, th),
+                                "+18",
+                                s,
+                            );
+                        }
+                    });
+                });
+            });
+            if lit && a > 0.95 {
+                let (sn, cs) = angle.sin_cos();
+                let half = r.w * 0.5;
+                let tip = [
+                    r.x + r.w * 0.5 - half * cs - 16.0 * s,
+                    r.y + r.h * 0.5 - half * sn,
+                ];
+                cursor(v, tip, 34.0 * s, time);
+            }
+        }
+    }
+
+    if !menu.notice.is_empty() {
+        let at = l
+            .targets
+            .last()
+            .map_or([l.sign.x, l.sign.y + l.sign.h], |(r, _)| [r.x, r.y + r.h]);
+        text_shadow(
+            font,
+            v,
+            Face::Italic,
+            &menu.notice,
+            at[0] + 20.0 * s,
+            at[1] + 18.0 * s,
+            23.0 * s,
+            rgba(0xff8aa0, 1.0),
+        );
+    }
+    purse(
+        font,
+        v,
+        Rect::new(w - 300.0 * s, 46.0 * s, 196.0 * s, 60.0 * s),
+        gold,
+        s,
+    );
+}
+
+/// Rosalía's desk (and the jobs page): her portrait on the left as on the loan, her account on a
+/// paper card at the top right, and under it a tilted row for each thing to do.
+struct DeskLayout {
+    s: f32,
+    portrait: Rect,
+    card: Rect,
+    rows: Vec<Rect>,
+}
+
+fn desk_count(menu: &Menu) -> usize {
+    menu.desk_actions().len()
+}
+
+fn desk_layout(w: f32, h: f32, count: usize) -> DeskLayout {
+    let o = offer_layout(w, h);
+    let s = o.s;
+    let portrait = Rect::new(o.portrait.x, o.portrait.y, o.portrait.w, 640.0 * s);
+    let x0 = o.card.x;
+    let right = (w - 470.0 * s).min(x0 + 690.0 * s);
+    let card = Rect::new(x0, 92.0 * s, right - x0, 236.0 * s);
+    let row_h = 92.0 * s;
+    let gap = 8.0 * s;
+    let top = card.y + card.h + 30.0 * s;
+    let rows = (0..count)
+        .map(|i| {
+            Rect::new(
+                x0 + 10.0 * s + i as f32 * 14.0 * s,
+                top + i as f32 * (row_h + gap),
+                right - x0 - 60.0 * s,
+                row_h,
+            )
+        })
+        .collect();
+    DeskLayout {
+        s,
+        portrait,
+        card,
+        rows,
+    }
+}
+
+/// Her account on a paper card: what is owed and how it stands, or a clean slate and what she
+/// lends; the house's work under it.
+fn account_card(font: &FontAtlas, v: &mut Vec<MapVertex>, r: Rect, menu: &Menu, s: f32) {
+    use super::super::venue::{LOANS, WAY_HOUSE, WAY_MINE};
+    let p = &menu.progress;
+    paper(v, r, 0.0, false, s);
+    paper_band(font, v, r, "SU CUENTA", "El Corazón Carmesí", s);
+    let x = r.x + 30.0 * s;
+    let right = r.x + r.w - 30.0 * s;
+    if p.debt > 0 {
+        let big = format!("DEBE {} oro", p.debt);
+        text(
+            font,
+            v,
+            Face::Title,
+            &big,
+            x,
+            r.y + 84.0 * s,
+            46.0 * s,
+            rgba(0xa0102e, 1.0),
+        );
+        let days = menu.days_left();
+        let state = if p.debt_way == WAY_MINE {
+            "Encargo en el pozo".to_owned()
+        } else if p.debt_way == WAY_HOUSE {
+            "Pagando en turnos".to_owned()
+        } else if days < 0 {
+            "Plazo vencido".to_owned()
+        } else if days == 0 {
+            "Vence hoy".to_owned()
+        } else {
+            format!("Vence en {days} días")
+        };
+        let sw = text_width(font, Face::Italic, &state, 26.0 * s);
+        text(
+            font,
+            v,
+            Face::Italic,
+            &state,
+            right - sw,
+            r.y + 98.0 * s,
+            26.0 * s,
+            rgba(if days < 0 { 0xa0102e } else { LEAF_INK }, 0.9),
+        );
+        // How much of it is paid.
+        let paid = menu.debt_paid();
+        let total = (paid + p.debt).max(1) as f32;
+        let bar = Rect::new(x, r.y + 136.0 * s, right - x, 14.0 * s);
+        panel(v, bar, 7.0 * s, Panel::fill(0xd8c4a4, 0xc8b090, 1.0));
+        let k = paid as f32 / total;
+        if k > 0.0 {
+            panel(
+                v,
+                Rect::new(bar.x, bar.y, bar.w * k, bar.h),
+                7.0 * s,
+                Panel::fill(0x3a9a5a, 0x1a6a3a, 1.0),
+            );
+        }
+        text(
+            font,
+            v,
+            Face::Ui,
+            &format!("Pagado {paid} de {}", paid + p.debt),
+            x,
+            bar.y + 22.0 * s,
+            19.0 * s,
+            rgba(LEAF_INK, 0.75),
+        );
+    } else {
+        text(
+            font,
+            v,
+            Face::Title,
+            "Sin deudas",
+            x,
+            r.y + 84.0 * s,
+            46.0 * s,
+            rgba(0x1a6a3a, 1.0),
+        );
+        text(
+            font,
+            v,
+            Face::Italic,
+            &format!("La casa presta {} o {} oro, +30 %", LOANS[0], LOANS[1]),
+            x,
+            r.y + 138.0 * s,
+            24.0 * s,
+            rgba(LEAF_INK, 0.8),
+        );
+    }
+    let jobs_line = if p.jobs_open {
+        format!(
+            "Clientes abiertos · {} turnos · {} encargos",
+            p.jobs_shifts, p.jobs_errands
+        )
+    } else {
+        "Clientes: se abren al saldar una deuda trabajando".to_owned()
+    };
+    text(
+        font,
+        v,
+        Face::Italic,
+        &jobs_line,
+        x,
+        r.y + r.h - 38.0 * s,
+        21.0 * s,
+        rgba(LEAF_INK, 0.7),
+    );
+}
+
+/// Rosalía's desk, or the house's jobs: her portrait and word, the account, the rows.
+#[allow(clippy::too_many_arguments)]
+fn draw_desk(
+    font: &FontAtlas,
+    v: &mut Vec<MapVertex>,
+    w: f32,
+    h: f32,
+    menu: &Menu,
+    gold: u32,
+    pointer: Option<(f32, f32)>,
+    host_face: Option<Uv>,
+    time: f32,
+) {
+    let rows = menu.desk_rows(gold);
+    let l = desk_layout(w, h, rows.len());
+    let s = l.s;
+    let age = time - menu.page_at_ms as f32 / 1000.0;
+    let rose = 0xd83c78;
+    let accent = rose;
+    backdrop(v, w, h, 0x6a0a3a, 0xff4f9a, age, time, s);
+    cut_in(v, l.portrait, host_face, rose, age, s);
+    let pr = l.portrait;
+    let subtitle = if menu.progress.debt > 0 {
+        "Su cuenta con la casa"
+    } else {
+        "Asuntos de la casa"
+    };
+    let name_a = entrance(age, 0.2, 0.3);
+    faded(v, name_a, |v| {
+        shifted(v, [(1.0 - name_a) * -60.0 * s, 0.0], |v| {
+            turned(v, [pr.x, pr.y + pr.h], -0.1, |v| {
+                shout(
+                    font,
+                    v,
+                    Face::Title,
+                    "Rosalía",
+                    pr.x + 20.0 * s,
+                    pr.y + pr.h - 150.0 * s,
+                    100.0 * s,
+                    0xffffff,
+                    rose,
+                    1.0,
+                );
+                text_outline(
+                    font,
+                    v,
+                    Face::Italic,
+                    subtitle,
+                    pr.x + 34.0 * s,
+                    pr.y + pr.h - 36.0 * s,
+                    32.0 * s,
+                    rgba(0xffc8dc, 1.0),
+                    rgba(0x0b0508, 0.9),
+                );
+            });
+        });
+    });
+    speech_box(
+        font,
+        v,
+        [pr.x + 30.0 * s, h - 118.0 * s],
+        (l.rows.first().map_or(w * 0.42, |r| r.x) - pr.x - 70.0 * s).min(640.0 * s),
+        "Rosalía",
+        menu.desk_line(),
+        rose,
+        -0.02,
+        entrance(age, 0.42, 0.25),
+        s,
+    );
+    // Her account, sliding in.
+    let c = l.card;
+    let a = entrance(age, 0.12, 0.34);
+    faded(v, a, |v| {
+        shifted(v, [(1.0 - a) * 320.0 * s, 0.0], |v| {
+            turned(v, center(c), -0.015, |v| account_card(font, v, c, menu, s));
+        });
+    });
+    let hover = |r: Rect| pointer.is_some_and(|(x, y)| inside_turned(r, TILE_ANGLE, x, y));
+    for (i, (row, adult)) in rows.iter().enumerate() {
+        let r = l.rows[i];
+        let a = entrance(age, 0.2 + 0.06 * i as f32, 0.3);
+        let lit = i == menu.choice;
+        faded(v, a, |v| {
+            shifted(v, [(1.0 - a) * 280.0 * s, 0.0], |v| {
+                turned(v, center(r), TILE_ANGLE, |v| {
+                    tile(font, v, r, row, lit, hover(r), accent, time, s);
+                    if *adult {
+                        let th = 30.0 * s;
+                        let tw = warn_tag_width(font, "+18", th);
+                        warn_tag(
+                            font,
+                            v,
+                            Rect::new(r.x + r.w - tw - 18.0 * s, r.y + 14.0 * s, tw, th),
+                            "+18",
+                            s,
+                        );
+                    }
+                });
+            });
+        });
+        if lit && a > 0.95 {
+            let (sn, cs) = TILE_ANGLE.sin_cos();
+            let half = r.w * 0.5;
+            let tip = [
+                r.x + r.w * 0.5 - half * cs - 16.0 * s,
+                r.y + r.h * 0.5 - half * sn,
+            ];
+            cursor(v, tip, 32.0 * s, time);
+        }
+    }
+    if !menu.notice.is_empty() {
+        let at = l.rows.last().map_or([c.x, c.y + c.h], |r| [r.x, r.y + r.h]);
+        text_shadow(
+            font,
+            v,
+            Face::Italic,
+            &menu.notice,
+            at[0] + 20.0 * s,
+            at[1] + 16.0 * s,
+            23.0 * s,
+            rgba(0xff8aa0, 1.0),
+        );
+    }
+    purse(
+        font,
+        v,
+        Rect::new(w - 300.0 * s, 46.0 * s, 196.0 * s, 60.0 * s),
+        gold,
+        s,
+    );
+}
+
+/// How far each client's card leans and how far down it sits.
+const CLIENT_TILT: [f32; 5] = [-0.034, 0.022, -0.026, 0.03, -0.02];
+const CLIENT_DROP: [f32; 5] = [0.0, 18.0, 6.0, 22.0, 10.0];
+
+/// Where everything is on the clients' page.
+struct ClientsLayout {
+    s: f32,
+    cards: Vec<Rect>,
+    serve: Rect,
+    back: Rect,
+    purse: Rect,
+    host: Rect,
+}
+
+fn clients_layout(w: f32, h: f32, count: usize) -> ClientsLayout {
+    let s = h / 1080.0;
+    let count = count.clamp(1, 5);
+    let gap = 30.0 * s;
+    let card_w = ((w - 240.0 * s - gap * (count as f32 - 1.0)) / count as f32).min(330.0 * s);
+    let total = card_w * count as f32 + gap * (count as f32 - 1.0);
+    let x0 = w * 0.5 - total * 0.5;
+    let cards = (0..count)
+        .map(|i| {
+            Rect::new(
+                x0 + i as f32 * (card_w + gap),
+                (214.0 + CLIENT_DROP[i]) * s,
+                card_w,
+                600.0 * s,
+            )
+        })
+        .collect();
+    let row = h - 112.0 * s;
+    let back = Rect::new(w - 440.0 * s, row, 200.0 * s, 66.0 * s);
+    let serve = Rect::new(back.x - 26.0 * s - 520.0 * s, row, 520.0 * s, 66.0 * s);
+    ClientsLayout {
+        s,
+        cards,
+        serve,
+        back,
+        purse: Rect::new(w - 300.0 * s, 46.0 * s, 196.0 * s, 60.0 * s),
+        host: Rect::new(w * 0.5 - 10.0 * s, 42.0 * s, 104.0 * s, 104.0 * s),
+    }
+}
+
+/// One client's card: his face with his name thrown over it and how often he has been served (new,
+/// or ×N), what he is on a tag in his colour, a line on him, what he asks for (+18) and what he
+/// pays; locked (no clips yet) under a veil with «PRÓXIMAMENTE».
+#[allow(clippy::too_many_arguments)]
+fn client_card(
+    font: &FontAtlas,
+    v: &mut Vec<MapVertex>,
+    r: Rect,
+    c: &ClientCard,
+    uv: Option<Uv>,
+    served: u32,
+    debt: bool,
+    chosen: bool,
+    hover: bool,
+    s: f32,
+) {
+    use super::super::venue::SHIFT_PAY;
+    let accent = c.accent;
+    let lit = chosen && c.ready;
+    soft(
+        v,
+        Rect::new(r.x + 12.0 * s, r.y + 16.0 * s, r.w, r.h),
+        14.0 * s,
+        18.0 * s,
+        rgba(SHADOW, 0.75),
+        false,
+    );
+    if lit {
+        soft(v, r, 16.0 * s, 26.0 * s, rgba(accent, 0.55), true);
+    }
+    panel(
+        v,
+        grow(r, 5.0 * s),
+        16.0 * s,
+        Panel::fill(0x0b0508, 0x0b0508, 1.0),
+    );
+    panel(
+        v,
+        r,
+        12.0 * s,
+        Panel::fill(
+            mix(0x2a0f24, accent, if lit { 0.22 } else { 0.08 }),
+            0x0e060c,
+            1.0,
+        )
+        .rim(
+            if lit {
+                GOLD_HI
+            } else if hover {
+                GOLD
+            } else {
+                mix(GOLD_DEEP, accent, 0.4)
+            },
+            1.0,
+            if lit { 3.0 } else { 2.0 } * s,
+        ),
+    );
+    // His face, his name over its foot.
+    let face_r = Rect::new(
+        r.x + 14.0 * s,
+        r.y + 14.0 * s,
+        r.w - 28.0 * s,
+        r.w - 28.0 * s,
+    );
+    panel(v, face_r, 8.0 * s, Panel::fill(0x1a0a16, 0x0b0508, 1.0));
+    if let Some(uv) = uv {
+        face_window(v, face_r, 8.0 * s, uv, 1.0);
+    }
+    if !c.ready {
+        panel(v, face_r, 8.0 * s, Panel::fill(0x0b0508, 0x0b0508, 0.62));
+        let size = 26.0 * s;
+        let tw = text_width(font, Face::Title, "PRÓXIMAMENTE", size) + 30.0 * s;
+        let t = Rect::new(
+            face_r.x + (face_r.w - tw) * 0.5,
+            face_r.y + face_r.h * 0.42,
+            tw,
+            44.0 * s,
+        );
+        panel(
+            v,
+            t,
+            6.0 * s,
+            Panel::fill(0x3a2a4a, 0x1a1024, 0.95).rim(GOLD, 1.0, 2.0 * s),
+        );
+        text_centered(
+            font,
+            v,
+            Face::Title,
+            "PRÓXIMAMENTE",
+            t.x + t.w * 0.5,
+            t.y + (t.h - size) * 0.5 - 2.0 * s,
+            size,
+            rgba(CREAM, 1.0),
+        );
+    }
+    shout(
+        font,
+        v,
+        Face::Title,
+        c.name,
+        face_r.x + 14.0 * s,
+        face_r.y + face_r.h - 74.0 * s,
+        62.0 * s,
+        0xffffff,
+        accent,
+        if c.ready { 1.0 } else { 0.7 },
+    );
+    // How often she has served him: new, or a count.
+    if c.ready {
+        let (tag, fill) = if served == 0 {
+            ("NUEVO".to_owned(), 0xffd56b)
+        } else {
+            (format!("×{served}"), accent)
+        };
+        let ts = 17.0 * s;
+        let tw = text_width(font, Face::Title, &tag, ts) + 22.0 * s;
+        let t = Rect::new(
+            face_r.x + face_r.w - tw - 8.0 * s,
+            face_r.y + 8.0 * s,
+            tw,
+            30.0 * s,
+        );
+        panel(
+            v,
+            t,
+            5.0 * s,
+            Panel::fill(fill, mix(fill, 0x000000, 0.25), 1.0).rim(0x0b0508, 1.0, 2.0 * s),
+        );
+        text_centered(
+            font,
+            v,
+            Face::Title,
+            &tag,
+            t.x + t.w * 0.5,
+            t.y + (t.h - ts) * 0.5 - 1.0 * s,
+            ts,
+            rgba(0x1a0a10, 1.0),
+        );
+    }
+    // What he is, on a tag of his colour.
+    let mut y = face_r.y + face_r.h + 14.0 * s;
+    let ts = 20.0 * s;
+    let tw = (text_width(font, Face::Italic, c.title, ts) + 30.0 * s).min(r.w - 28.0 * s);
+    panel(
+        v,
+        Rect::new(r.x + 14.0 * s, y, tw, 34.0 * s),
+        6.0 * s,
+        Panel::fill(mix(0x1a0a16, accent, 0.35), 0x12060e, 1.0).rim(accent, 1.0, 1.6 * s),
+    );
+    text(
+        font,
+        v,
+        Face::Italic,
+        c.title,
+        r.x + 29.0 * s,
+        y + (34.0 * s - ts) * 0.5 - 2.0 * s,
+        ts,
+        rgba(CREAM, 1.0),
+    );
+    y += 46.0 * s;
+    // A line on him.
+    let size = 17.0 * s;
+    for line in wrap(font, Face::Body, c.about, size, r.w - 32.0 * s)
+        .iter()
+        .take(2)
+    {
+        text(
+            font,
+            v,
+            Face::Body,
+            line,
+            r.x + 16.0 * s,
+            y,
+            size,
+            rgba(CREAM, 0.9),
+        );
+        y += 24.0 * s;
+    }
+    // What he asks for, and what he pays.
+    let foot = r.y + r.h - 50.0 * s;
+    if c.ready {
+        let ask = format!("Pide: {}", c.act);
+        text(
+            font,
+            v,
+            Face::Italic,
+            &ask,
+            r.x + 16.0 * s,
+            foot - 38.0 * s,
+            18.0 * s,
+            rgba(mix(CREAM, accent, 0.4), 1.0),
+        );
+        let th = 26.0 * s;
+        let ww = warn_tag_width(font, "+18", th);
+        warn_tag(
+            font,
+            v,
+            Rect::new(r.x + r.w - ww - 14.0 * s, foot - 40.0 * s, ww, th),
+            "+18",
+            s,
+        );
+        coin(v, [r.x + 30.0 * s, foot + 16.0 * s], 12.0 * s, 1.0);
+        let pay = if debt {
+            format!("−{SHIFT_PAY} de deuda")
+        } else {
+            format!("+{SHIFT_PAY} oro y propina")
+        };
+        let ps = 19.0 * s;
+        let mut size = ps;
+        while size > 13.0 * s && text_width(font, Face::Ui, &pay, size) > r.w - 70.0 * s {
+            size -= 0.5 * s;
+        }
+        text(
+            font,
+            v,
+            Face::Ui,
+            &pay,
+            r.x + 50.0 * s,
+            foot + 16.0 * s - size * 0.6,
+            size,
+            rgba(0xffe08a, 1.0),
+        );
+    }
+}
+
+/// Rosalía's clients: the house's name across the top as on the girls' page, the clients dealt as
+/// cards, the chosen one lifted with the cursor at his side, her word at the foot, and the keys.
+#[allow(clippy::too_many_arguments)]
+fn draw_clients(
+    font: &FontAtlas,
+    v: &mut Vec<MapVertex>,
+    w: f32,
+    h: f32,
+    menu: &Menu,
+    gold: u32,
+    pointer: Option<(f32, f32)>,
+    faces: &[Option<Uv>],
+    host_face: Option<Uv>,
+    time: f32,
+) {
+    use super::super::venue::SHIFT_PAY;
+    let l = clients_layout(w, h, ROSTER.len());
+    let s = l.s;
+    let age = time - menu.page_at_ms as f32 / 1000.0;
+    let chosen = ROSTER.get(menu.choice);
+    let accent = chosen.map_or(CRIMSON, |c| c.accent);
+    backdrop(v, w, h, 0x3a0c2a, accent, age, time, s);
+
+    // The page's name thrown across the top, the book's ribbon under it.
+    let ta = entrance(age, 0.04, 0.3);
+    faded(v, ta, |v| {
+        shifted(v, [-(1.0 - ta) * 90.0 * s, 0.0], |v| {
+            turned(v, [440.0 * s, 100.0 * s], -0.045, |v| {
+                shout(
+                    font,
+                    v,
+                    Face::Title,
+                    "Clientes de la casa",
+                    96.0 * s,
+                    40.0 * s,
+                    72.0 * s,
+                    0xffffff,
+                    0x8a1030,
+                    1.0,
+                );
+                let tag = "EL LIBRO DE ROSALÍA";
+                let tw = text_width(font, Face::Title, tag, 22.0 * s);
+                let rib = Rect::new(108.0 * s, 124.0 * s, tw + 44.0 * s, 40.0 * s);
+                panel(
+                    v,
+                    grow(rib, 4.0 * s),
+                    6.0 * s,
+                    Panel::fill(0x0b0508, 0x0b0508, 1.0),
+                );
+                panel(
+                    v,
+                    rib,
+                    4.0 * s,
+                    Panel::fill(0xe8306a, 0x9a1040, 1.0).sheen(time * 0.3),
+                );
+                text(
+                    font,
+                    v,
+                    Face::Title,
+                    tag,
+                    rib.x + 22.0 * s,
+                    rib.y + 8.0 * s,
+                    22.0 * s,
+                    rgba(0xffffff, 1.0),
+                );
+                text_outline(
+                    font,
+                    v,
+                    Face::Italic,
+                    "¿A quién atiendes esta noche?",
+                    rib.x + rib.w + 20.0 * s,
+                    rib.y + 4.0 * s,
+                    27.0 * s,
+                    rgba(CREAM, 1.0),
+                    rgba(0x0b0508, 0.9),
+                );
+            });
+        });
+    });
+    // Rosalía, beside the title.
+    let host = l.host;
+    faded(v, entrance(age, 0.12, 0.3), |v| {
+        soft(v, host, host.w * 0.5, 14.0 * s, rgba(0xd83c78, 0.32), true);
+        panel(
+            v,
+            grow(host, 4.0 * s),
+            host.w * 0.5 + 4.0 * s,
+            Panel::fill(0x3a1230, 0x12060e, 1.0).rim(GOLD, 1.0, 2.6 * s),
+        );
+        if let Some(uv) = host_face {
+            face(v, host, host.w * 0.5, uv, 1.0);
+        }
+        text_shadow(
+            font,
+            v,
+            Face::Title,
+            "Rosalía",
+            host.x + host.w + 18.0 * s,
+            host.y + 26.0 * s,
+            26.0 * s,
+            rgba(0xf0a8c8, 1.0),
+        );
+    });
+    purse(font, v, l.purse, gold, s);
+
+    // The clients, dealt one after another; the chosen one on top.
+    let debt = menu.progress.debt > 0;
+    let paint = |v: &mut Vec<MapVertex>, i: usize, c: &ClientCard, chosen: bool| {
+        let Some(base) = l.cards.get(i).copied() else {
+            return;
+        };
+        let tilt = CLIENT_TILT[i];
+        let hover = pointer.is_some_and(|(x, y)| inside_turned(base, tilt, x, y));
+        let a = entrance(age, 0.08 + 0.07 * i as f32, 0.34);
+        let lift = if chosen { -14.0 * s } else { 0.0 };
+        faded(v, a, |v| {
+            shifted(
+                v,
+                [(1.0 - a) * 60.0 * s, (1.0 - a) * 70.0 * s + lift],
+                |v| {
+                    turned(v, center(base), tilt, |v| {
+                        client_card(
+                            font,
+                            v,
+                            base,
+                            c,
+                            faces.get(i).copied().flatten(),
+                            menu.served(c.id),
+                            debt,
+                            chosen,
+                            hover,
+                            s,
+                        );
+                    });
+                },
+            );
+        });
+    };
+    for (i, c) in ROSTER.iter().enumerate() {
+        if i != menu.choice {
+            paint(v, i, c, false);
+        }
+    }
+    if let Some(c) = chosen {
+        paint(v, menu.choice, c, true);
+        if let Some(&r) = l.cards.get(menu.choice) {
+            if entrance(age, 0.08 + 0.07 * menu.choice as f32, 0.34) > 0.95 {
+                let tip = turn_point(
+                    [r.x - 14.0 * s, r.y + 150.0 * s],
+                    center(r),
+                    CLIENT_TILT[menu.choice],
+                );
+                cursor(v, tip, 34.0 * s, time);
+            }
+        }
+    }
+
+    // Her word (or the notice) at the foot.
+    let words = if menu.notice.is_empty() {
+        menu.desk_line()
+    } else {
+        menu.notice.as_str()
+    };
+    speech_box(
+        font,
+        v,
+        [96.0 * s, h - 40.0 * s],
+        (l.serve.x - 140.0 * s).min(560.0 * s),
+        "Rosalía",
+        words,
+        0xd83c78,
+        -0.015,
+        entrance(age, 0.3, 0.25),
+        s,
+    );
+
+    // The keys.
+    let hover = |r: Rect| pointer.is_some_and(|(x, y)| r.contains(x, y));
+    let (label, can) = match chosen {
+        Some(c) if c.ready => (
+            if debt {
+                format!("Atender a {} · −{SHIFT_PAY} de deuda", c.name)
+            } else {
+                format!("Atender a {} · +{SHIFT_PAY} oro", c.name)
+            },
+            true,
+        ),
+        Some(c) => (format!("{} · pronto", c.name), false),
+        None => ("Atender".to_owned(), false),
+    };
+    button(
+        font,
+        v,
+        l.serve,
+        "Enter",
+        &label,
+        true,
+        hover(l.serve),
+        can,
+        accent,
+        time,
+        s,
+    );
+    button(
+        font,
+        v,
+        l.back,
+        "Esc",
+        "Volver",
+        false,
+        hover(l.back),
+        true,
+        accent,
+        time,
+        s,
+    );
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1186,19 +2900,67 @@ fn draw_girls(
         time,
         s,
     );
+    // Rosalía's desk: the account, the loan and the house's work (what is owed on a red tag).
     button(
         font,
         v,
-        l.talk,
-        "H",
-        "Charlar",
+        l.desk,
+        "R",
+        "Rosalía",
         false,
-        hover(l.talk),
+        hover(l.desk),
         true,
-        accent,
+        0xd83c78,
         time,
         s,
     );
+    let owed = menu.progress.debt;
+    let tag = if owed > 0 {
+        format!("DEBES {owed}")
+    } else if menu.progress.jobs_open {
+        "TRABAJO".to_owned()
+    } else {
+        "CUENTA".to_owned()
+    };
+    let th = 28.0 * s;
+    let tw = warn_tag_width(font, &tag, th);
+    if owed > 0 {
+        warn_tag(
+            font,
+            v,
+            Rect::new(
+                l.desk.x + l.desk.w - tw + 10.0 * s,
+                l.desk.y - th * 0.6,
+                tw,
+                th,
+            ),
+            &tag,
+            s,
+        );
+    } else {
+        let r = Rect::new(
+            l.desk.x + l.desk.w - tw + 10.0 * s,
+            l.desk.y - th * 0.6,
+            tw,
+            th,
+        );
+        panel(
+            v,
+            r,
+            4.0 * s,
+            Panel::fill(0xd83c78, 0x8a1040, 1.0).rim(0x0b0508, 1.0, 2.0 * s),
+        );
+        text_centered(
+            font,
+            v,
+            Face::Title,
+            &tag,
+            r.x + r.w * 0.5,
+            r.y + (th - 16.0 * s) * 0.5 - 1.0 * s,
+            16.0 * s,
+            rgba(0xffffff, 1.0),
+        );
+    }
     button(
         font,
         v,
@@ -1397,6 +3159,77 @@ fn emblem(
                 0xffe0a0,
                 1.0,
                 0.0,
+            );
+        }
+        "coin" => {
+            coin(v, [c[0] - k * 0.32, c[1] + k * 0.22], k * 0.62, ink[3]);
+            coin(v, [c[0] + k * 0.3, c[1] - k * 0.22], k * 0.62, ink[3]);
+        }
+        "pick" => {
+            // A miner's pick: the haft from bottom left, the iron head across its top.
+            let a = [c[0] - k * 0.72, c[1] + k * 0.78];
+            let b = [c[0] + k * 0.42, c[1] - k * 0.48];
+            let wood = rgba(0xd8a066, ink[3]);
+            wire(v, a, b, k * 0.24, wood, wood, 0.0, false);
+            let d = [1.14f32 / 1.7, -1.26f32 / 1.7];
+            let n = [-d[1], d[0]];
+            let iron = rgba(0xe8eef4, ink[3]);
+            for side in [-1.0f32, 1.0] {
+                let tip = [
+                    b[0] + side * n[0] * k * 0.82 - d[0] * k * 0.3,
+                    b[1] + side * n[1] * k * 0.82 - d[1] * k * 0.3,
+                ];
+                wire(v, b, tip, k * 0.28, iron, iron, 0.0, false);
+            }
+        }
+        "mask" => {
+            // A masquerade half-mask with its two eyes and its ribbons.
+            panel(
+                v,
+                Rect::new(c[0] - k * 1.0, c[1] - k * 0.4, k * 2.0, k * 0.8),
+                k * 0.4,
+                Panel::fill(0xfff2f6, 0xf0c8dc, ink[3]),
+            );
+            for side in [-1.0f32, 1.0] {
+                disc(
+                    v,
+                    [c[0] + side * k * 0.46, c[1] - k * 0.02],
+                    k * 0.2,
+                    rgba(0x3a1230, 1.0),
+                );
+                wire(
+                    v,
+                    [c[0] + side * k * 0.95, c[1]],
+                    [c[0] + side * k * 1.1, c[1] + k * 0.75],
+                    k * 0.12,
+                    ink,
+                    ink,
+                    0.0,
+                    false,
+                );
+            }
+        }
+        "door" => {
+            // A shut door with an arched top and its knob.
+            let r = Rect::new(c[0] - k * 0.55, c[1] - k * 0.88, k * 1.1, k * 1.76);
+            panel(v, r, k * 0.55, Panel::fill(0xfff2f6, 0xe8d0dc, ink[3]));
+            panel(
+                v,
+                Rect::new(r.x, c[1] - k * 0.1, r.w, k * 0.98),
+                k * 0.06,
+                Panel::fill(0xe8d0dc, 0xe8d0dc, ink[3]),
+            );
+            panel(
+                v,
+                grow(r, -k * 0.16),
+                k * 0.42,
+                Panel::fill(0x5a2440, 0x3a1230, 1.0),
+            );
+            disc(
+                v,
+                [c[0] + k * 0.22, c[1] + k * 0.18],
+                k * 0.1,
+                rgba(GOLD_HI, 1.0),
             );
         }
         _ => {

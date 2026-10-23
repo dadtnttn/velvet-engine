@@ -23,6 +23,8 @@ pub mod combat_fx;
 mod decor;
 #[path = "dressing.rs"]
 mod dressing;
+/// Rosalía's errand down the shaft: a quota to dig before the cage takes her out.
+pub mod encargo;
 #[path = "enemies.rs"]
 mod enemies;
 #[path = "finish.rs"]
@@ -324,7 +326,10 @@ fn free_spot(map: &Blueprint, p: Vec3) -> Vec3 {
                     .map(|(f, _)| f)
                     .filter(|f| (f - p.y).abs() <= 2.5)
                     .collect(),
-                None => map.surface(x, z, p.y + 1.0, PLAYER_HEIGHT).into_iter().collect(),
+                None => map
+                    .surface(x, z, p.y + 1.0, PLAYER_HEIGHT)
+                    .into_iter()
+                    .collect(),
             };
             for floor in floors {
                 let Some(q) = stands(Vec3::new(x, floor, z)) else {
@@ -766,6 +771,11 @@ pub struct Dungeon {
     pub pozo: Option<Box<pozo::Pozo>>,
     /// The shaft as she last left it (its galleries stay open a while).
     pub pozo_memory: Option<pozo::Memory>,
+    /// Rosalía's errand, while she works one down the shaft (the game reads its outcome).
+    pub errand: Option<encargo::Errand>,
+    /// The champion she just fell to in the hand-made mine (its model: «herrero»… or «corazon»
+    /// for the Heart's own blood), for the game to play its scene; taken with `take_fallen_to`.
+    pub fallen_to: Option<&'static str>,
     /// Where the shaft's winch stands in the mine (by the Tendero's stall), and the way its front
     /// faces (a quarter turn).
     pub shaft: Option<Vec3>,
@@ -960,6 +970,7 @@ impl Dungeon {
             checkpoint,
             torch: true,
             pending_exit: false,
+            fallen_to: None,
             jump_requested: false,
             auto_walk: false,
             npc_talks: 0,
@@ -973,6 +984,7 @@ impl Dungeon {
             voices: Default::default(),
             pozo: None,
             pozo_memory: None,
+            errand: None,
             shaft: None,
             shaft_yaw: 0.0,
             gear: Default::default(),
@@ -1343,6 +1355,61 @@ impl Dungeon {
         self.sound(sound::Sfx::ChestCreak, None, 0.6);
     }
 
+    /// Rosalía's errand: down the shaft (if she is not there yet) to dig `quota` gold of it for her
+    /// wagon; `pay` once it is met (0: a debt, written off instead).
+    pub fn start_errand(&mut self, quota: u32, pay: u32, debt: bool) {
+        if self.pozo.is_none() {
+            self.enter_pozo();
+        }
+        self.errand = Some(encargo::Errand::new(quota, pay, debt, self.elapsed));
+        self.message(format!(
+            "Encargo de Rosalía: {quota} oro en mineral. Todo lo que piques va a su vagoneta; la jaula no sube hasta cumplirlo."
+        ));
+    }
+
+    /// The cage when an errand is short: it stays down, and says why.
+    fn errand_holds_cage(&mut self) -> bool {
+        let Some(errand) = self.errand.as_ref() else {
+            return false;
+        };
+        if errand.met() || errand.outcome.is_some() {
+            return false;
+        }
+        let (done, quota) = (errand.done, errand.quota);
+        self.message(format!(
+            "La jaula no sube: Rosalía espera {quota} oro de mineral y llevas {done}. C dos veces abandona el encargo."
+        ));
+        self.sound(sound::Sfx::ChestCreak, None, 0.4);
+        true
+    }
+
+    /// C down the shaft: give Rosalía's errand up (twice, to be sure); out by the cage then.
+    fn errand_cancel_key(&mut self) {
+        let now = self.elapsed;
+        let Some(errand) = self.errand.as_mut() else {
+            return;
+        };
+        if errand.met() || errand.outcome.is_some() {
+            return;
+        }
+        if errand.press_cancel(now) {
+            let debt = errand.debt;
+            self.leave_pozo();
+            self.message(if debt {
+                "Abandonas el encargo. Rosalía se queda lo que subiste… y te cierra la casa hasta que pagues."
+            } else {
+                "Abandonas el encargo. La casa no paga lo que no se termina."
+            });
+        } else {
+            let debt = errand.debt;
+            self.message(if debt {
+                "¿Abandonar el encargo? Pulsa C otra vez: Rosalía te vetará la casa hasta que pagues."
+            } else {
+                "¿Abandonar el encargo? Pulsa C otra vez: no cobrarás nada."
+            });
+        }
+    }
+
     /// Back up and out to the mine by the winch.
     pub fn leave_pozo(&mut self) {
         let Some(pozo) = self.pozo.take() else {
@@ -1397,15 +1464,59 @@ impl Dungeon {
         let eye = self.controller.eye();
         let forward = self.controller.forward();
         let gear = self.gear;
+        // On Rosalía's errand, what she digs goes to her wagon, not the bag (never full).
+        let errand_open = self
+            .errand
+            .as_ref()
+            .is_some_and(|e| !e.met() && e.outcome.is_none());
+        let mut wagon = std::collections::BTreeMap::new();
         let events = pozo.dig(
             eye,
             forward,
             gear,
-            &mut self.materials,
+            if errand_open {
+                &mut wagon
+            } else {
+                &mut self.materials
+            },
             &mut self.gold,
             self.elapsed,
             dt,
         );
+        if errand_open {
+            let broke = events
+                .iter()
+                .filter(|e| matches!(e, pozo::Event::Broke { .. }))
+                .count() as u32;
+            let mut gold = broke * encargo::ROCK_VALUE;
+            let mut pieces = 0;
+            for (id, n) in wagon {
+                match pozo::value(&id) {
+                    Some(v) => {
+                        gold += v * n;
+                        pieces += n;
+                    }
+                    // what Rosalía has no use for stays with her
+                    None => *self.materials.entry(id).or_default() += n,
+                }
+            }
+            if let Some(errand) = self.errand.as_mut() {
+                errand.blocks += broke;
+                errand.pieces += pieces;
+                if errand.add(gold) {
+                    let quota = errand.quota;
+                    self.mine_notes.push((
+                        format!("¡Encargo cumplido! {quota} oro"),
+                        [1.0, 0.82, 0.35],
+                        self.elapsed,
+                    ));
+                    self.message(
+                        "¡Encargo de Rosalía cumplido! Vuelve a la jaula (U te sube) y sal con F para entregarlo.",
+                    );
+                    self.sound(sound::Sfx::RuneChime, None, 0.9);
+                }
+            }
+        }
         for event in events {
             match event {
                 pozo::Event::Hit { at, rock } => {
@@ -3184,6 +3295,7 @@ impl Dungeon {
             self.sound(sound::Sfx::PlayerHurt, None, (0.5 + damage / 20.0).min(1.0));
         }
         if self.health <= 0.0 {
+            self.fallen_to = self.champion_over_her(current);
             self.sound(sound::Sfx::Respawn, None, 0.8);
             self.health = 100.0;
             self.gold /= 2;
@@ -3197,6 +3309,35 @@ impl Dungeon {
             );
         }
     }
+    /// The champion standing over her in room `current` as she falls (the hand-made mine only): the
+    /// nearest living one in her room and in reach of the fight. In the Heart's chamber, its guardian
+    /// if it is at her side, else the Heart itself, whose blood wore her down.
+    fn champion_over_her(&self, current: usize) -> Option<&'static str> {
+        let mine = self.authored.as_deref()?;
+        let player = self.controller.position;
+        let (model, close) = self
+            .actors
+            .iter()
+            .filter(|a| a.health > 0.0)
+            .filter_map(|a| {
+                let spawn = &self.map.spawns[a.spawn];
+                let close = horizontal(a.position - player).length();
+                (spawn.room == current && close < 22.0)
+                    .then(|| authored::champion_model(Some(mine), spawn).map(|m| (m, close)))
+                    .flatten()
+            })
+            .min_by(|a, b| a.1.total_cmp(&b.1))?;
+        if model == "guardian" && self.heart.awake && close > 6.0 {
+            return Some("corazon");
+        }
+        Some(model)
+    }
+
+    /// The champion she just fell to, once (see `fallen_to`).
+    pub fn take_fallen_to(&mut self) -> Option<&'static str> {
+        self.fallen_to.take()
+    }
+
     /// She pushes to walk and does not move: walled in by the floors round her (the top of an
     /// altar, a pocket between props), she is let out onto the nearest free floor. Against a
     /// plain wall she can still walk elsewhere, so nothing happens.
@@ -3635,8 +3776,23 @@ impl Dungeon {
     pub fn interaction(&self) -> Option<prompt_icons::Prompt> {
         use prompt_icons::{Icon, Prompt};
         if self.pozo.is_some() {
-            return pozo::Pozo::at_cage(self.controller.position).then(|| {
-                Prompt::new(Icon::Leave, "Salir del pozo").detail("Volver a la boca de la mina")
+            if !pozo::Pozo::at_cage(self.controller.position) {
+                return None;
+            }
+            return Some(match self.errand.as_ref() {
+                Some(e) if !e.met() && e.outcome.is_none() => {
+                    Prompt::new(Icon::Lock, "La jaula no sube")
+                        .detail(format!(
+                            "Encargo de Rosalía: {} / {} oro · C dos veces lo abandona",
+                            e.done, e.quota
+                        ))
+                        .locked()
+                }
+                Some(e) if e.outcome.is_none() => Prompt::new(Icon::Leave, "Entregar y salir")
+                    .detail("Su vagoneta sube con la jaula"),
+                _ => {
+                    Prompt::new(Icon::Leave, "Salir del pozo").detail("Volver a la boca de la mina")
+                }
             });
         }
         if let Some(npc) = self.npc_near() {
@@ -3748,7 +3904,13 @@ impl Dungeon {
             return;
         }
         if self.pozo.is_some() {
-            if pozo::Pozo::at_cage(self.controller.position) {
+            if pozo::Pozo::at_cage(self.controller.position) && !self.errand_holds_cage() {
+                // Met: her wagon goes up with the cage, and the game settles it.
+                if let Some(errand) = self.errand.as_mut() {
+                    if errand.outcome.is_none() {
+                        errand.outcome = Some(true);
+                    }
+                }
                 self.leave_pozo();
             }
             return;
@@ -4029,6 +4191,7 @@ impl Dungeon {
                         pozo.haul();
                     }
                 }
+                KeyC => self.errand_cancel_key(),
                 KeyT => self.torch = !self.torch,
                 F3 => self.debug = !self.debug,
                 Space => self.jump_requested = true,

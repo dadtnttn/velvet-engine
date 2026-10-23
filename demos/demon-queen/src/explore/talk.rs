@@ -357,6 +357,18 @@ impl App {
                 return;
             }
         }
+        // A shift in the house (`@var juego_turno = <n>`, `turno_<n>` in burdel.md): its minigame.
+        let turno = self.story.get(play_scene::turno::GAME_VAR);
+        if turno > 0 {
+            self.story
+                .values
+                .insert(play_scene::turno::GAME_VAR.to_owned(), 0);
+            if let Some(client) = play_scene::turno::client_of_scene(turno) {
+                self.open_play_scene(play_scene::Game::Turno(client as u8));
+                self.persist_3d_state(true);
+                return;
+            }
+        }
         // The same room, the seal taking its shape with Rosalía's elixir (`@var escena_nina_futa`):
         // the elixir is spent.
         if self.story.get("escena_nina_futa") > 0 {
@@ -384,12 +396,27 @@ impl App {
             2 => Some("gorou_bikini"),
             _ => None,
         };
+        // In a shift of the house, over its client's picture: her mask and that night's lingerie.
+        let masked = self.stage_mask();
         let portrait = |who: &str, mood: Option<&str>| {
             let faces = guion::portraits();
-            dressed
+            masked
                 .filter(|_| who == "gorou")
-                .and_then(|key| faces.find(key, mood))
+                .and_then(|client| faces.find("reina_mascara", Some(client)))
+                .or_else(|| {
+                    dressed
+                        .filter(|_| who == "gorou")
+                        .and_then(|key| faces.find(key, mood))
+                })
                 .or_else(|| faces.find(who, mood))
+                // the house's clients: their faces from their shift's picture
+                .or_else(|| {
+                    super::play_scene::turno::CLIENTS
+                        .iter()
+                        .any(|c| c.id == who)
+                        .then(|| faces.find("clientes", Some(who)))
+                        .flatten()
+                })
                 .map(|p| map_overlay::PortraitRef {
                     image: p.image,
                     crop: p.crop,

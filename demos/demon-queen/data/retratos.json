@@ -768,5 +768,117 @@
     420
    ]
   }
+ },
+ "reina_mascara": {
+  "normal": {
+   "imagen": "burdel_vn/turnos/retratos/reina_bram",
+   "recorte": [
+    0,
+    0,
+    320,
+    320
+   ]
+  },
+  "bram": {
+   "imagen": "burdel_vn/turnos/retratos/reina_bram",
+   "recorte": [
+    0,
+    0,
+    320,
+    320
+   ]
+  },
+  "rus": {
+   "imagen": "burdel_vn/turnos/retratos/reina_rus",
+   "recorte": [
+    0,
+    0,
+    320,
+    320
+   ]
+  },
+  "gorm": {
+   "imagen": "burdel_vn/turnos/retratos/reina_gorm",
+   "recorte": [
+    0,
+    0,
+    320,
+    320
+   ]
+  },
+  "varg": {
+   "imagen": "burdel_vn/turnos/retratos/reina_varg",
+   "recorte": [
+    0,
+    0,
+    320,
+    320
+   ]
+  },
+  "kael": {
+   "imagen": "burdel_vn/turnos/retratos/reina_kael",
+   "recorte": [
+    0,
+    0,
+    320,
+    320
+   ]
+  }
+ },
+ "clientes": {
+  "normal": {
+   "imagen": "burdel_vn/turnos/retratos/bram",
+   "recorte": [
+    0,
+    0,
+    320,
+    320
+   ]
+  },
+  "bram": {
+   "imagen": "burdel_vn/turnos/retratos/bram",
+   "recorte": [
+    0,
+    0,
+    320,
+    320
+   ]
+  },
+  "rus": {
+   "imagen": "burdel_vn/turnos/retratos/rus",
+   "recorte": [
+    0,
+    0,
+    320,
+    320
+   ]
+  },
+  "gorm": {
+   "imagen": "burdel_vn/turnos/retratos/gorm",
+   "recorte": [
+    0,
+    0,
+    320,
+    320
+   ]
+  },
+  "varg": {
+   "imagen": "burdel_vn/turnos/retratos/varg",
+   "recorte": [
+    0,
+    0,
+    320,
+    320
+   ]
+  },
+  "kael": {
+   "imagen": "burdel_vn/turnos/retratos/kael",
+   "recorte": [
+    0,
+    0,
+    320,
+    320
+   ]
+  }
  }
 }

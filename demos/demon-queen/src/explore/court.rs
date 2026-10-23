@@ -183,7 +183,7 @@ pub(crate) const DON_CURA: &str = "don_cura";
 pub(crate) const DON_AGUANTE: &str = "don_aguante";
 
 /// What the day allows once (cleared when she sleeps).
-const TODAY: [&str; 10] = [
+const TODAY: [&str; 11] = [
     "aud_hoy",
     "botiquin_hoy",
     "cocina_hoy",
@@ -193,8 +193,47 @@ const TODAY: [&str; 10] = [
     "bano_hoy",
     "prisionera_hoy",
     "cita_hoy",
+    // a while with Nyxara (her lessons page)
+    "nyx_rato_hoy",
     // one turn of the war campaign a day (its gold is the Queen's: no farming it by turns)
     "guerra_turno_hoy",
+];
+
+/// A while with Nyxara (her lessons page, «Pasar el rato con ella»): its id (`corte.rato_<id>`,
+/// `nyx_rato_<id>` counts them), its card and her mood on it. Each one, once a day, +1 her
+/// affection.
+pub(crate) struct Rato {
+    pub id: &'static str,
+    pub title: &'static str,
+    pub detail: &'static str,
+    pub mood: &'static str,
+}
+
+pub(crate) const RATOS: [Rato; 4] = [
+    Rato {
+        id: "te",
+        title: "Un té en la enfermería",
+        detail: "Le llevas la merienda y la sacas un rato de entre sus frascos.",
+        mood: "sonrisa",
+    },
+    Rato {
+        id: "enfermos",
+        title: "Ayudarla con los enfermos",
+        detail: "Sostienes vendas y frascos mientras ella cura. Te mira trabajar de reojo.",
+        mood: "seria",
+    },
+    Rato {
+        id: "pulso",
+        title: "Que te tome el pulso",
+        detail: "Una revisión sin motivo. Ella sabe que no hay motivo. Tú también.",
+        mood: "picara",
+    },
+    Rato {
+        id: "notas",
+        title: "Leer sus notas sobre ti",
+        detail: "Su cuaderno pequeño, el del bolsillo de dentro: lo que apunta de su reina.",
+        mood: "sonrojada",
+    },
 ];
 
 /// Her sword skill's top level (Nemi's training), and what each level adds to a blow.
@@ -490,6 +529,8 @@ pub(crate) enum Page {
         learned: bool,
         first: bool,
     },
+    /// A while with Nyxara: which (`RATOS`).
+    Ratos,
     /// Nemi's training at the arena.
     Training(Duel),
     /// The morning: what each of the court did, and today's tasks (`court_days.rs`).
@@ -500,6 +541,8 @@ pub(crate) enum Page {
     Codex,
     /// The great hall's sofas: whom to date, and her memories (`dates.rs`).
     Dates(super::dates::DatesPage),
+    /// The alcove's red divan: whose Caricias (`divan.rs`).
+    Divan,
 }
 
 /// The court's screen while it is up.
@@ -916,6 +959,45 @@ impl App {
         self.court_show(Page::LessonTalk { index, line: 0 });
     }
 
+    /// Nyxara's affection and the mark her next date asks (0: no date left).
+    pub(crate) fn nyx_affection(&self) -> (u8, u8) {
+        let have = self.story.get("afecto_nyxara").clamp(0, 99) as u8;
+        let had = self.story.get("cita_nyxara").max(0) as usize;
+        let next = super::dates::citas()
+            .chicas
+            .iter()
+            .find(|g| g.id == "nyxara")
+            .and_then(|g| g.citas.get(had))
+            .map_or(0, |c| c.afecto.clamp(0, 99) as u8);
+        (have, next)
+    }
+
+    /// A while with Nyxara: once a day, +1 her affection, and its scene.
+    fn rato_pick(&mut self, pick: usize) {
+        let Some(r) = RATOS.get(pick) else {
+            return;
+        };
+        if self.story.get("nyx_rato_hoy") > 0 {
+            ui_sfx::play(UiSfx::Error);
+            self.court_notice("Hoy ya habéis pasado un rato juntas. Mañana, otro.");
+            return;
+        }
+        for (key, by) in [
+            ("nyx_rato_hoy".to_owned(), 1),
+            ("afecto_nyxara".to_owned(), 1),
+            (format!("nyx_rato_{}", r.id), 1),
+        ] {
+            *self.story.values.entry(key).or_insert(0) += by;
+        }
+        ui_sfx::play(UiSfx::Deal);
+        self.persist_3d_state(true);
+        self.close_court();
+        let scene = format!("corte.rato_{}", r.id);
+        if !self.start_talk_at(&scene) {
+            eprintln!("[corte] no hay escena {scene}");
+        }
+    }
+
     fn lesson_runes(&mut self, index: usize) {
         let first =
             lecciones()
@@ -1142,12 +1224,15 @@ impl App {
                 .map_or(0, |p| p.opciones.len()),
             Some(Page::Works) => obras().obras.len(),
             Some(Page::Armory) => ARMORY.len(),
-            Some(Page::Lessons) => lecciones().lecciones.len(),
+            // (and, past the lessons, a while with her)
+            Some(Page::Lessons) => lecciones().lecciones.len() + 1,
+            Some(Page::Ratos) => RATOS.len(),
             Some(Page::Runes { .. }) => RUNES,
             Some(Page::Morning) => self.routine_cards().len(),
             Some(Page::Telescope { look: None }) => court_days::catalejo().direcciones.len(),
             Some(Page::Codex) => court_days::codice().entradas.len() + 1,
             Some(Page::Dates(_)) => dates::citas().chicas.len(),
+            Some(Page::Divan) => self.divan_count(),
             _ => 0,
         }
     }
@@ -1168,7 +1253,12 @@ impl App {
             Page::Audience { .. } => self.next_petition(),
             Page::Works => self.restore(pick),
             Page::Armory => self.buy_sword(pick),
+            Page::Lessons if pick >= lecciones().lecciones.len() => {
+                ui_sfx::play(UiSfx::Select);
+                self.court_show(Page::Ratos);
+            }
             Page::Lessons => self.start_lesson(pick),
+            Page::Ratos => self.rato_pick(pick),
             Page::LessonTalk { index, line } => {
                 let lines = lecciones()
                     .lecciones
@@ -1227,6 +1317,7 @@ impl App {
             }
             Page::Codex => self.codex_pick(pick),
             Page::Dates(_) => self.dates_pick(pick),
+            Page::Divan => self.divan_pick(pick),
         }
     }
 
@@ -1255,6 +1346,13 @@ impl App {
             | Some(Page::LessonEnd { .. }) => {
                 ui_sfx::play(UiSfx::Back);
                 self.court_show(Page::Lessons);
+            }
+            Some(Page::Ratos) => {
+                ui_sfx::play(UiSfx::Back);
+                self.court_show(Page::Lessons);
+                if let Some(c) = self.court.as_mut() {
+                    c.choice = lecciones().lecciones.len();
+                }
             }
             Some(Page::Telescope { look: Some(d) }) => {
                 ui_sfx::play(UiSfx::Back);
@@ -1719,21 +1817,108 @@ impl App {
                             } else {
                                 l.don_texto.clone()
                             },
-                            chips: vec![if learned {
-                                chip("APRENDIDA · REPASAR".into(), 1)
+                            chips: if learned {
+                                vec![chip("APRENDIDA · REPASAR".into(), 1)]
                             } else {
-                                chip(format!("DON · {}", l.don_nombre), 3)
-                            }],
+                                vec![
+                                    chip(format!("DON · {}", l.don_nombre), 3),
+                                    chip("+1 AFECTO".into(), 2),
+                                ]
+                            },
                             picture: None,
                             icon: lesson_rune(i),
                             state: if learned { 2 } else { u8::from(!open) },
                         }
                     })
                     .collect();
+                let (have, next) = self.nyx_affection();
+                view.affection = Some((have, next));
+                view.stats = vec![
+                    ("Afecto de Nyxara".to_owned(), format!("{have} / 10")),
+                    (
+                        "Su próxima cita".to_owned(),
+                        if next == 0 {
+                            "ruta completa".to_owned()
+                        } else if have >= next {
+                            "¡abierta!".to_owned()
+                        } else {
+                            format!("pide {next}")
+                        },
+                    ),
+                ];
+                let today = self.story.get("nyx_rato_hoy") > 0;
+                view.extra = Some(CourtCard {
+                    title: "Pasar el rato con ella".to_owned(),
+                    detail: "Un té, ayudarla con los enfermos, que te tome el pulso… Cada rato sube su afecto."
+                        .to_owned(),
+                    chips: vec![if today {
+                        chip("HOY YA · MAÑANA OTRO".into(), 1)
+                    } else {
+                        chip("+1 AFECTO · UNO AL DÍA".into(), 2)
+                    }],
+                    picture: None,
+                    icon: String::new(),
+                    state: u8::from(today),
+                });
                 view.keys = vec![
                     ("A D".into(), "elegir".into()),
                     ("Enter".into(), "empezar".into()),
                     ("Esc".into(), "cerrar".into()),
+                ];
+            }
+            Page::Ratos => {
+                view.kind = 1;
+                view.title = "Un rato con Nyxara".to_owned();
+                view.tag = "UNO AL DÍA · CADA RATO, +1 A SU AFECTO".to_owned();
+                view.accent = 0x9a5cff;
+                let (have, next) = self.nyx_affection();
+                view.stats = vec![
+                    ("Afecto de Nyxara".to_owned(), format!("{have} / 10")),
+                    (
+                        "Su próxima cita".to_owned(),
+                        if next == 0 {
+                            "ruta completa".to_owned()
+                        } else if have >= next {
+                            "¡abierta!".to_owned()
+                        } else {
+                            format!("pide {next}")
+                        },
+                    ),
+                ];
+                let today = self.story.get("nyx_rato_hoy") > 0;
+                view.cards = RATOS
+                    .iter()
+                    .map(|r| {
+                        let times = self.story.get(&format!("nyx_rato_{}", r.id));
+                        let mut chips = vec![if today {
+                            chip("HOY YA · MAÑANA OTRO".into(), 1)
+                        } else {
+                            chip("+1 AFECTO".into(), 2)
+                        }];
+                        if times > 0 {
+                            chips.push(chip(
+                                if times == 1 {
+                                    "1 VEZ".to_owned()
+                                } else {
+                                    format!("{times} VECES")
+                                },
+                                0,
+                            ));
+                        }
+                        CourtCard {
+                            title: r.title.to_owned(),
+                            detail: r.detail.to_owned(),
+                            chips,
+                            picture: self.court_portrait("nyxara", Some(r.mood)),
+                            icon: String::new(),
+                            state: u8::from(today),
+                        }
+                    })
+                    .collect();
+                view.keys = vec![
+                    ("A D W S".into(), "elegir".into()),
+                    ("Enter".into(), "pasar el rato".into()),
+                    ("Esc".into(), "volver".into()),
                 ];
             }
             Page::LessonTalk { index, line } => {
@@ -1936,6 +2121,7 @@ impl App {
             Page::Telescope { look } => self.telescope_view(&mut view, *look),
             Page::Codex => self.codex_view(&mut view, c.choice),
             Page::Dates(d) => self.dates_view(d, &mut view),
+            Page::Divan => self.divan_view(&mut view),
         }
         Some(view)
     }
@@ -1944,6 +2130,57 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_while_with_nyxara_gives_one_affection_once_a_day() {
+        let mut app = App::new(
+            std::path::PathBuf::new(),
+            "nyx-ratos-test".into(),
+            "bedroom_inside".into(),
+            std::path::PathBuf::new(),
+        );
+        app.story.values.insert("afecto_nyxara".into(), 0);
+        app.open_lessons();
+        // past the lessons, the way to a while with her
+        let past = lecciones().lecciones.len();
+        assert_eq!(app.court_cards(), past + 1);
+        app.court_pick(past);
+        assert!(matches!(
+            app.court.as_ref().map(|c| &c.page),
+            Some(Page::Ratos)
+        ));
+        assert_eq!(app.court_cards(), RATOS.len());
+        app.court_pick(0);
+        assert_eq!(app.story.get("afecto_nyxara"), 1, "+1");
+        assert_eq!(app.story.get("nyx_rato_te"), 1);
+        let lib = guion::library();
+        assert_eq!(
+            app.talk.as_ref().map(|t| t.scene_id(lib)),
+            Some("corte.rato_te")
+        );
+        // the same day, nothing more
+        app.talk = None;
+        app.open_lessons();
+        app.court_pick(past);
+        app.court_pick(1);
+        assert_eq!(app.story.get("afecto_nyxara"), 1, "one a day");
+        // the next day, another
+        app.close_court();
+        app.court_new_day(false);
+        app.open_lessons();
+        app.court_pick(past);
+        app.court_pick(1);
+        assert_eq!(app.story.get("afecto_nyxara"), 2);
+        // every while has its scene, and its second time too
+        for r in &RATOS {
+            for id in [
+                format!("corte.rato_{}", r.id),
+                format!("corte.rato_{}_otra", r.id),
+            ] {
+                assert!(lib.find(&id, None).is_some(), "{id}");
+            }
+        }
+    }
 
     #[test]
     fn the_runes_are_won_by_repeating_them_and_lost_by_three_mistakes() {

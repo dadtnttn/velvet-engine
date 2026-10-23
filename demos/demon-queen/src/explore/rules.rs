@@ -55,6 +55,10 @@ impl App {
     /// F at the brothel's door: in when Rosalía's token is hers; before that only at night and in
     /// the cloak (she puts it on at the door).
     pub(super) fn try_enter_brothel(&mut self) {
+        // A Queen who would not pay Rosalía stays out (or pays at the door).
+        if !self.brothel_door_open() {
+            return;
+        }
         let welcomed = self.story.get("burdel_bienvenida") > 0;
         if !welcomed {
             if !self.is_night() {

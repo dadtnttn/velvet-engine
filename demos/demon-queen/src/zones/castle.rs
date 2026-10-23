@@ -590,6 +590,8 @@ impl App {
             "estudio" => self.open_codex(),
             // the red sofas of the great hall: whom to date (the vanity keeps its mirror)
             "sofa" => self.open_dates(),
+            // the red divan by the alcove's fire: whose Caricias
+            "sillon" => self.open_divan(),
             _ => false,
         }
     }
@@ -601,8 +603,7 @@ impl App {
     pub(super) fn sleep_in_bed(&mut self) {
         let phase = self.environment_cycle.phase();
         let night = !(0.2..=0.8).contains(&phase);
-        self.environment_cycle
-            .set_phase(if night { 0.3 } else { 0.95 });
+        self.set_world_phase(if night { 0.3 } else { 0.95 });
         let thought = if night {
             "Buenos días. He dormido de maravilla."
         } else {

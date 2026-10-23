@@ -39,6 +39,10 @@ use hipno::HipnoGame;
 pub(super) mod tienda;
 use tienda::TiendaGame;
 
+#[path = "turno.rs"]
+pub(super) mod turno;
+use turno::TurnoGame;
+
 /// Frames per second of the clips.
 const FPS: f32 = 24.0;
 
@@ -903,6 +907,8 @@ pub(super) enum Game {
     Hipno,
     /// The shopkeeper's favour `n` (`tienda::FAVORS`), paid for a cut in a haggle.
     Tienda(u8),
+    /// A shift in Rosalía's house to pay the debt: client `n` (`turno::CLIENTS`).
+    Turno(u8),
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -953,12 +959,16 @@ pub(super) struct PlayScene {
     noa: NoaGame,
     hipno: HipnoGame,
     tienda: TiendaGame,
+    turno: TurnoGame,
     /// The pointer last frame (it pushes the gaze only while it moves).
     last_pointer: Option<(f32, f32)>,
 }
 
 impl PlayScene {
     fn open(game: Game, elapsed: f32) -> Option<Self> {
+        // A shift's shots are those the packing kept (a view may be left out).
+        let turno_dir: String;
+        let turno_shots: Vec<(&'static str, bool)>;
         let (dir, shots): (&str, &[(&'static str, bool)]) = match game {
             Game::Alba => (
                 "burdel/alba/escena",
@@ -1019,6 +1029,15 @@ impl PlayScene {
             ),
             Game::Hipno => ("hipno/escena", &hipno::SHOTS),
             Game::Tienda(_) => ("tienda/escena", &tienda::SHOTS),
+            Game::Turno(c) => {
+                let client = &turno::CLIENTS[(c as usize).min(turno::CLIENTS.len() - 1)];
+                turno_dir = format!("burdel/turnos/{}", client.id);
+                let root = crate::exploration3d_state::data_dir()
+                    .join("assets")
+                    .join(&turno_dir);
+                turno_shots = turno::shots_on_disk(c as usize, &root);
+                (turno_dir.as_str(), turno_shots.as_slice())
+            }
         };
         let root = crate::exploration3d_state::data_dir()
             .join("assets")
@@ -1032,7 +1051,7 @@ impl PlayScene {
             dice: Dice(seed | 1),
             phase: if matches!(
                 game,
-                Game::AlbaFuta | Game::Noa | Game::Hipno | Game::Tienda(_)
+                Game::AlbaFuta | Game::Noa | Game::Hipno | Game::Tienda(_) | Game::Turno(_)
             ) {
                 Phase::Play
             } else {
@@ -1078,6 +1097,7 @@ impl PlayScene {
             },
             hipno: HipnoGame::default(),
             tienda: TiendaGame::default(),
+            turno: TurnoGame::default(),
             last_pointer: None,
         };
         // Her lines wait for the rules card to go.
@@ -1118,6 +1138,7 @@ impl PlayScene {
             }
             Game::Hipno => scene.open_hipno(),
             Game::Tienda(favor) => scene.open_tienda(favor as usize),
+            Game::Turno(client) => scene.open_turno(client as usize),
         }
         Some(scene)
     }
@@ -1203,6 +1224,7 @@ impl PlayScene {
                 }
             }
             Game::Tienda(_) => self.favor().tint,
+            Game::Turno(_) => self.client().tint,
         }
     }
 
@@ -1242,6 +1264,9 @@ impl PlayScene {
         if matches!(self.game, Game::Tienda(_)) {
             self.step_tienda(dt);
         }
+        if matches!(self.game, Game::Turno(_)) {
+            self.step_turno(dt);
+        }
         match self.phase {
             Phase::Intro => {
                 if self.reel.done() {
@@ -1251,7 +1276,7 @@ impl PlayScene {
             Phase::Play => match self.game {
                 Game::Alba | Game::AlbaFuta => self.step_alba(dt),
                 Game::Noa | Game::NoaFuta => self.step_noa(dt),
-                Game::Hipno | Game::Tienda(_) => {}
+                Game::Hipno | Game::Tienda(_) | Game::Turno(_) => {}
             },
             Phase::Cut(until) => {
                 if now >= until {
@@ -1283,7 +1308,7 @@ impl PlayScene {
         self.phase_since = now;
         match self.game {
             Game::Alba => self.reel.play("lento", 0.4, now),
-            Game::AlbaFuta | Game::Noa | Game::Hipno | Game::Tienda(_) => {}
+            Game::AlbaFuta | Game::Noa | Game::Hipno | Game::Tienda(_) | Game::Turno(_) => {}
             Game::NoaFuta => {
                 self.reel.play("rodillas", 0.5, now);
                 self.noa.tried[0] = true;
@@ -1964,6 +1989,7 @@ impl PlayScene {
         match self.game {
             Game::Hipno => self.hipno_after(),
             Game::Tienda(_) => {}
+            Game::Turno(_) => self.turno_after(),
             Game::Alba | Game::AlbaFuta => self.begin_verse(),
             Game::Noa | Game::NoaFuta => {
                 self.phase = Phase::Relax(now + 5.0);
@@ -1989,6 +2015,10 @@ impl PlayScene {
 
     /// 1–3 (or a tile clicked): her word, or the copla's rhyme.
     fn pick(&mut self, i: usize) {
+        if matches!(self.game, Game::Turno(_)) {
+            self.turno_pick(i);
+            return;
+        }
         if self.game == Game::Hipno {
             if self.phase == Phase::Play && self.hipno.order.is_some() {
                 self.hipno_answer(i);
@@ -2017,6 +2047,9 @@ impl PlayScene {
 
     /// The tiles on show now (her words or the copla's).
     fn chips(&self) -> Vec<map_overlay::GameChip> {
+        if matches!(self.game, Game::Turno(_)) {
+            return self.turno_chips();
+        }
         if self.game == Game::Hipno {
             return if self.phase == Phase::Play && self.hipno_chips_up() {
                 self.hipno_chips()
@@ -2078,8 +2111,12 @@ impl PlayScene {
     }
 
     fn rules(&self) -> map_overlay::GameRules {
-        if matches!(self.game, Game::Tienda(_)) {
-            let (title, rows) = self.tienda_rules();
+        if matches!(self.game, Game::Tienda(_) | Game::Turno(_)) {
+            let (title, rows) = if matches!(self.game, Game::Turno(_)) {
+                self.turno_rules()
+            } else {
+                self.tienda_rules()
+            };
             return map_overlay::GameRules {
                 title,
                 rows,
@@ -2172,7 +2209,7 @@ impl PlayScene {
                     ),
                 ],
             ),
-            Game::Hipno | Game::Tienda(_) => ("", &[]),
+            Game::Hipno | Game::Tienda(_) | Game::Turno(_) => ("", &[]),
         };
         map_overlay::GameRules {
             title: title.to_owned(),
@@ -2190,7 +2227,10 @@ impl PlayScene {
         let noa = self.is_noa();
         let hipno = self.game == Game::Hipno;
         let tienda = matches!(self.game, Game::Tienda(_));
-        let (who, accent) = if hipno {
+        let turno = matches!(self.game, Game::Turno(_));
+        let (who, accent) = if turno {
+            ("reina_mascara", self.client().accent)
+        } else if hipno {
             ("hypnotist", [0xd6, 0x5c, 0xff])
         } else if tienda {
             ("tendero", [0x4a, 0xd0, 0x9a])
@@ -2200,14 +2240,22 @@ impl PlayScene {
             ("alba", [0xf0, 0xc0, 0x60])
         };
         let portrait = guion::portraits()
-            .find(who, None)
+            .find(who, turno.then(|| self.client().id))
             .map(|p| map_overlay::PortraitRef {
                 image: p.image,
                 crop: p.crop,
             });
         let mut game = map_overlay::GameView {
-            kind: if hipno { 2 } else { u8::from(noa) },
-            who: if hipno {
+            kind: if turno {
+                3
+            } else if hipno {
+                2
+            } else {
+                u8::from(noa)
+            },
+            who: if turno {
+                self.client().name
+            } else if hipno {
                 "Mago"
             } else if tienda {
                 "Tendero"
@@ -2243,7 +2291,32 @@ impl PlayScene {
             }
         }
         let phase: String;
-        if hipno {
+        if turno {
+            game.turno = Some(self.turno_view());
+            game.chips = self.chips();
+            if let Some(since) = self.turno.choosing_since() {
+                game.chips_age = ((now - since) * 1000.0) as u32;
+            }
+            if self.phase == Phase::Play && game.chips.is_empty() {
+                let tv = game
+                    .turno
+                    .as_ref()
+                    .map(|t| (t.hit_ms < 250, t.held, t.views));
+                let (hit, held, views) = tv.unwrap_or_default();
+                game.keys
+                    .push(("ESPACIO".to_owned(), "al compás".to_owned(), hit));
+                game.keys
+                    .push(("SHIFT".to_owned(), "contenerte".to_owned(), held));
+                if views {
+                    game.keys
+                        .push(("V".to_owned(), "otra vista".to_owned(), false));
+                }
+            } else if !game.chips.is_empty() {
+                game.keys
+                    .push(("1 2".to_owned(), "elige dónde".to_owned(), false));
+            }
+            phase = self.turno_phase();
+        } else if hipno {
             game.hypno = Some(self.hipno_view());
             game.chips = self.chips();
             if let Some((_, since)) = self.hipno.order {
@@ -2382,6 +2455,8 @@ impl PlayScene {
             braked: false,
             marks: if hipno && building && !self.hipno.mouth() {
                 HipnoGame::marks()
+            } else if turno && building {
+                self.turno_marks()
             } else if noa && building {
                 self.noa_poses()
                     .iter()
@@ -2462,6 +2537,7 @@ impl PlayScene {
         match self.game {
             Game::Hipno => self.hipno_ending(done),
             Game::Tienda(_) => self.tienda_ending(done),
+            Game::Turno(_) => self.turno_ending(done),
             Game::Alba | Game::AlbaFuta => {
                 let a = &self.alba;
                 let futa = self.game == Game::AlbaFuta;
@@ -2548,6 +2624,9 @@ impl PlayScene {
         }
         if matches!(self.game, Game::Tienda(_)) {
             return self.tienda_thought();
+        }
+        if matches!(self.game, Game::Turno(_)) {
+            return self.turno_thought();
         }
         match (self.game, self.ended.unwrap_or(false)) {
             (Game::NoaFuta, true) if self.noa.knocks == 0 => {
@@ -2680,6 +2759,19 @@ impl App {
             return;
         }
         let fresh = pressed && !repeat;
+        // A shift: Space on her beat, Shift holds back, V the other view, 1 · 2 where.
+        if matches!(scene.game, Game::Turno(_)) {
+            match code {
+                KeyCode::Space if fresh => scene.turno_beat(),
+                KeyCode::ShiftLeft | KeyCode::ShiftRight => scene.turno.hold = pressed,
+                KeyCode::KeyV if fresh => scene.turno_flip_view(),
+                KeyCode::Digit1 | KeyCode::Numpad1 if fresh => scene.pick(0),
+                KeyCode::Digit2 | KeyCode::Numpad2 if fresh => scene.pick(1),
+                KeyCode::Escape | KeyCode::Backspace if fresh => scene.stop(),
+                _ => {}
+            }
+            return;
+        }
         // A favour: Space hurries it, Esc backs out.
         if matches!(scene.game, Game::Tienda(_)) {
             match code {
@@ -2765,6 +2857,10 @@ impl App {
                         return;
                     }
                 }
+                if matches!(scene.game, Game::Turno(_)) {
+                    scene.turno_beat();
+                    return;
+                }
                 if scene.game == Game::Hipno && scene.hipno.mouth() {
                     match map_overlay::game_pose_hit(w, h, 2, x, y) {
                         Some(Ok(by)) => {
@@ -2796,6 +2892,9 @@ impl App {
                 }
             }
         }
+        if matches!(scene.game, Game::Turno(_)) {
+            return;
+        }
         scene.set_holding(pressed);
     }
 
@@ -2803,6 +2902,7 @@ impl App {
     pub(super) fn play_scene_interrupt(&mut self) {
         if let Some(scene) = self.play_scene.as_mut() {
             scene.set_holding(false);
+            scene.turno.hold = false;
             if scene.ended.is_none() {
                 scene.stop();
             }
@@ -2842,6 +2942,17 @@ impl App {
                     super::ero::encounter(&mut self.story.values, "tendero", false, false);
                 }
             }
+            Game::Turno(_) => {
+                super::ero::encounter(&mut self.story.values, scene.client().id, false, done);
+            }
+        }
+        // A shift: the tip comes off the debt; the first time it goes all the way, it is the first.
+        if let Game::Turno(client) = scene.game {
+            self.after_turno(
+                client as usize,
+                done && !scene.turno.early,
+                scene.turno_tip(),
+            );
         }
         // A favour: the ladder climbs, and back in the shop the haggle takes its cut.
         if let Game::Tienda(favor) = scene.game {
@@ -3025,6 +3136,9 @@ impl App {
             gaze: s.hipno.gaze,
             ring: s.hipno.ring().1[0],
             mouth: s.hipno.mouth(),
+            beat_in: s.turno_beat_in(),
+            stamina: s.turno.stamina,
+            choosing: s.turno.choosing_since().is_some(),
         })
     }
 
@@ -3066,6 +3180,10 @@ pub(super) struct PlayQa {
     pub(super) gaze: f32,
     pub(super) ring: f32,
     pub(super) mouth: bool,
+    /// A shift: seconds to her next beat (`f32::INFINITY` when none), his stamina, picking where.
+    pub(super) beat_in: f32,
+    pub(super) stamina: f32,
+    pub(super) choosing: bool,
 }
 
 #[cfg(test)]

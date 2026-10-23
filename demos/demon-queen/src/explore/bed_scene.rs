@@ -108,10 +108,18 @@ pub(super) enum Voice {
     Mago,
     /// The village's shopkeeper (the shop's favours).
     Tendero,
+    /// A client of Rosalía's house thinking, in his shift (`turno.rs`, `turno::CLIENTS`).
+    Client(u8),
+    /// The Queen in her mask, in a client's shift: her face as he sees her.
+    QueenMasked(u8),
     Narration,
     /// A sound, between dashes.
     Sound,
 }
+
+/// The shift clients' faces in `retratos.json` (`clientes`, and the Queen's mask for each under
+/// `reina_mascara`), in `turno::CLIENTS` order.
+const CLIENT_FACES: [&str; 4] = ["bram", "rus", "gorm", "varg"];
 
 impl Voice {
     /// Its name, colour, face (who and mood in `retratos.json`) and whether it is a thought.
@@ -173,6 +181,21 @@ impl Voice {
                 "Tendero",
                 [0x4a, 0xd0, 0x9a],
                 Some(("tendero", None)),
+                false,
+            ),
+            Voice::Client(c) => (
+                ["Bram", "Rus", "Gorm", "Varg"]
+                    .get(c as usize)
+                    .copied()
+                    .unwrap_or("Él"),
+                [0x9f, 0xd3, 0xff],
+                Some(("clientes", CLIENT_FACES.get(c as usize).copied())),
+                true,
+            ),
+            Voice::QueenMasked(c) => (
+                "Reina",
+                [0xff, 0x6e, 0xa0],
+                Some(("reina_mascara", CLIENT_FACES.get(c as usize).copied())),
                 false,
             ),
             Voice::Narration | Voice::Sound => ("", [0xd9, 0xbd, 0x8a], None, false),

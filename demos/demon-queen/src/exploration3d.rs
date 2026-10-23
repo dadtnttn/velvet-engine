@@ -170,6 +170,10 @@ mod court;
 mod court_days;
 #[path = "explore/dates.rs"]
 pub(crate) mod dates;
+#[path = "explore/deuda.rs"]
+mod deuda;
+#[path = "explore/divan.rs"]
+mod divan;
 #[path = "explore/drink.rs"]
 mod drink;
 #[path = "explore/floats.rs"]
@@ -1495,7 +1499,7 @@ impl App {
         // air fading out.
         self.update_audio_above_ground(dt);
         if self.environment_cycle_enabled {
-            self.environment_cycle.advance(dt);
+            self.advance_world_clock(dt);
         }
 
         self.iso.ease(dt);
@@ -1950,6 +1954,51 @@ mod dungeon_mode_tests {
         assert!(app.nature_mode && app.village_entered);
     }
 
+    #[test]
+    fn falling_to_a_champion_brings_her_up_into_its_scene() {
+        let mut app = App::new(
+            PathBuf::new(),
+            "dungeon-defeat-test".into(),
+            "bedroom_inside".into(),
+            PathBuf::new(),
+        );
+        app.player = Vec3::new(-12.5, 0.0, 27.0);
+        app.nature_mode = true;
+        app.village_entered = true;
+        app.enter_dungeon_unchecked();
+        // (what the mine notes when she falls beside the smith: tested in the dungeon crate)
+        app.dungeon.fallen_to = Some("herrero");
+        app.tick_dungeon(1.0 / 60.0);
+        assert!(!app.dungeon_mode, "carried up");
+        assert_eq!(app.player, Vec3::new(-12.5, 0.0, 27.0));
+        let lib = guion::library();
+        assert_eq!(
+            app.talk.as_ref().map(|t| t.scene_id(lib)),
+            Some("mina.herrero")
+        );
+        // every champion has its scene, with its two choices
+        for boss in [
+            "herrero",
+            "bibliotecaria",
+            "senor",
+            "centinela",
+            "custodio",
+            "guardian",
+            "corazon",
+        ] {
+            for scene in [
+                boss.to_owned(),
+                format!("{boss}_zafarse"),
+                format!("{boss}_vuelta"),
+            ] {
+                assert!(
+                    lib.find(&format!("mina.{scene}"), None).is_some(),
+                    "mina.{scene}"
+                );
+            }
+        }
+    }
+
     fn backpack_world(name: &str) -> App {
         App::new(
             PathBuf::new(),
@@ -2055,10 +2104,16 @@ mod dungeon_mode_tests {
         assert!(!app.mage_will_talk(), "he only stammers at the royal dress");
         app.outfit = 1;
         assert!(app.mage_will_talk());
-        assert!(!app.mage_in_bikini(), "the green dress gets his stall, not the ring scene");
+        assert!(
+            !app.mage_in_bikini(),
+            "the green dress gets his stall, not the ring scene"
+        );
         let bikini = rules::outfit_slot("bikini").expect("the bikini");
         app.outfit = bikini;
-        assert!(app.mage_in_bikini(), "in the bikini he stammers until they have met");
+        assert!(
+            app.mage_in_bikini(),
+            "in the bikini he stammers until they have met"
+        );
         assert!(app.talk.is_none());
         app.left_baths_in_bikini();
         assert_eq!(app.outfit, 0, "out of the springs too soon: dressed again");
