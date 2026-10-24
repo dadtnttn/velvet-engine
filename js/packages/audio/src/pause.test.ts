@@ -1,6 +1,7 @@
 // Tests for following the game clock's pause and the page's visibility. A paused clock mutes the game
 // buses (or suspends the whole context, by option). A hidden page suspends the context. Plays that
-// cannot start yet wait in a queue, which keeps only the newest plays and drops the ones that are stale.
+// cannot start yet wait in a queue, which keeps only the newest plays and drops the sounds that are stale; a track
+// waits as long as it takes, and the queue drops it last.
 
 import { describe, expect, it } from "vitest";
 import { chainOf, createRig, settle } from "./test-support";
@@ -129,6 +130,20 @@ describe("the queue of plays that wait", () => {
     await settle();
     await expect(old.ended).resolves.toBe("skipped");
     expect(fresh.status).toBe("playing");
+  });
+
+  it("starts a track that waited longer than the stale time, and drops it from a full queue last", async () => {
+    const rig = createRig({ sounds: [track, door], running: false, staleAfterMs: 1000, queueLimit: 2 });
+    const music = rig.audio.playMusic("music.day");
+    const first = rig.audio.play("sfx.door");
+    const second = rig.audio.play("sfx.door");
+    await expect(first.ended).resolves.toBe("skipped");
+    rig.time.ms = 20000;
+    rig.context.state = "running";
+    rig.audio.update();
+    await settle();
+    expect(music.status).toBe("playing");
+    await expect(second.ended).resolves.toBe("skipped");
   });
 
   it("keeps only the newest track that waits for the audio", async () => {

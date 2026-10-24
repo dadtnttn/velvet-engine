@@ -203,7 +203,7 @@ export interface AudioOptions {
   readonly random?: () => number;
   /** How many plays may wait for the audio to start. The oldest is dropped beyond it. Default 32. */
   readonly queueLimit?: number;
-  /** Milliseconds a waiting play stays worth starting. Older ones are skipped. Default 3000. */
+  /** Milliseconds a waiting sound stays worth starting. Older ones are skipped; a track waits as long as it takes. Default 3000. */
   readonly staleAfterMs?: number;
   /** Whether a hidden page suspends the audio context. Default true. */
   readonly suspendWhenHidden?: boolean;

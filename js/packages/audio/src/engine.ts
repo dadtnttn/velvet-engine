@@ -78,6 +78,8 @@ interface PlayRequest {
   readonly startAt: number;
   readonly fadeInMs: number;
   readonly queuedAt: number;
+  /** True for a track: it waits for the audio however long that takes, and the queue drops it last. */
+  readonly music: boolean;
 }
 
 /** The context factory when none is given: the browser's AudioContext, or null without one. */
@@ -522,6 +524,7 @@ class Engine implements AudioEngine {
       startAt: timing.startAt,
       fadeInMs: timing.fadeInMs,
       queuedAt: now,
+      music: timing.music,
     });
     return playback;
   }
@@ -600,18 +603,25 @@ class Engine implements AudioEngine {
     this.mixer.voiceStarted(sound.bus);
   }
 
-  /** Adds a request to the queue. The oldest waiting request is dropped when the queue is full. */
+  /**
+   * Adds a request to the queue. When the queue is full, the oldest waiting sound is dropped; the track that waits is
+   * dropped only when the queue holds nothing else.
+   */
   private enqueue(request: PlayRequest): void {
     const waiting = this.queue.filter((item) => !item.playback.isEnded);
     waiting.push(request);
     while (waiting.length > this.queueLimit) {
-      const dropped = waiting.shift();
+      const sound = waiting.findIndex((item) => !item.music);
+      const [dropped] = waiting.splice(Math.max(sound, 0), 1);
       dropped?.playback.finish("skipped");
     }
     this.queue = waiting;
   }
 
-  /** Starts the waiting requests, in order, when the audio runs. Requests that waited too long are skipped. */
+  /**
+   * Starts the waiting requests, in order, when the audio runs. Sounds that waited too long are skipped; a track is
+   * started however long it waited (a title's music waits for the player's first press, which can take a while).
+   */
   private flush(): void {
     if (this.queue.length === 0 || this.runningContext() === null) return;
     const waiting = this.queue;
@@ -619,7 +629,7 @@ class Engine implements AudioEngine {
     const now = this.now();
     for (const request of waiting) {
       if (request.playback.isEnded) continue;
-      if (now - request.queuedAt > this.staleAfterMs) {
+      if (!request.music && now - request.queuedAt > this.staleAfterMs) {
         request.playback.finish("skipped");
         continue;
       }
