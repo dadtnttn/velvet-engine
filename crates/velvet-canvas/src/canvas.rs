@@ -267,6 +267,12 @@ impl Canvas {
         self.state.transform = self.state.transform.pre_scale(s, s);
     }
 
+    /// Stretches what is drawn next by `sx` across and `sy` down (a negative factor mirrors): a face
+    /// turning away, a mirror image.
+    pub fn scale_xy(&mut self, sx: f32, sy: f32) {
+        self.state.transform = self.state.transform.pre_scale(sx, sy);
+    }
+
     /// Turns what is drawn next around the current origin, in degrees (clockwise on screen).
     pub fn rotate(&mut self, degrees: f32) {
         self.state.transform = self
