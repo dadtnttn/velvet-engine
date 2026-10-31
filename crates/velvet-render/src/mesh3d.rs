@@ -1804,38 +1804,91 @@ fn import_gltf(
     let gltf::Gltf { document, blob } = gltf;
     let error = |e: gltf::Error| Render3DError::Gltf(e.to_string());
     let buffers = gltf::import_buffers(&document, base, blob).map_err(error)?;
-    let mut images = Vec::new();
-    for image in document.images() {
-        let file;
-        let bytes = match image.source() {
+    // Each picture's bytes: a view of a buffer, or a file beside a `.gltf` (its name as written,
+    // spaces as %20).
+    let files: Vec<Option<Vec<u8>>> = document
+        .images()
+        .map(|image| match image.source() {
+            gltf::image::Source::Uri { uri, .. } if !uri.starts_with("data:") => {
+                base.and_then(|base| std::fs::read(base.join(uri.replace("%20", " "))).ok())
+            }
+            _ => None,
+        })
+        .collect();
+    let sources: Vec<Option<&[u8]>> = document
+        .images()
+        .zip(&files)
+        .map(|(image, file)| match image.source() {
             gltf::image::Source::View { view, .. } => {
                 let start = view.offset();
                 Some(&buffers[view.buffer().index()].0[start..start + view.length()])
             }
-            // A picture beside a `.gltf` (its name as written, spaces as %20).
-            gltf::image::Source::Uri { uri, .. } if !uri.starts_with("data:") => {
-                file = base.and_then(|base| std::fs::read(base.join(uri.replace("%20", " "))).ok());
-                file.as_deref()
-            }
-            _ => None,
-        };
-        if let Some(bytes) = bytes {
-            if velvet_avif::is_avif(bytes) {
-                let rgba = velvet_avif::decode_avif(bytes)
-                    .map_err(|e| Render3DError::Gltf(e.to_string()))?;
-                let (width, height) = rgba.dimensions();
-                images.push(gltf::image::Data {
-                    pixels: rgba.into_raw(),
-                    format: gltf::image::Format::R8G8B8A8,
-                    width,
-                    height,
-                });
-                continue;
-            }
+            _ => file.as_deref(),
+        })
+        .collect();
+    let mut decoded = decode_avif_pictures(&sources);
+    let mut images = Vec::new();
+    for (index, image) in document.images().enumerate() {
+        if let Some(rgba) = decoded[index].take() {
+            let rgba = rgba.map_err(Render3DError::Gltf)?;
+            let (width, height) = rgba.dimensions();
+            images.push(gltf::image::Data {
+                pixels: rgba.into_raw(),
+                format: gltf::image::Format::R8G8B8A8,
+                width,
+                height,
+            });
+            continue;
         }
         images.push(gltf::image::Data::from_source(image.source(), base, &buffers).map_err(error)?);
     }
     Ok((document, buffers, images))
+}
+
+/// The AVIF pictures among `sources` decoded on a few threads at once (decoding them is most of
+/// a model's load, and a model holds several); `None` for every other picture. The pictures and
+/// their order are the same as decoding them one by one.
+fn decode_avif_pictures(
+    sources: &[Option<&[u8]>],
+) -> Vec<Option<Result<image::RgbaImage, String>>> {
+    let jobs: Vec<usize> = (0..sources.len())
+        .filter(|&i| sources[i].is_some_and(velvet_avif::is_avif))
+        .collect();
+    let decode = |i: usize| {
+        velvet_avif::decode_avif(sources[i].expect("an AVIF picture")).map_err(|e| e.to_string())
+    };
+    let mut out: Vec<Option<Result<image::RgbaImage, String>>> =
+        (0..sources.len()).map(|_| None).collect();
+    let threads = std::thread::available_parallelism()
+        .map_or(2, |n| n.get())
+        .clamp(1, 4)
+        .min(jobs.len());
+    if threads <= 1 {
+        for &i in &jobs {
+            out[i] = Some(decode(i));
+        }
+        return out;
+    }
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let done = std::sync::Mutex::new(Vec::with_capacity(jobs.len()));
+    std::thread::scope(|scope| {
+        for _ in 0..threads {
+            scope.spawn(|| loop {
+                let k = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                let Some(&i) = jobs.get(k) else {
+                    break;
+                };
+                let picture = decode(i);
+                done.lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .push((i, picture));
+            });
+        }
+    });
+    for (i, picture) in done.into_inner().unwrap_or_else(|e| e.into_inner()) {
+        out[i] = Some(picture);
+    }
+    out
 }
 
 /// The head of a model file packed whole (tools/pack_media.py): `VGLZ`, the format's version
@@ -1932,24 +1985,35 @@ impl GltfModel {
             }
             buffers.push(data);
         }
-        let mut images = Vec::new();
+        let mut files = Vec::new();
         for image in document.images() {
-            let file;
-            let bytes = match image.source() {
+            files.push(match image.source() {
+                gltf::image::Source::Uri { uri, .. } if !uri.starts_with("data:") => {
+                    Some(read(&beside(uri)).map_err(|e| gltf_error(format!("{uri}: {e}")))?)
+                }
+                _ => None,
+            });
+        }
+        let sources: Vec<Option<&[u8]>> = document
+            .images()
+            .zip(&files)
+            .map(|(image, file)| match image.source() {
                 gltf::image::Source::View { view, .. } => {
                     let start = view.offset();
                     Some(&buffers[view.buffer().index()].0[start..start + view.length()])
                 }
-                gltf::image::Source::Uri { uri, .. } if !uri.starts_with("data:") => {
-                    file = read(&beside(uri)).map_err(|e| gltf_error(format!("{uri}: {e}")))?;
-                    Some(file.as_slice())
-                }
-                _ => None,
-            };
+                _ => file.as_deref(),
+            })
+            .collect();
+        let mut avif = decode_avif_pictures(&sources);
+        let mut images = Vec::new();
+        for (index, image) in document.images().enumerate() {
+            let bytes = sources[index];
             let decoded = match bytes {
-                Some(bytes) if velvet_avif::is_avif(bytes) => {
-                    velvet_avif::decode_avif(bytes).map_err(|e| gltf_error(e.to_string()))?
-                }
+                Some(_) if avif[index].is_some() => avif[index]
+                    .take()
+                    .expect("decoded above")
+                    .map_err(gltf_error)?,
                 Some(bytes) => image::load_from_memory(bytes)
                     .map_err(|e| gltf_error(e.to_string()))?
                     .to_rgba8(),

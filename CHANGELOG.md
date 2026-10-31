@@ -44,6 +44,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   cannot build its ARM assembly (it leaves out `src/arm/asm-offsets.h`), and its x86 assembly
   does not link into a shared library such as an Android app's, so ARM and Android targets decode
   with rav1d's Rust code.
+- `velvet-render` decodes a model's AVIF textures on up to four threads at once; the textures are
+  the same.
 
 ### Fixed
 
