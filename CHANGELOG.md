@@ -51,6 +51,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   git tag, which has the headers the crates.io package lacks); `VELVET_AV1_ASM=0` turns rav1d's
   assembly off at run time; `decode_totals()` counts the pictures decoded and the time spent.
 
+### Fixed
+
+- `velvet-render` on OpenGL ES (Android without Vulkan, emulators): the ink outline, bounce light
+  and cached-shadow restore passes failed to build ("textureLoad from depth textures is not
+  supported in GLSL"). On GL they bind the depth as an unfilterable float texture; other backends
+  keep the depth binding and the same shader text (`VELVET_DEPTH_AS_FLOAT=1` forces the float
+  path anywhere, for testing).
+
 ## [0.3.0] - 2026-10-16
 
 Velvet Engine 0.2 was never tagged on its own: it shipped inside Demon Queen 0.2.0. This release
