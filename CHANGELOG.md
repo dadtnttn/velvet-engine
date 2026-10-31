@@ -52,6 +52,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   supported in GLSL"). On GL they bind the depth as an unfilterable float texture; other backends
   keep the depth binding and the same shader text (`VELVET_DEPTH_AS_FLOAT=1` forces the float
   path anywhere, for testing).
+- `velvet-render` on Vulkan: the GPU skinning shader came out of naga 24 as invalid SPIR-V (a
+  `let` array indexed by the loop twice became a variable used but never declared), and Vulkan
+  drivers crashed building the renderer (desktop NVIDIA; the Android emulator froze). It indexes
+  vectors now; DX12 and OpenGL output is unchanged. A test writes every renderer shader as the
+  Vulkan backend would and reads the SPIR-V back (`VELVET_SPV_DIR=<folder>` keeps the files for
+  `spirv-val`).
 
 ## [0.3.0] - 2026-10-16
 

@@ -33,6 +33,8 @@ mod render_plan;
 /// Clips from one rig onto another (bone maps, rest alignment, quaternion helpers).
 pub mod retarget;
 pub mod scene_bridge;
+#[cfg(test)]
+mod shader_check;
 mod skin3d;
 mod software;
 mod sort_key;

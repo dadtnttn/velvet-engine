@@ -622,7 +622,7 @@ impl GpuContext {
     }
 }
 
-const SPRITE_SHADER: &str = r#"
+pub(crate) const SPRITE_SHADER: &str = r#"
 struct Camera {
     view_proj: mat4x4<f32>,
 };

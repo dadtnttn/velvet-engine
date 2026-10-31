@@ -7467,7 +7467,7 @@ fn fs_outline(input: VertexOut) -> @location(0) vec4<f32> {
 }
 "#;
 
-const SHADOW_SHADER: &str = r#"
+pub(crate) const SHADOW_SHADER: &str = r#"
 struct Camera {
     view_projection: mat4x4<f32>,
     light_view_projection: mat4x4<f32>,

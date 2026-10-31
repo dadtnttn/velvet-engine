@@ -357,8 +357,10 @@ fn cs_skin(@builtin(global_invocation_id) id: vec3<u32>) {
     }
     let v = bind_pose[i];
     let inf = influences[i];
-    let js = array<u32, 4>(inf.joints.x & 0xffffu, inf.joints.x >> 16u, inf.joints.y & 0xffffu, inf.joints.y >> 16u);
-    let ws = array<f32, 4>(inf.weights.x, inf.weights.y, inf.weights.z, inf.weights.w);
+    // Vectors, not `let` arrays: naga 24 writes a `let` array indexed by the loop twice as
+    // SPIR-V that uses a variable it never declares, and Vulkan drivers crash on it.
+    let js = vec4<u32>(inf.joints.x & 0xffffu, inf.joints.x >> 16u, inf.joints.y & 0xffffu, inf.joints.y >> 16u);
+    let ws = inf.weights;
     var position = vec3<f32>(0.0);
     var normal = vec3<f32>(0.0);
     var total = 0.0;

@@ -1145,7 +1145,7 @@ fn stream_vertex_layout() -> wgpu::VertexBufferLayout<'static> {
 }
 
 /// The renderer's camera block (kept in step with the mesh shader's).
-const CAMERA_WGSL: &str = r#"
+pub(crate) const CAMERA_WGSL: &str = r#"
 struct Camera {
     view_projection: mat4x4<f32>,
     light_view_projection: mat4x4<f32>,
@@ -1185,7 +1185,7 @@ fn mirrored(clip: vec4<f32>, offset: vec2<f32>) -> vec4<f32> {
 "#;
 
 /// Smoothed Particle Hydrodynamics for the droplets (Müller, Charypar & Gross 2003).
-const SPH_SHADER: &str = r#"
+pub(crate) const SPH_SHADER: &str = r#"
 struct Sph {
     counts: vec4<f32>,
     kernel: vec4<f32>,
@@ -1319,7 +1319,7 @@ fn cs_forces(@builtin(global_invocation_id) id: vec3<u32>, @builtin(local_invoca
 "#;
 
 /// The surface and the droplets.
-const DRAW_SHADER: &str = r#"
+pub(crate) const DRAW_SHADER: &str = r#"
 struct Body {
     grid: vec4<f32>,
     dims: vec4<f32>,
