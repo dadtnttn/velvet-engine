@@ -392,6 +392,41 @@ pub fn is_avif(bytes: &[u8]) -> bool {
 
 /// An AVIF picture as RGBA (its alpha plane, if any, as alpha; premultiplied alpha undone).
 pub fn decode_avif(bytes: &[u8]) -> Result<RgbaImage> {
+    apply_cpu_choice();
+    let started = std::time::Instant::now();
+    let decoded = decode_avif_inner(bytes);
+    DECODED_PICTURES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    DECODE_MICROS.fetch_add(
+        started.elapsed().as_micros() as u64,
+        std::sync::atomic::Ordering::Relaxed,
+    );
+    decoded
+}
+
+/// QA: `VELVET_AV1_ASM=0` decodes with rav1d's Rust code alone, even where its assembly is
+/// built in (to tell the two apart on a device, or to step round a fault in one).
+fn apply_cpu_choice() {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| {
+        if std::env::var("VELVET_AV1_ASM").is_ok_and(|v| v == "0") {
+            rav1d::src::cpu::rav1d_set_cpu_flags_mask(0);
+        }
+    });
+}
+
+static DECODED_PICTURES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static DECODE_MICROS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// How many AVIF pictures this process has decoded so far, and the time it took (summed over
+/// every thread, so it can exceed the wall time). Two readings bracket a load.
+pub fn decode_totals() -> (u64, std::time::Duration) {
+    (
+        DECODED_PICTURES.load(std::sync::atomic::Ordering::Relaxed),
+        std::time::Duration::from_micros(DECODE_MICROS.load(std::sync::atomic::Ordering::Relaxed)),
+    )
+}
+
+fn decode_avif_inner(bytes: &[u8]) -> Result<RgbaImage> {
     let parsed = avif_parse::read_avif(&mut Cursor::new(bytes))
         .map_err(|e| Error::Container(e.to_string()))?;
     let colour = decode_still(&parsed.primary_item)?;
@@ -530,6 +565,7 @@ impl Clip {
     /// Opens an IVF file of AV1, decoded with `threads` threads of the decoder's own (1: on the
     /// asking thread alone, none made).
     pub fn open(path: &Path, threads: i32) -> Result<Self> {
+        apply_cpu_choice();
         let mut bytes = Vec::new();
         std::fs::File::open(path)?.read_to_end(&mut bytes)?;
         Self::from_bytes(bytes, threads)

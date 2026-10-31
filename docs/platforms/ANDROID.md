@@ -444,10 +444,14 @@ Roughly in order of effort, smallest first:
   future target SDK will require handling back through `OnBackInvokedCallback` (Java side).
 - **NativeActivity** has no text input connection (see Input). GameActivity would bring one, but
   needs its Java library (AAR) and Gradle.
-- **rav1d without assembly on Android.** The ARM assembly does not build from the crates.io
-  package (1.1.0 leaves out its `.h` files) and the x86 assembly does not link into a shared
-  library, so `velvet-avif` decodes AV1 (AVIF pictures, IVF clips) with Rust code only on Android:
-  several times slower than with assembly. Desktop x86 keeps the assembly.
+- **rav1d's assembly on Android.** `velvet-avif` decodes AV1 (AVIF pictures, IVF clips) with
+  rav1d's Rust code on Android unless its `arm-asm` feature is on: rav1d's NEON assembly for
+  arm64-v8a, several times faster. Turn it on for that ABI only
+  (`abi_cargo_features = { "arm64-v8a" = ["arm-asm"] }`, through a feature of your game) and patch
+  rav1d with its git tag in your workspace, since the crates.io package leaves out the headers the
+  ARM assembly needs (see velvet-avif's Cargo.toml). `velvet android` links with `-Bsymbolic`, so
+  the assembly can reach the tables Rust exports. `VELVET_AV1_ASM=0` turns the assembly off at run
+  time. x86_64 Android keeps the Rust code; desktop x86 keeps its assembly.
 - **Fast-follow and on-demand asset packs** need the Play Asset Delivery library and Gradle;
   only install-time packs are supported.
 - **No x86 32-bit or RISC-V** testing; armeabi-v7a builds but is not part of the samples.
