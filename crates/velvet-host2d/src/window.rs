@@ -10,7 +10,8 @@ use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalSize;
 use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
-use winit::keyboard::{KeyCode, PhysicalKey};
+use winit::keyboard::{KeyCode, ModifiersState, PhysicalKey};
+use winit::window::Fullscreen;
 use winit::window::{Window, WindowId};
 
 use crate::input::{Button, Input, InputEvent};
@@ -40,6 +41,7 @@ pub fn run<G: Game2D + 'static>(config: HostConfig, game: G) -> Result<(), Box<d
         error: None,
         frames: 0,
         capture_after,
+        modifiers: ModifiersState::empty(),
     };
     event_loop.run_app(&mut app)?;
     match app.error {
@@ -62,6 +64,8 @@ struct App<G: Game2D> {
     frames: u64,
     /// After how many frames to save the canvas and close (QA).
     capture_after: Option<(u64, std::path::PathBuf)>,
+    /// The keyboard's modifiers held now (Alt+Enter goes fullscreen).
+    modifiers: ModifiersState,
 }
 
 struct Running {
@@ -72,6 +76,8 @@ struct Running {
     cursor: Option<(f64, f64)>,
     /// True while the pointer is on the picture.
     on_picture: bool,
+    /// Whether the system's arrow is shown (the game hides it while it draws its own).
+    pointer_shown: bool,
 }
 
 impl<G: Game2D> App<G> {
@@ -81,12 +87,14 @@ impl<G: Game2D> App<G> {
             return;
         };
         running.presenter.resize(width, height);
-        running.viewport = Viewport::letterbox(
-            width,
-            height,
-            self.config.logical_width,
-            self.config.logical_height,
-        );
+        // The logical size follows the window's shape as far as the game allows; the canvas is made again at it.
+        let (lw, lh) = self.config.logical_for(width, height);
+        running.viewport = Viewport::letterbox(width, height, lw, lh);
+        if (lw, lh) != (self.canvas.width(), self.canvas.height()) {
+            let (pw, ph) = (self.canvas.pixel_width(), self.canvas.pixel_height());
+            self.canvas = Canvas::with_pixels(lw, lh, pw, ph);
+            self.game.logical_size_changed(lw, lh);
+        }
         if let Some(v) = running.viewport {
             let (pw, ph) = self.config.canvas_pixels(v.width, v.height);
             if pw != self.canvas.pixel_width() || ph != self.canvas.pixel_height() {
@@ -121,6 +129,13 @@ impl<G: Game2D> App<G> {
         let Some(running) = self.running.as_mut() else {
             return;
         };
+        // The system's arrow hides while the game draws its own pointer, over the picture only (on the bars it is the
+        // window's).
+        let shown = self.game.shows_pointer() || !running.on_picture;
+        if shown != running.pointer_shown {
+            running.window.set_cursor_visible(shown);
+            running.pointer_shown = shown;
+        }
         // A minimised window shows nothing: nothing is drawn nor sent to the graphics card.
         let Some(viewport) = running.viewport else {
             return;
@@ -261,7 +276,8 @@ impl<G: Game2D> ApplicationHandler for App<G> {
             .with_min_inner_size(PhysicalSize::new(
                 self.config.min_width,
                 self.config.min_height,
-            ));
+            ))
+            .with_maximized(self.config.maximized);
         let window = match event_loop.create_window(attributes) {
             Ok(w) => Arc::new(w),
             Err(e) => {
@@ -285,6 +301,7 @@ impl<G: Game2D> ApplicationHandler for App<G> {
             viewport: None,
             cursor: None,
             on_picture: false,
+            pointer_shown: true,
         });
         self.resized(size.width, size.height);
         self.last = Some(Instant::now());
@@ -314,12 +331,25 @@ impl<G: Game2D> ApplicationHandler for App<G> {
                     self.input.push(InputEvent::Wheel(lines));
                 }
             }
+            WindowEvent::ModifiersChanged(modifiers) => self.modifiers = modifiers.state(),
             WindowEvent::KeyboardInput { event, .. } => {
                 if let PhysicalKey::Code(code) = event.physical_key {
                     match event.state {
                         ElementState::Pressed => {
                             if code == KeyCode::F12 && !event.repeat {
                                 self.screenshot();
+                            }
+                            // F11 or Alt+Enter: fullscreen (borderless, on the window's own screen), or back.
+                            let enter = matches!(code, KeyCode::Enter | KeyCode::NumpadEnter);
+                            if !event.repeat
+                                && (code == KeyCode::F11 || enter && self.modifiers.alt_key())
+                            {
+                                if let Some(running) = &self.running {
+                                    let full = running.window.fullscreen().is_none();
+                                    running.window.set_fullscreen(
+                                        full.then_some(Fullscreen::Borderless(None)),
+                                    );
+                                }
                             }
                             self.input.push(InputEvent::KeyDown(code));
                         }

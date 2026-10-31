@@ -49,6 +49,11 @@ pub struct HostConfig {
     /// The size the game is authored at.
     pub logical_width: f32,
     pub logical_height: f32,
+    /// How far the logical size may grow to fill a window of another shape: a taller window gets a taller picture, a
+    /// wider one a wider picture, up to these (past them, bars). The game hears of it in
+    /// [`Game2D::logical_size_changed`]. Left at the authored size, the picture keeps its shape, with bars.
+    pub max_logical_width: f32,
+    pub max_logical_height: f32,
     /// The window's first size and its smallest size, in pixels.
     pub window_width: u32,
     pub window_height: u32,
@@ -63,6 +68,8 @@ pub struct HostConfig {
     /// With a stage, whether the canvas is drawn over it (a game whose HUD is made of screen cards says no, and is
     /// spared painting and sending a whole canvas every frame).
     pub overlay: bool,
+    /// Whether the window opens maximised (it can always go fullscreen with F11 or Alt+Enter).
+    pub maximized: bool,
 }
 
 impl HostConfig {
@@ -72,6 +79,8 @@ impl HostConfig {
             title: title.to_string(),
             logical_width: 1920.0,
             logical_height: 1080.0,
+            max_logical_width: 1920.0,
+            max_logical_height: 1080.0,
             window_width: 1600,
             window_height: 900,
             min_width: 1280,
@@ -80,6 +89,30 @@ impl HostConfig {
             step: 1.0 / 60.0,
             captures_dir: Some(PathBuf::from("captures")),
             overlay: true,
+            maximized: false,
+        }
+    }
+
+    /// The logical size for a window of `width`×`height` pixels: the authored size, its height grown for a taller
+    /// window or its width for a wider one, as far as the maxima allow (whole logical pixels).
+    pub fn logical_for(&self, width: u32, height: u32) -> (f32, f32) {
+        let (w, h) = (self.logical_width, self.logical_height);
+        if width == 0 || height == 0 || w <= 0.0 || h <= 0.0 {
+            return (w, h);
+        }
+        let aspect = width as f32 / height as f32;
+        if aspect < w / h {
+            (
+                w,
+                (w / aspect)
+                    .round()
+                    .clamp(h, self.max_logical_height.max(h)),
+            )
+        } else {
+            (
+                (h * aspect).round().clamp(w, self.max_logical_width.max(w)),
+                h,
+            )
         }
     }
 
@@ -95,10 +128,8 @@ impl HostConfig {
         if self.native {
             (width.max(1), height.max(1))
         } else {
-            (
-                self.logical_width.round() as u32,
-                self.logical_height.round() as u32,
-            )
+            let (w, h) = self.logical_for(width, height);
+            (w.round() as u32, h.round() as u32)
         }
     }
 }
@@ -136,6 +167,16 @@ pub trait Game2D {
     fn quit(&self) -> bool {
         false
     }
+
+    /// The logical size changed (the window took another shape, and [`HostConfig`]'s maxima let the picture follow):
+    /// pointer coordinates come in the new size from now on, and what is laid out on the screen may be placed again.
+    fn logical_size_changed(&mut self, _width: f32, _height: f32) {}
+
+    /// False while the game draws its own pointer (a tool in hand that follows it): the system's arrow is then hidden
+    /// over the picture.
+    fn shows_pointer(&self) -> bool {
+        true
+    }
 }
 
 #[cfg(test)]
@@ -148,6 +189,23 @@ mod tests {
         assert_eq!(parse_size(" 1280 X 720 "), Some((1280, 720)));
         assert_eq!(parse_size("0x720"), None);
         assert_eq!(parse_size("big"), None);
+    }
+
+    #[test]
+    fn the_logical_size_grows_to_the_window_as_far_as_allowed() {
+        let mut config = HostConfig::new("t");
+        // At the authored size only, any window keeps 1920×1080 (with bars).
+        assert_eq!(config.logical_for(2560, 1600), (1920.0, 1080.0));
+        config.max_logical_height = 1440.0;
+        config.max_logical_width = 2560.0;
+        assert_eq!(config.logical_for(3840, 2160), (1920.0, 1080.0));
+        assert_eq!(config.logical_for(2560, 1600), (1920.0, 1200.0));
+        assert_eq!(config.logical_for(1024, 768), (1920.0, 1440.0));
+        assert_eq!(config.logical_for(2560, 1080), (2560.0, 1080.0));
+        assert_eq!(config.logical_for(2400, 1080), (2400.0, 1080.0));
+        // Past the maxima, they hold (and the picture gets bars).
+        assert_eq!(config.logical_for(1000, 1000), (1920.0, 1440.0));
+        assert_eq!(config.logical_for(4000, 1000), (2560.0, 1080.0));
     }
 
     #[test]
