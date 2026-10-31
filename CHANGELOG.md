@@ -50,6 +50,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `velvet-avif`: an `arm-asm` feature for rav1d's NEON assembly on 64-bit ARM (with rav1d from its
   git tag, which has the headers the crates.io package lacks); `VELVET_AV1_ASM=0` turns rav1d's
   assembly off at run time; `decode_totals()` counts the pictures decoded and the time spent.
+- `velvet-render` decodes a model's AVIF textures on up to four threads at once; the textures are
+  the same.
 
 ### Fixed
 
