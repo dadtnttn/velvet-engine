@@ -318,7 +318,7 @@ impl Upscaler3D {
     }
 }
 
-const SHADER: &str = r#"
+pub(crate) const SHADER: &str = r#"
 struct U {
     sizes: vec4<f32>,
     sharp: vec4<f32>,

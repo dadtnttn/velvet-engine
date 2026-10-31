@@ -409,7 +409,7 @@ impl Post3D {
     }
 }
 
-const POST_SHADER: &str = r#"
+pub(crate) const POST_SHADER: &str = r#"
 struct Post {
     bloom: vec4<f32>,
     grade: vec4<f32>,
