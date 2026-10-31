@@ -15,6 +15,7 @@ mod camera;
 pub mod crowd3d;
 mod culling;
 mod debug_overlay;
+mod depth_read;
 mod gi3d;
 mod gpu;
 mod iso;

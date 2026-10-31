@@ -7,6 +7,7 @@
 
 use std::{collections::BTreeMap, num::NonZeroU64, path::Path};
 
+use crate::depth_read::DepthRead;
 use crate::{ShadingStyle3D, ToonStyle3D};
 use bytemuck::{Pod, Zeroable};
 use thiserror::Error;
@@ -3274,6 +3275,7 @@ impl Wgpu3DRenderer {
         // cutout (`discard` disables early depth rejection), and with or
         // without a normal map (a flat map skips its sample and derivatives).
         // The finish's ink: a full-screen pass reading the depth (multisampled when the frame is).
+        let depth_read = DepthRead::for_device(device);
         let outline_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("velvet-3d-outline-layout"),
             entries: &[
@@ -3291,7 +3293,7 @@ impl Wgpu3DRenderer {
                     binding: 1,
                     visibility: wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Texture {
-                        sample_type: wgpu::TextureSampleType::Depth,
+                        sample_type: depth_read.sample_type(),
                         view_dimension: wgpu::TextureViewDimension::D2,
                         multisampled: sample_count > 1,
                     },
@@ -3305,15 +3307,8 @@ impl Wgpu3DRenderer {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
-        let outline_source = OUTLINE_SHADER
-            .replace(
-                "__DEPTH__",
-                if sample_count > 1 {
-                    "texture_depth_multisampled_2d"
-                } else {
-                    "texture_depth_2d"
-                },
-            )
+        let outline_source = depth_read
+            .shader(OUTLINE_SHADER, sample_count > 1)
             .replace("__SAMPLES__", &sample_count.max(1).to_string());
         let outline_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("velvet-3d-outline-shader"),
@@ -6038,8 +6033,8 @@ struct ShadowRestore {
     version: u64,
 }
 
-const SHADOW_RESTORE_SHADER: &str = r#"
-@group(0) @binding(0) var cached: texture_depth_2d;
+pub(crate) const SHADOW_RESTORE_SHADER: &str = r#"
+@group(0) @binding(0) var cached: __DEPTH__;
 
 @vertex
 fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
@@ -6055,20 +6050,21 @@ struct Out {
 @fragment
 fn fs_main(@builtin(position) position: vec4<f32>) -> Out {
     var out: Out;
-    out.depth = textureLoad(cached, vec2<i32>(position.xy), 0);
+    out.depth = textureLoad(cached, vec2<i32>(position.xy), 0)__DEPTH_X__;
     return out;
 }
 "#;
 
 impl ShadowRestore {
     fn new(device: &wgpu::Device, views: &[wgpu::TextureView; 2]) -> Self {
+        let depth_read = DepthRead::for_device(device);
         let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("velvet-3d-shadow-restore-layout"),
             entries: &[wgpu::BindGroupLayoutEntry {
                 binding: 0,
                 visibility: wgpu::ShaderStages::FRAGMENT,
                 ty: wgpu::BindingType::Texture {
-                    sample_type: wgpu::TextureSampleType::Depth,
+                    sample_type: depth_read.sample_type(),
                     view_dimension: wgpu::TextureViewDimension::D2,
                     multisampled: false,
                 },
@@ -6087,7 +6083,9 @@ impl ShadowRestore {
         };
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("velvet-3d-shadow-restore-shader"),
-            source: wgpu::ShaderSource::Wgsl(SHADOW_RESTORE_SHADER.into()),
+            source: wgpu::ShaderSource::Wgsl(
+                depth_read.shader(SHADOW_RESTORE_SHADER, false).into(),
+            ),
         });
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("velvet-3d-shadow-restore-pipeline-layout"),
@@ -7327,7 +7325,7 @@ fn shade(input: VertexOut, cutout: bool) -> vec4<f32> {
 }
 "#;
 
-const OUTLINE_SHADER: &str = r#"
+pub(crate) const OUTLINE_SHADER: &str = r#"
 struct Outline {
     params: vec4<f32>,
     ink: vec4<f32>,
@@ -7356,7 +7354,7 @@ fn vs_outline(@builtin(vertex_index) index: u32) -> VertexOut {
 fn view_depth(coord: vec2<i32>, sample_index: i32) -> f32 {
     let size = vec2<i32>(outline.clip.zw);
     let c = clamp(coord, vec2<i32>(0), size - vec2<i32>(1));
-    let d = textureLoad(depth_texture, c, sample_index);
+    let d = textureLoad(depth_texture, c, sample_index)__DEPTH_X__;
     let near = outline.clip.x;
     let far = outline.clip.y;
     if (outline.ink.w > 0.5) {
@@ -7367,7 +7365,7 @@ fn view_depth(coord: vec2<i32>, sample_index: i32) -> f32 {
 
 // How much of a line passes through one sample.
 fn edge_at(p: vec2<i32>, s: i32) -> f32 {
-    let raw = textureLoad(depth_texture, p, s);
+    let raw = textureLoad(depth_texture, p, s)__DEPTH_X__;
     if (raw >= 0.99999) {
         return 0.0;
     }
@@ -7417,7 +7415,7 @@ fn occlusion_at(p: vec2<i32>) -> f32 {
     if (strength <= 0.0 || outline.ink.w < 0.5) {
         return 0.0;
     }
-    if (textureLoad(depth_texture, p, 0) >= 0.99999) {
+    if (textureLoad(depth_texture, p, 0)__DEPTH_X__ >= 0.99999) {
         return 0.0;
     }
     let c = view_point(p);

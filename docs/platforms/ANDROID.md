@@ -264,6 +264,10 @@ surface.configure(&device, &config);
 - Mobile GPUs have no BC texture compression (`TEXTURE_COMPRESSION_BC`): ship ETC2 or ASTC
   textures or expect RGBA8 (four times the memory of BC7). Compute shaders need Vulkan or OpenGL
   ES 3.1.
+- OpenGL ES cannot read a depth texture texel by texel (GLSL has no `texelFetch` for shadow
+  samplers, so naga refuses WGSL's `textureLoad` on `texture_depth_2d`). `velvet-render`'s passes
+  that do (the ink outline, the bounce light, the cached shadow map's restore) bind the depth as
+  an unfilterable float texture there instead; your own shaders need the same on GL.
 - DX12 and DXC are Windows-only: keep backend and shader-compiler choices behind
   `cfg!(target_os = "windows")`.
 
@@ -426,8 +430,10 @@ Roughly in order of effort, smallest first:
 
 ## Known limits
 
-- **Not run on a device yet.** Everything above builds, packages, signs and verifies; behaviour on
-  phones (lifecycle, insets, input, audio, GPU drivers) still has to be checked on real devices.
+- **Not run on a phone yet.** Everything above builds, packages, signs and verifies, and a large
+  3D game on `velvet-render` has run on the x86_64 emulator over OpenGL ES 3.1 (lifecycle, back
+  button, audio pause, saves); behaviour on phones (insets, input, Vulkan and mobile GPU drivers,
+  performance) still has to be checked on real devices.
 - **winit 0.30 lifecycle.** No pause/stop/destroy/save-state callbacks; one event loop per process
   (the process ends after the game returns). An activity destroyed by the system while the game
   runs (an unhandled configuration change, "Don't keep activities" in developer options) cannot

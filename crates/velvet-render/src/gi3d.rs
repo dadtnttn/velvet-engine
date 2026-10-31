@@ -18,6 +18,8 @@
 use bytemuck::{Pod, Zeroable};
 use velvet_math::{Mat4, Vec3};
 
+use crate::depth_read::DepthRead;
+
 /// Samples gathered per pixel and frame.
 const SAMPLES: u32 = 12;
 /// How much of each new gather goes into the result (the rest is the history).
@@ -118,6 +120,7 @@ fn result_texture(
 impl ScreenGi {
     pub(crate) fn new(device: &wgpu::Device, queue: &wgpu::Queue, sample_count: u32) -> Self {
         let multisampled = sample_count > 1;
+        let depth_read = DepthRead::for_device(device);
         let entry = |binding: u32, ty: wgpu::BindingType| wgpu::BindGroupLayoutEntry {
             binding,
             visibility: wgpu::ShaderStages::COMPUTE,
@@ -138,7 +141,7 @@ impl ScreenGi {
                 entry(
                     1,
                     wgpu::BindingType::Texture {
-                        sample_type: wgpu::TextureSampleType::Depth,
+                        sample_type: depth_read.sample_type(),
                         view_dimension: wgpu::TextureViewDimension::D2,
                         multisampled,
                     },
@@ -173,14 +176,7 @@ impl ScreenGi {
                 ),
             ],
         });
-        let source = GI_SHADER.replace(
-            "__DEPTH__",
-            if multisampled {
-                "texture_depth_multisampled_2d"
-            } else {
-                "texture_depth_2d"
-            },
-        );
+        let source = depth_read.shader(GI_SHADER, multisampled);
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("velvet-3d-gi-shader"),
             source: wgpu::ShaderSource::Wgsl(source.into()),
@@ -485,7 +481,7 @@ fn half_to_f32(h: u16) -> f32 {
     }
 }
 
-const GI_SHADER: &str = r#"
+pub(crate) const GI_SHADER: &str = r#"
 struct Gi {
     view_projection: mat4x4<f32>,
     inverse_view_projection: mat4x4<f32>,
@@ -508,7 +504,7 @@ const PI: f32 = 3.14159265;
 
 fn depth_at(p: vec2<i32>) -> f32 {
     let q = clamp(p, vec2<i32>(0), vec2<i32>(gi.size.xy) - vec2<i32>(1));
-    return textureLoad(depth_texture, q, 0);
+    return textureLoad(depth_texture, q, 0)__DEPTH_X__;
 }
 
 fn world_at(p: vec2<i32>, depth: f32) -> vec3<f32> {
@@ -652,8 +648,10 @@ mod tests {
 
     #[test]
     fn the_gather_shader_is_valid_with_and_without_multisampling() {
-        validate(&GI_SHADER.replace("__DEPTH__", "texture_depth_2d"));
-        validate(&GI_SHADER.replace("__DEPTH__", "texture_depth_multisampled_2d"));
+        for read in [DepthRead::DEPTH, DepthRead::FLOAT] {
+            validate(&read.shader(GI_SHADER, false));
+            validate(&read.shader(GI_SHADER, true));
+        }
     }
 
     #[test]
