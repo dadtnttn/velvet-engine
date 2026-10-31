@@ -365,8 +365,20 @@ fn build_library(
     if let Some(jobs) = options.jobs {
         cmd.args(["-j", &jobs.to_string()]);
     }
-    if !config.cargo_features.is_empty() {
-        cmd.args(["--features", &config.cargo_features.join(",")]);
+    let features: Vec<&str> = config
+        .cargo_features
+        .iter()
+        .chain(
+            config
+                .abi_cargo_features
+                .get(abi.name())
+                .into_iter()
+                .flatten(),
+        )
+        .map(String::as_str)
+        .collect();
+    if !features.is_empty() {
+        cmd.args(["--features", &features.join(",")]);
     }
     if config.no_default_features {
         cmd.arg("--no-default-features");
@@ -377,12 +389,18 @@ fn build_library(
     // on every target whose name contains "linux" (meshopt 0.6 does), and Android's
     // libstdc++.so is a stub without exception support: without these archives the loader
     // refuses the library at startup (`__gxx_personality_v0` not found).
+    // `-Bsymbolic`: the library's references to its own symbols bind to them (nothing on Android
+    // interposes on an app's library), so assembly in a dependency can reach the library's data
+    // with PC-relative addressing: rav1d's ARM assembly reads tables Rust exports, which the
+    // linker otherwise refuses in a shared library ("recompile with -fPIC").
     cmd.args([
         "--",
         "-C",
         "link-arg=-Wl,-z,max-page-size=16384",
         "-C",
         "link-arg=-Wl,-z,common-page-size=16384",
+        "-C",
+        "link-arg=-Wl,-Bsymbolic",
         "-C",
         "link-arg=-lc++_static",
         "-C",
