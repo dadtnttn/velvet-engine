@@ -71,6 +71,9 @@ pub struct AndroidAppConfig {
     pub uses_features: Vec<String>,
     /// Cargo features to enable for the Android build.
     pub cargo_features: Vec<String>,
+    /// More features for one ABI only, by its name (`{ "arm64-v8a" = ["neon"] }`): code that
+    /// builds for one architecture alone, such as assembly.
+    pub abi_cargo_features: std::collections::BTreeMap<String, Vec<String>>,
     /// Build without the crate's default features.
     pub no_default_features: bool,
     /// Extensions stored uncompressed (they are compressed already, and stored entries can be
@@ -103,6 +106,7 @@ impl Default for AndroidAppConfig {
             permissions: Vec::new(),
             uses_features: Vec::new(),
             cargo_features: Vec::new(),
+            abi_cargo_features: Default::default(),
             no_default_features: false,
             store_uncompressed: None,
             strip: true,
@@ -384,6 +388,7 @@ mod tests {
             "label": "Game",
             "abis": ["arm64-v8a", "x86_64"],
             "assets": ["scenes", {"from": "../data", "to": "data", "exclude": ["**/*.psd"]}],
+            "abi_cargo_features": {"arm64-v8a": ["neon"]},
             "asset_packs": [{"name": "media", "assets": [{"from": "../media", "to": ""}]}]
         });
         let config: AndroidAppConfig = serde_json::from_value(json).unwrap();
@@ -392,6 +397,10 @@ mod tests {
         assert_eq!(config.assets[0].to(), "scenes");
         assert_eq!(config.assets[1].to(), "data");
         assert_eq!(config.assets[1].exclude(), &["**/*.psd".to_string()]);
+        assert_eq!(
+            config.abi_cargo_features.get("arm64-v8a"),
+            Some(&vec!["neon".to_string()])
+        );
         assert_eq!(config.asset_packs[0].delivery, "install-time");
         assert_eq!(config.asset_packs[0].assets[0].to(), "");
         assert!(validate(&config).is_empty(), "{:?}", validate(&config));

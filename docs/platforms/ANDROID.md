@@ -99,6 +99,7 @@ icon = "android/icon.png"            # square PNG, 512 px; a plain icon is drawn
 # permissions = ["android.permission.VIBRATE"]
 # uses_features = ["android.hardware.gamepad"]
 # cargo_features = ["mobile"]        # features for the Android build
+# abi_cargo_features = { "arm64-v8a" = ["neon"] }  # more features for one ABI only
 # no_default_features = false
 # store_uncompressed = ["ogg", "png"]  # default: already-compressed media types
 # strip = true                       # strip debug info from the packaged library
