@@ -13,6 +13,8 @@ struct Globals {
     light_position: array<vec4<f32>, 16>,
     // rgb × intensity
     light_color: array<vec4<f32>, 16>,
+    // Through a lens: its centre and radius in the target's pixels, on (1)
+    lens: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> g: Globals;
@@ -30,7 +32,7 @@ struct Instance {
     // u0, v0, u1, v1
     @location(5) uv: vec4<f32>,
     @location(6) tint: vec4<f32>,
-    // lit, on the screen, -, -
+    // lit, on the screen, writes depth, -
     @location(7) flags: vec4<f32>,
 };
 
@@ -74,7 +76,13 @@ fn vs_main(v: Instance) -> Fragment {
 fn fs_main(f: Fragment) -> @location(0) vec4<f32> {
     let texel = textureSample(picture, filtering, f.uv);
     var color = vec4<f32>(texel.rgb * f.tint.rgb, texel.a) * f.tint.a;
-    if (color.a < 0.004) {
+    // What writes depth drops its nearly clear pixels too (under 5 %): the faint haze round a cut-out picture would
+    // write depth there and hide, unseen, what lies behind it. Added light keeps its faintest glow.
+    if (color.a < select(0.004, 0.05, f.flags.z > 0.5)) {
+        discard;
+    }
+    // Through a lens, only inside its circle.
+    if (g.lens.w > 0.5 && distance(f.position.xy, g.lens.xy) > g.lens.z) {
         discard;
     }
     if (f.flags.x > 0.5) {

@@ -191,6 +191,34 @@ pub struct Fog {
     pub end: f32,
 }
 
+/// A magnifying glass over the screen: inside a circle of `radius` round `center` (logical pixels), the world is
+/// drawn again `zoom` times larger about that centre, over the world and under the screen cards (one of which can be
+/// the glass's rim). The point under the centre stays where it is, so what the pointer picks is what it magnifies.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Lens {
+    pub center: Vec2,
+    pub radius: f32,
+    pub zoom: f32,
+}
+
+impl Lens {
+    /// A view-projection seen through the glass: `view_proj` (for a screen of `screen` logical pixels) magnified about
+    /// the glass's centre.
+    pub fn view_projection(&self, view_proj: Mat4, screen: Vec2) -> Mat4 {
+        let cx = self.center.x / screen.x.max(1.0) * 2.0 - 1.0;
+        let cy = 1.0 - self.center.y / screen.y.max(1.0) * 2.0;
+        let z = self.zoom;
+        // On normalised device coordinates: (p - c) × zoom + c, written on clip coordinates (before the divide by w).
+        let magnify = Mat4::from_cols(
+            [z, 0.0, 0.0, 0.0],
+            [0.0, z, 0.0, 0.0],
+            [0.0, 0.0, 1.0, 0.0],
+            [(1.0 - z) * cx, (1.0 - z) * cy, 0.0, 1.0],
+        );
+        magnify * view_proj
+    }
+}
+
 /// A version no picture of any stage has had: a renderer that drew an older stage never mistakes a new picture for
 /// one it already holds.
 fn next_version() -> u64 {
@@ -234,6 +262,8 @@ pub struct Stage {
     pub ambient: [f32; 3],
     pub lights: Vec<Light>,
     pub fog: Option<Fog>,
+    /// A magnifying glass over the screen, if one is held.
+    pub lens: Option<Lens>,
     cards: Vec<(CardId, Card)>,
     pictures: HashMap<PictureId, Picture>,
     next_picture: PictureId,
@@ -250,6 +280,7 @@ impl Stage {
             ambient: [1.0, 1.0, 1.0],
             lights: Vec::new(),
             fog: None,
+            lens: None,
             cards: Vec::new(),
             pictures: HashMap::new(),
             next_picture: 1,
@@ -564,6 +595,31 @@ mod tests {
         assert!((hit.uv.x - 0.5).abs() < 1e-3 && (hit.uv.y - 0.5).abs() < 1e-3);
         assert!((hit.point.x - 100.0).abs() < 0.2 && (hit.point.y - 50.0).abs() < 0.2);
         assert!((hit.distance - (100.0f32 * 100.0 * 2.0).sqrt()).abs() < 0.1);
+    }
+
+    #[test]
+    fn a_lens_magnifies_about_its_centre() {
+        let (stage, floor) = stage_with_floor();
+        let lens = Lens {
+            center: Vec2::new(900.0, 520.0),
+            radius: 140.0,
+            zoom: 2.5,
+        };
+        let through = lens.view_projection(stage.view_projection(), stage.screen);
+        for (px, py) in [(100.0, 50.0), (60.0, 30.0), (150.0, 80.0)] {
+            let world = stage.card_to_world(floor, Vec2::new(px, py), 0.0).unwrap();
+            let (plain, _) = stage.project(world).unwrap();
+            let ndc = through.transform_point3(world);
+            let seen = Vec2::new(
+                (ndc.x + 1.0) * 0.5 * stage.screen.x,
+                (1.0 - ndc.y) * 0.5 * stage.screen.y,
+            );
+            let expected = lens.center + (plain - lens.center) * lens.zoom;
+            assert!(
+                (seen - expected).length() < 0.05,
+                "{px},{py}: {seen:?} != {expected:?}"
+            );
+        }
     }
 
     #[test]

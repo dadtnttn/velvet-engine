@@ -1,7 +1,9 @@
 //! Drawing a stage on the graphics card: the pictures become textures (with their smaller copies, sent again only when
-//! painted again), each card is a quad, the world through the camera with depth, then the screen cards on top.
+//! painted again), each card is a quad, the world through the camera with depth, then the screen cards on top. A lens
+//! adds a pass between the two: the world again, magnified, inside its circle.
 
 use std::collections::HashMap;
+use std::ops::Range;
 
 use bytemuck::{Pod, Zeroable};
 use velvet_math::Mat4;
@@ -20,6 +22,8 @@ struct Globals {
     fog: [f32; 4],
     light_position: [[f32; 4]; MAX_LIGHTS],
     light_color: [[f32; 4]; MAX_LIGHTS],
+    /// Through a lens: its centre and radius in the target's pixels, and 1 (0 when not).
+    lens: [f32; 4],
 }
 
 /// A card, as the shader reads it.
@@ -62,6 +66,8 @@ pub struct StageRenderer {
     sampler: wgpu::Sampler,
     globals: wgpu::Buffer,
     globals_bind: wgpu::BindGroup,
+    lens_globals: wgpu::Buffer,
+    lens_globals_bind: wgpu::BindGroup,
     instances: wgpu::Buffer,
     capacity: usize,
     pictures: HashMap<PictureId, GpuPicture>,
@@ -217,20 +223,26 @@ impl StageRenderer {
             anisotropy_clamp: 8,
             ..Default::default()
         });
-        let globals = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("velvet-stage globals"),
-            size: std::mem::size_of::<Globals>() as u64,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-        let globals_bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("velvet-stage globals"),
-            layout: &globals_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: globals.as_entire_binding(),
-            }],
-        });
+        let uniforms = |label: &str| {
+            let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some(label),
+                size: std::mem::size_of::<Globals>() as u64,
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+            let bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some(label),
+                layout: &globals_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: buffer.as_entire_binding(),
+                }],
+            });
+            (buffer, bind)
+        };
+        let (globals, globals_bind) = uniforms("velvet-stage globals");
+        // The globals of the world seen through a lens.
+        let (lens_globals, lens_globals_bind) = uniforms("velvet-stage lens");
         let capacity = 64;
         let instances = Self::instance_buffer(device, capacity);
         let white = Self::upload(
@@ -249,6 +261,8 @@ impl StageRenderer {
             sampler,
             globals,
             globals_bind,
+            lens_globals,
+            lens_globals_bind,
             instances,
             capacity,
             pictures: HashMap::new(),
@@ -460,7 +474,14 @@ impl StageRenderer {
                 shape: [card.size.x, card.size.y, card.anchor.x, card.anchor.y],
                 uv: card.uv,
                 tint: card.tint,
-                flags: [if card.lit { 1.0 } else { 0.0 }, 0.0, 0.0, 0.0],
+                // A card that writes depth hides what is behind it: its nearly clear pixels are dropped (see the
+                // shader), so the faint haze a cut-out leaves round a picture does not hide things it seems not to cover.
+                flags: [
+                    if card.lit { 1.0 } else { 0.0 },
+                    0.0,
+                    if card.blend == Blend::Add { 0.0 } else { 1.0 },
+                    0.0,
+                ],
             });
             draws.push((
                 if card.blend == Blend::Add {
@@ -537,6 +558,7 @@ impl StageRenderer {
             fog,
             light_position,
             light_color,
+            lens: [0.0; 4],
         };
         queue.write_buffer(&self.globals, 0, bytemuck::bytes_of(&globals));
         if instances.len() > self.capacity {
@@ -550,33 +572,96 @@ impl StageRenderer {
             Some(msaa) => (msaa, Some(target)),
             None => (target, None),
         };
-        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("velvet-stage"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view,
-                resolve_target: resolve,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                    store: wgpu::StoreOp::Store,
-                },
-            })],
-            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                view: &targets.depth,
-                depth_ops: Some(wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(1.0),
-                    store: wgpu::StoreOp::Discard,
-                }),
-                stencil_ops: None,
-            }),
-            timestamp_writes: None,
-            occlusion_query_set: None,
-        });
         let [x, y, vw, vh] = viewport;
-        pass.set_viewport(x, y, vw.max(1.0), vh.max(1.0), 0.0, 1.0);
-        pass.set_bind_group(0, &self.globals_bind, &[]);
-        pass.set_vertex_buffer(0, self.instances.slice(..));
+        // A lens draws the backdrop and the world again, magnified, inside its circle and before the screen cards: its
+        // globals carry the magnified projection and the circle in the target's pixels, and a scissor keeps the pass
+        // to the circle's square. Without one, a single pass.
+        let world_end = 1 + world.len();
+        let mut passes: Vec<(Range<usize>, bool, Option<[u32; 4]>)> =
+            vec![(0..draws.len(), false, None)];
+        if let Some(lens) = stage.lens.filter(|l| l.radius > 0.5 && l.zoom > 0.0) {
+            let (sx, sy) = (vw / w, vh / h);
+            let (cx, cy) = (x + lens.center.x * sx, y + lens.center.y * sy);
+            let r = lens.radius * sx.min(sy);
+            let clamp = |v: f32, max: u32| v.clamp(0.0, max as f32) as u32;
+            let (x0, y0) = (
+                clamp((cx - r).floor(), size.0),
+                clamp((cy - r).floor(), size.1),
+            );
+            let (x1, y1) = (
+                clamp((cx + r).ceil(), size.0),
+                clamp((cy + r).ceil(), size.1),
+            );
+            if x1 > x0 && y1 > y0 {
+                let magnified = Globals {
+                    view_proj: lens
+                        .view_projection(stage.view_projection(), stage.screen)
+                        .to_cols_array_2d(),
+                    lens: [cx, cy, r, 1.0],
+                    ..globals
+                };
+                queue.write_buffer(&self.lens_globals, 0, bytemuck::bytes_of(&magnified));
+                passes = vec![
+                    (0..world_end, false, None),
+                    (0..world_end, true, Some([x0, y0, x1 - x0, y1 - y0])),
+                    (world_end..draws.len(), false, None),
+                ];
+            }
+        }
+        let count = passes.len();
+        for (k, (range, through, scissor)) in passes.into_iter().enumerate() {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("velvet-stage"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view,
+                    // Resolved once, after the last pass.
+                    resolve_target: if k + 1 == count { resolve } else { None },
+                    ops: wgpu::Operations {
+                        load: if k == 0 {
+                            wgpu::LoadOp::Clear(wgpu::Color::BLACK)
+                        } else {
+                            wgpu::LoadOp::Load
+                        },
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                // Each pass starts its own depth: the lens sees the world anew, and the screen does not test it.
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &targets.depth,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: wgpu::StoreOp::Discard,
+                    }),
+                    stencil_ops: None,
+                }),
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+            pass.set_viewport(x, y, vw.max(1.0), vh.max(1.0), 0.0, 1.0);
+            if let Some([left, top, width, height]) = scissor {
+                pass.set_scissor_rect(left, top, width, height);
+            }
+            let uniforms = if through {
+                &self.lens_globals_bind
+            } else {
+                &self.globals_bind
+            };
+            pass.set_bind_group(0, uniforms, &[]);
+            pass.set_vertex_buffer(0, self.instances.slice(..));
+            self.draw_range(&mut pass, &draws, range);
+        }
+    }
+
+    /// Issues the draws of `range` (each draws the instance of its own index), changing pipelines as their kind
+    /// changes.
+    fn draw_range(
+        &self,
+        pass: &mut wgpu::RenderPass<'_>,
+        draws: &[(Pass, Option<PictureId>)],
+        range: Range<usize>,
+    ) {
         let mut current: Option<Pass> = None;
-        for (i, (kind, picture)) in draws.iter().enumerate() {
+        for (i, (kind, picture)) in draws.iter().enumerate().skip(range.start).take(range.len()) {
             if current != Some(*kind) {
                 let index = match kind {
                     Pass::World => 0,

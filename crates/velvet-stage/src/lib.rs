@@ -9,6 +9,7 @@
 //!   with it). They are lit by up to 16 point **lights** (candles) over an ambient light, and fade into a **haze** with
 //!   distance, so layers far away read as far away.
 //! - **Screen cards** sit on top in the screen's logical pixels (the HUD).
+//! - A [`Lens`] magnifies the world inside a circle of the screen (a magnifying glass), under the screen cards.
 //! - [`Stage::pick`] finds the card under the pointer (the screen first, then the nearest in the world) and the point
 //!   of its picture, ignoring the transparent parts; [`Stage::pick_on`] finds the point on one card's plane even past
 //!   its edges (to drag across a desk); [`Stage::project`] goes the other way.
@@ -39,6 +40,6 @@ pub use camera::{Camera, Ray};
 pub use offscreen::{render_rgba, Offscreen};
 pub use render::StageRenderer;
 pub use stage::{
-    Blend, Card, CardId, Fog, Hit, Light, Picture, PictureId, Space, Stage, MAX_LIGHTS,
+    Blend, Card, CardId, Fog, Hit, Lens, Light, Picture, PictureId, Space, Stage, MAX_LIGHTS,
 };
 pub use velvet_math::{Vec2, Vec3};
