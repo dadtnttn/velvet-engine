@@ -7,6 +7,7 @@
 | [`formats/`](formats/) | File formats shared by tools and runtimes: [VLZ](formats/VLZ_FORMAT.md) |
 | [`language/`](language/) | The engine's languages: [Velvet Script](language/VELVET_SCRIPT.md) ([v2](language/VELVET_SCRIPT_2.md), [v3](language/VELVET_SCRIPT_3.md)), [Velvet Story](language/VELVET_STORY.md), [Velvet Style](language/VELVET_STYLE.md), [Velvet Anim](language/VELVET_ANIM.md), [Velvet Image](language/VELVET_IMAGE.md), and their roadmaps |
 | [`editor/`](editor/) | [Velvet Studio](editor/STUDIO.md) |
+| [`platforms/`](platforms/) | Running games beyond the desktop: [Android](platforms/ANDROID.md) (entry point, files, input, lifecycle, `velvet android` packaging and signing, porting checklist) |
 | [`engineering/`](engineering/) | Notes from building real games on the engine: [repository contents](engineering/REPOSITORY_CONTENTS.md), Demon Queen's NPCs, dungeon art, the fantasy village world |
 | [`tutorials/`](tutorials/) | Step by step: hello, a visual novel, top-down, first VN launch |
 | [`assets/`](assets/) | Brand images used by the README |

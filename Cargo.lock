@@ -2072,6 +2072,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
+name = "hello-mobile"
+version = "0.3.0"
+dependencies = [
+ "velvet-host2d",
+ "velvet-platform",
+ "velvet-sfx",
+]
+
+[[package]]
 name = "hello-velvet"
 version = "0.3.0"
 dependencies = [
@@ -4668,6 +4677,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "velvet-math",
+ "velvet-platform",
  "velvet-render",
  "velvet-scene3d",
  "wgpu",
@@ -5214,6 +5224,7 @@ dependencies = [
  "camino",
  "image",
  "indexmap",
+ "ndk",
  "parking_lot",
  "ron",
  "serde",
@@ -5271,6 +5282,7 @@ name = "velvet-build"
 version = "0.3.0"
 dependencies = [
  "camino",
+ "image",
  "indexmap",
  "serde",
  "serde_json",
@@ -5278,6 +5290,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "tracing",
+ "velvet-assets",
  "velvet-core",
  "velvet-project",
  "walkdir",
@@ -5550,6 +5563,7 @@ dependencies = [
  "image",
  "pollster",
  "velvet-canvas",
+ "velvet-platform",
  "velvet-stage",
  "wgpu",
  "winit",
@@ -5635,6 +5649,19 @@ dependencies = [
 [[package]]
 name = "velvet-pixel"
 version = "0.3.0"
+
+[[package]]
+name = "velvet-platform"
+version = "0.3.0"
+dependencies = [
+ "jni 0.22.4",
+ "libc",
+ "ndk",
+ "tempfile",
+ "velvet-assets",
+ "wgpu",
+ "winit",
+]
 
 [[package]]
 name = "velvet-play"

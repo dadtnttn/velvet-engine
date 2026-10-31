@@ -14,6 +14,10 @@
 //!   when [`Game2D::stage`] gives one, with the canvas over it only if [`HostConfig::overlay`] says so;
 //! - and runs the same game **without a window** ([`Headless`]) for tests, bots and captures.
 //!
+//! It also runs on **Android** through `velvet-platform` (see `docs/platforms/ANDROID.md`): the first finger is the
+//! pointer, the back button arrives as Escape (and as [`Game2D::platform_event`]), the GPU surface follows the app's
+//! suspend and resume, and the screen is kept full and on.
+//!
 //! ```ignore
 //! use velvet_host2d::{Game2D, HostConfig, Input};
 //! use velvet_host2d::velvet_canvas::{Canvas, Color};
@@ -36,6 +40,7 @@ use std::path::PathBuf;
 pub use headless::Headless;
 pub use input::{Button, Input, InputEvent, KeyCode};
 pub use velvet_canvas;
+pub use velvet_platform;
 pub use velvet_stage;
 pub use viewport::Viewport;
 pub use window::run;
@@ -153,6 +158,11 @@ pub trait Game2D {
 
     /// The canvas's pixels changed (the window was resized): layers drawn at the old pixels are stale.
     fn pixels_changed(&mut self, _canvas: &Canvas) {}
+
+    /// The platform did something: the app went to the background (`Suspended`: save and pause the
+    /// sound, Android may end the process from here on), came back (`Resumed`), lost or regained focus,
+    /// ran short of memory, or the back button was pressed (`Back`; the game also hears it as Escape).
+    fn platform_event(&mut self, _event: velvet_platform::PlatformEvent) {}
 
     /// The game's 2.5D stage, if it has one: drawn every frame under the canvas (or alone, see
     /// [`HostConfig::overlay`]).

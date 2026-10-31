@@ -7,9 +7,18 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-rav1d = { version = "1.1", default-features = false, features = ["bitdepth_8", "bitdepth_16", "asm"] }
 avif-parse = "1"
 image = { version = "0.25", default-features = false }
+
+# rav1d's assembly (nasm) on desktop x86 only. Its ARM assembly cannot build from the crates.io
+# package (1.1.0 leaves out every `.h`, src/arm/asm-offsets.h among them), and its x86 assembly
+# cannot link into a shared library (PC32 relocations against Rust symbols), which is what an
+# Android app is. ARM and Android targets decode with the Rust code alone.
+[target.'cfg(all(any(target_arch = "x86", target_arch = "x86_64"), not(target_os = "android")))'.dependencies]
+rav1d = { version = "1.1", default-features = false, features = ["bitdepth_8", "bitdepth_16", "asm"] }
+
+[target.'cfg(not(all(any(target_arch = "x86", target_arch = "x86_64"), not(target_os = "android"))))'.dependencies]
+rav1d = { version = "1.1", default-features = false, features = ["bitdepth_8", "bitdepth_16"] }
 
 [dev-dependencies]
 image = { version = "0.25", default-features = false, features = ["png"] }

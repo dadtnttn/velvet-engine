@@ -1884,6 +1884,93 @@ impl GltfModel {
         parse_gltf(document, buffers, images)
     }
 
+    /// Load a `.glb` or `.gltf` through a file reader instead of the filesystem, so models can
+    /// come from an Android APK: `read(path)` returns a file's bytes (for example
+    /// `velvet_platform::files::assets().read`). A `.gltf`'s external buffers and pictures are
+    /// read through it too, relative to the model's folder (`/` separators).
+    pub fn load_with(
+        path: &str,
+        read: &dyn Fn(&str) -> std::io::Result<Vec<u8>>,
+    ) -> Result<Self, Render3DError> {
+        let gltf_error = |error: String| Render3DError::Gltf(error);
+        let bytes = read(path).map_err(|e| gltf_error(format!("{path}: {e}")))?;
+        let bytes = unpack_model_bytes(&bytes)?;
+        let gltf::Gltf { document, mut blob } =
+            gltf::Gltf::from_slice(&bytes).map_err(|e| gltf_error(e.to_string()))?;
+        let folder = path.rsplit_once('/').map_or("", |(dir, _)| dir);
+        let beside = |uri: &str| {
+            let name = uri.replace("%20", " ");
+            if folder.is_empty() {
+                name
+            } else {
+                format!("{folder}/{name}")
+            }
+        };
+        let mut buffers = Vec::new();
+        for buffer in document.buffers() {
+            let data = match buffer.source() {
+                gltf::buffer::Source::Uri(uri) if !uri.starts_with("data:") => {
+                    let mut bytes =
+                        read(&beside(uri)).map_err(|e| gltf_error(format!("{uri}: {e}")))?;
+                    // As gltf's importer: buffers are padded to four bytes.
+                    while bytes.len() % 4 != 0 {
+                        bytes.push(0);
+                    }
+                    gltf::buffer::Data(bytes)
+                }
+                source => gltf::buffer::Data::from_source_and_blob(source, None, &mut blob)
+                    .map_err(|e| gltf_error(e.to_string()))?,
+            };
+            if data.len() < buffer.length() {
+                return Err(gltf_error(format!(
+                    "buffer {} is {} bytes, the model says {}",
+                    buffer.index(),
+                    data.len(),
+                    buffer.length()
+                )));
+            }
+            buffers.push(data);
+        }
+        let mut images = Vec::new();
+        for image in document.images() {
+            let file;
+            let bytes = match image.source() {
+                gltf::image::Source::View { view, .. } => {
+                    let start = view.offset();
+                    Some(&buffers[view.buffer().index()].0[start..start + view.length()])
+                }
+                gltf::image::Source::Uri { uri, .. } if !uri.starts_with("data:") => {
+                    file = read(&beside(uri)).map_err(|e| gltf_error(format!("{uri}: {e}")))?;
+                    Some(file.as_slice())
+                }
+                _ => None,
+            };
+            let decoded = match bytes {
+                Some(bytes) if velvet_avif::is_avif(bytes) => {
+                    velvet_avif::decode_avif(bytes).map_err(|e| gltf_error(e.to_string()))?
+                }
+                Some(bytes) => image::load_from_memory(bytes)
+                    .map_err(|e| gltf_error(e.to_string()))?
+                    .to_rgba8(),
+                None => {
+                    images.push(
+                        gltf::image::Data::from_source(image.source(), None, &buffers)
+                            .map_err(|e| gltf_error(e.to_string()))?,
+                    );
+                    continue;
+                }
+            };
+            let (width, height) = decoded.dimensions();
+            images.push(gltf::image::Data {
+                pixels: decoded.into_raw(),
+                format: gltf::image::Format::R8G8B8A8,
+                width,
+                height,
+            });
+        }
+        parse_gltf(document, buffers, images)
+    }
+
     /// Rest pose of every node: (name, parent index, translation, rotation
     /// quaternion `[x, y, z, w]`). Procedural animation solves from it.
     pub fn rest_nodes(&self) -> Vec<(String, Option<usize>, Vec3, [f32; 4])> {
@@ -7839,6 +7926,47 @@ mod tests {
         assert_eq!(a.animations, b.animations);
         // A cut stream is an error, not a short model.
         assert!(unpack_model_bytes(&packed[..packed.len() / 2]).is_err());
+    }
+
+    #[test]
+    fn a_gltf_and_its_buffer_load_through_a_reader() {
+        // A triangle in a `.gltf` whose positions live in an external `.bin` (as packaged
+        // assets, read through a function rather than the filesystem).
+        let gltf = r#"{
+            "asset": {"version": "2.0"},
+            "buffers": [{"uri": "tri%20data.bin", "byteLength": 36}],
+            "bufferViews": [{"buffer": 0, "byteOffset": 0, "byteLength": 36}],
+            "accessors": [{"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3",
+                           "min": [0, 0, 0], "max": [1, 1, 0]}],
+            "meshes": [{"primitives": [{"attributes": {"POSITION": 0}}]}],
+            "nodes": [{"mesh": 0}],
+            "scenes": [{"nodes": [0]}],
+            "scene": 0
+        }"#;
+        let positions: [f32; 9] = [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0];
+        let mut files = std::collections::HashMap::new();
+        files.insert("models/tri.gltf".to_string(), gltf.as_bytes().to_vec());
+        files.insert(
+            "models/tri data.bin".to_string(),
+            bytemuck::cast_slice::<f32, u8>(&positions).to_vec(),
+        );
+        let read = |path: &str| {
+            files
+                .get(path)
+                .cloned()
+                .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, path.to_string()))
+        };
+        let model = GltfModel::load_with("models/tri.gltf", &read).unwrap();
+        assert_eq!(model.meshes.len(), 1);
+        assert_eq!(model.meshes[0].vertices.len(), 3);
+        files.remove("models/tri data.bin");
+        let read = |path: &str| {
+            files
+                .get(path)
+                .cloned()
+                .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, path.to_string()))
+        };
+        assert!(GltfModel::load_with("models/tri.gltf", &read).is_err());
     }
 
     /// Every model of a packed release loads as its original: the same geometry, animations

@@ -10,6 +10,17 @@
 **/out/
 **/output/
 **/*.rs.bk
+
+# Android (`velvet android`): signing keys and their passwords never enter the repository, nor do
+# packages (they are built under target/velvet-android/).
+*.keystore
+*.jks
+android-signing.local.properties
+keystore.properties
+*.apk
+*.aab
+*.apks
+*.idsig
 Cargo.lock.bak
 
 # Editors, dependencies and operating systems

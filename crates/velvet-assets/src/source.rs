@@ -47,6 +47,13 @@ pub trait Source: Send + Sync {
         let all = self.read(path)?;
         slice_range(&all, path, offset, len).map(<[u8]>::to_vec)
     }
+
+    /// A seekable reader over the asset, for streaming large resources. The default reads the
+    /// whole asset into memory; sources backed by files (loose files, an APK's uncompressed
+    /// entries) stream from the file instead.
+    fn open(&self, path: &AssetPath) -> Result<crate::reader::AssetReader, SourceError> {
+        self.read(path).map(crate::reader::AssetReader::from_bytes)
+    }
 }
 
 fn slice_range<'a>(
@@ -131,6 +138,15 @@ impl Source for FileSource {
         let mut out = vec![0u8; len];
         file.read_exact(&mut out)?;
         Ok(out)
+    }
+
+    fn open(&self, path: &AssetPath) -> Result<crate::reader::AssetReader, SourceError> {
+        let full = path.resolve_fs(&self.root);
+        let file = std::fs::File::open(&full).map_err(|e| match e.kind() {
+            std::io::ErrorKind::NotFound => SourceError::NotFound(path.to_string()),
+            _ => SourceError::Io(e),
+        })?;
+        Ok(crate::reader::AssetReader::from_file(file)?)
     }
 }
 
@@ -273,6 +289,13 @@ impl Source for LayeredSource {
             None => Err(SourceError::NotFound(path.to_string())),
         }
     }
+
+    fn open(&self, path: &AssetPath) -> Result<crate::reader::AssetReader, SourceError> {
+        match self.first_with(path) {
+            Some(s) => s.open(path),
+            None => Err(SourceError::NotFound(path.to_string())),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -322,5 +345,32 @@ mod tests {
             Err(SourceError::NotFound(_))
         ));
         assert_eq!(layered.size_hint(&"only_loose.txt".into()), Some(3));
+    }
+
+    #[test]
+    fn open_streams_files_and_reads_memory() {
+        use std::io::Read;
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("song.ogg"), b"OggS-data").unwrap();
+        let mut mem = MemorySource::new();
+        mem.insert("only_memory.txt", b"hi".to_vec());
+        let layered = LayeredSource::new()
+            .with(Arc::new(FileSource::new(dir.path())))
+            .with(Arc::new(mem));
+
+        let mut song = layered.open(&"song.ogg".into()).unwrap();
+        assert!(song.is_streamed());
+        assert_eq!(song.len(), 9);
+        let mut text = String::new();
+        song.read_to_string(&mut text).unwrap();
+        assert_eq!(text, "OggS-data");
+
+        let small = layered.open(&"only_memory.txt".into()).unwrap();
+        assert!(!small.is_streamed());
+        assert_eq!(small.into_bytes().unwrap(), b"hi");
+        assert!(matches!(
+            layered.open(&"missing.bin".into()),
+            Err(SourceError::NotFound(_))
+        ));
     }
 }

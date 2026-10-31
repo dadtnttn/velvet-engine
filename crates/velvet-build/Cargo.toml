@@ -18,6 +18,9 @@ sha2 = { workspace = true }
 indexmap = { workspace = true }
 tracing = { workspace = true }
 zip = { version = "2.2", default-features = false, features = ["deflate"] }
+# Android packaging: the packaged-asset index format, and the launcher icons.
+velvet-assets = { path = "../velvet-assets", default-features = false }
+image = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3"

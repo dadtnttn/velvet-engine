@@ -70,6 +70,7 @@ members = [
     "examples/hotline-rush",
     "examples/hybrid-demo",
     "examples/cellular-lab",
+    "examples/hello-mobile",
     "demos/cellular-arena",
     "demos/rpg-quest-vs3",
     "crates/velvet-fx",
@@ -86,6 +87,7 @@ members = [
     "crates/velvet-desktop",
     "crates/velvet-wasm",
     "crates/velvet-scene3d",
+    "crates/velvet-platform",
     "demos/fx-forge",
     "demos/third-person",
     "demos/ui-gallery",
@@ -168,6 +170,7 @@ velvet-qa = { path = "crates/velvet-qa" }
 velvet-stacks = { path = "crates/velvet-stacks" }
 velvet-artbuild = { path = "crates/velvet-artbuild" }
 velvet-desktop = { path = "crates/velvet-desktop", default-features = false }
+velvet-platform = { path = "crates/velvet-platform" }
 
 # External — foundation
 serde = { version = "1", features = ["derive"] }

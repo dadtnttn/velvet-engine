@@ -4,6 +4,9 @@
 
 #![deny(missing_docs)]
 
+#[cfg(target_os = "android")]
+mod apk_source;
+mod asset_index;
 mod async_queue;
 mod bundle;
 mod handle;
@@ -14,6 +17,7 @@ mod missing;
 mod path;
 mod platform;
 mod plugin;
+mod reader;
 mod refcount;
 mod registry;
 mod source;
@@ -23,6 +27,10 @@ mod vlz_source;
 
 pub mod prelude;
 
+/// Packaged assets of the running Android app (the APK and its install-time asset packs).
+#[cfg(target_os = "android")]
+pub use apk_source::ApkSource;
+pub use asset_index::{AssetIndex, IndexEntry};
 pub use async_queue::{AsyncLoadQueue, LoadPriority, QueueItem, QueuePhase};
 pub use bundle::{AssetBundle, BundleEntry, BundleError};
 pub use handle::{AssetId, AssetState, Handle, StrongHandle};
@@ -43,6 +51,7 @@ pub use platform::{
     VariantCatalog,
 };
 pub use plugin::AssetsPlugin;
+pub use reader::AssetReader;
 pub use refcount::{LiveSet, RcHandle, RefCountTable, TrackedStrongHandle};
 pub use registry::{AssetEvent, Assets};
 pub use source::{FileSource, LayeredSource, MemorySource, Source, SourceError};

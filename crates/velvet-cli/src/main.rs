@@ -1,5 +1,6 @@
 //! Velvet CLI — `velvet` command entry point.
 
+mod android_cmd;
 mod app_cmd;
 mod cards_cmd;
 mod crypto_cmd;
@@ -395,6 +396,11 @@ enum Commands {
     Vlz {
         #[command(subcommand)]
         command: VlzCommands,
+    },
+    /// Android: build, package (APK/AAB), sign, verify, install and logcat (docs/platforms/ANDROID.md).
+    Android {
+        #[command(subcommand)]
+        command: android_cmd::AndroidCommand,
     },
 }
 
@@ -1029,6 +1035,7 @@ fn main() {
 
 fn dispatch(cli: Cli) -> Result<()> {
     match cli.command {
+        Commands::Android { command } => android_cmd::cmd_android(command),
         Commands::Doctor => cmd_doctor(),
         Commands::Version => {
             println!("Velvet Engine {}", engine_version());

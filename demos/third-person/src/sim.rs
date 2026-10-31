@@ -2,7 +2,7 @@
 //! quest, procedural animation clips, particle bursts, and saves.
 //!
 //! Pure simulation over `velvet-scene3d` (no window, no GPU): the windowed
-//! shell in `main.rs` only renders what this sim computes, and every rule
+//! shell in `app.rs` only renders what this sim computes, and every rule
 //! below is covered by unit tests.
 
 use std::collections::BTreeMap;

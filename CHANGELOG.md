@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Android** ([docs/platforms/ANDROID.md](docs/platforms/ANDROID.md)). **`velvet-platform`**: one
+  entry point for desktop and Android (`android_main!`, winit's NativeActivity backend), packaged
+  files and save folders on every platform, a GPU surface that survives suspend and resume
+  (`gpu::SurfaceSlot`; one backend per instance, Vulkan on devices with a hardware Vulkan adapter
+  and OpenGL ES elsewhere, as both cannot share the window; limits phones can give), touch as mouse
+  events plus fingers and gestures, the back button, safe-area insets, immersive mode, orientation
+  and lifecycle events. **`velvet android`** (`doctor`, `build`, `apk`, `aab`, `sign`, `verify`,
+  `install`, `logcat`, `keygen-help`) builds a game's library with the NDK and packs it into an
+  APK or app bundle without Gradle: aapt2, 16 KB page alignment, apksigner or jarsigner with the
+  debug key or a release key from the environment or a git-ignored local file. C++ dependencies
+  are linked against the NDK's static libc++, and a library that still imports C++ runtime
+  symbols Android lacks is refused at build time instead of failing to load. Also
+  `velvet_assets::{ApkSource, AssetReader, AssetIndex}` and `Source::open` (streaming),
+  `velvet_render::GltfModel::load_with` (models through a file reader), Android support in
+  `velvet-host2d` (`Game2D::platform_event`), the `third-person` demo on Android, and
+  `examples/hello-mobile`.
 - **`velvet-pixel`**: hand-shaded pixel art built in code. Shaded primitives and signed-distance
   bodies (`velvet_pixel::sdf`) go into a material buffer, lit with banded ramps and dithering, with
   cast shadows, rim light and selective outlines. It is the toolkit Demon Queen's loading screens
@@ -24,6 +40,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - Demon Queen left the engine's repository for its own private one beside it; it uses the
   engine's crates by path.
+- `velvet-avif` uses rav1d's assembly on desktop x86 only: the crates.io package of rav1d 1.1.0
+  cannot build its ARM assembly (it leaves out `src/arm/asm-offsets.h`), and its x86 assembly
+  does not link into a shared library such as an Android app's, so ARM and Android targets decode
+  with rav1d's Rust code.
 
 ## [0.3.0] - 2026-10-16
 

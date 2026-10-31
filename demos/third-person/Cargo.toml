@@ -15,6 +15,7 @@ path = "src/main.rs"
 velvet-math = { workspace = true }
 velvet-scene3d = { workspace = true }
 velvet-render = { workspace = true }
+velvet-platform = { workspace = true }
 anyhow = { workspace = true }
 serde_json = { workspace = true }
 winit = { workspace = true }
@@ -23,3 +24,15 @@ pollster = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3"
+
+# The Android app (`velvet android apk -p third-person`, see docs/platforms/ANDROID.md). The library
+# (src/lib.rs) is built as the APK's native code; `scenes/` becomes its packaged assets.
+[package.metadata.velvet.android]
+package = "com.example.velvet.thirdperson"
+label = "Third Person"
+version_code = 1
+min_sdk = 26
+target_sdk = 36
+abis = ["arm64-v8a", "x86_64"]
+orientation = "sensorLandscape"
+assets = ["scenes"]

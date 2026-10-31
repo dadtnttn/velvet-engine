@@ -20,7 +20,8 @@ use crate::{Game2D, HostConfig};
 
 /// Opens the window and runs the game until it quits or the window is closed.
 pub fn run<G: Game2D + 'static>(config: HostConfig, game: G) -> Result<(), Box<dyn Error>> {
-    let event_loop = EventLoop::new()?;
+    // The platform's event loop: on Android it is attached to the activity (see mobile.rs).
+    let event_loop: EventLoop<()> = velvet_platform::event_loop()?;
     let canvas = Canvas::new(config.logical_width, config.logical_height);
     // QA: `VELVET_CAPTURE_AFTER=120:out.png` saves the canvas after that many frames and closes the window.
     let capture_after = std::env::var("VELVET_CAPTURE_AFTER").ok().and_then(|v| {
@@ -35,6 +36,7 @@ pub fn run<G: Game2D + 'static>(config: HostConfig, game: G) -> Result<(), Box<d
         game,
         canvas,
         input: Input::new(),
+        mobile: mobile::Mobile::new(),
         running: None,
         last: None,
         behind: 0.0,
@@ -55,6 +57,8 @@ struct App<G: Game2D> {
     game: G,
     canvas: Canvas,
     input: Input,
+    /// Touch as the pointer, the back button, suspend and resume (mobile.rs).
+    mobile: mobile::Mobile,
     running: Option<Running>,
     last: Option<Instant>,
     /// Game time not yet stepped.
@@ -265,6 +269,8 @@ impl<G: Game2D> App<G> {
 impl<G: Game2D> ApplicationHandler for App<G> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.running.is_some() {
+            // Back from the background (Android): a new surface for the same window.
+            self.resume();
             return;
         }
         let attributes = Window::default_attributes()
@@ -305,9 +311,13 @@ impl<G: Game2D> ApplicationHandler for App<G> {
         });
         self.resized(size.width, size.height);
         self.last = Some(Instant::now());
+        self.started();
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
+        if self.mobile_event(event_loop, _id, &event) {
+            return;
+        }
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::Resized(size) => self.resized(size.width, size.height),
@@ -378,7 +388,18 @@ impl<G: Game2D> ApplicationHandler for App<G> {
         }
         event_loop.set_control_flow(ControlFlow::Wait);
     }
+
+    fn suspended(&mut self, _event_loop: &ActiveEventLoop) {
+        self.suspend();
+    }
+
+    fn memory_warning(&mut self, _event_loop: &ActiveEventLoop) {
+        self.low_memory();
+    }
 }
+
+/// Android's side of the window: touch, the back button, the surface's suspend and resume.
+mod mobile;
 
 const SHADER: &str = r#"
 @group(0) @binding(0) var source: texture_2d<f32>;
@@ -401,7 +422,8 @@ struct Vertex { @builtin(position) position: vec4<f32>, @location(0) uv: vec2<f3
 
 /// Shows a canvas in the window.
 struct Presenter {
-    surface: wgpu::Surface<'static>,
+    /// The window's surface, dropped while Android has the app in the background.
+    surface: velvet_platform::gpu::SurfaceSlot,
     device: wgpu::Device,
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
@@ -427,29 +449,32 @@ struct Source {
 
 impl Presenter {
     async fn new(window: Arc<Window>) -> Result<Presenter, String> {
-        let mut descriptor = wgpu::InstanceDescriptor::default();
+        // One backend on Android (Vulkan or OpenGL ES, never both: see instance_descriptor).
+        let mut descriptor = velvet_platform::gpu::instance_descriptor();
         // As in Demon Queen: DX12 on Windows (Vulkan lost the device on the development machine).
         if cfg!(target_os = "windows") {
             descriptor.backends = wgpu::Backends::DX12;
+            descriptor = descriptor.with_env();
         }
-        let instance = wgpu::Instance::new(&descriptor.with_env());
+        let instance = wgpu::Instance::new(&descriptor);
         let surface = instance
             .create_surface(window.clone())
             .map_err(|e| format!("the window's surface: {e}"))?;
-        let adapter = instance
-            .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::default(),
-                compatible_surface: Some(&surface),
-                force_fallback_adapter: false,
-            })
-            .await
-            .ok_or("no graphics adapter for the window")?;
+        // On Android: Vulkan, else OpenGL ES; elsewhere wgpu's choice, as before.
+        let adapter = velvet_platform::gpu::request_adapter(
+            &instance,
+            &surface,
+            wgpu::PowerPreference::default(),
+        )
+        .await
+        .ok_or("no graphics adapter for the window")?;
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
                     label: Some("velvet-host2d"),
                     required_features: wgpu::Features::empty(),
-                    required_limits: wgpu::Limits::default(),
+                    // `Limits::default()` where the GPU has it, less on phones and OpenGL ES.
+                    required_limits: velvet_platform::gpu::supported_limits(&adapter),
                     memory_hints: wgpu::MemoryHints::MemoryUsage,
                 },
                 None,
@@ -550,7 +575,7 @@ impl Presenter {
         let linear = sampler(wgpu::FilterMode::Linear);
         let nearest = sampler(wgpu::FilterMode::Nearest);
         Ok(Presenter {
-            surface,
+            surface: velvet_platform::gpu::SurfaceSlot::from_surface(instance, window, surface),
             device,
             queue,
             config,

@@ -1,0 +1,22 @@
+[package]
+name = "hello-mobile"
+description = "A small velvet-host2d game that runs on desktop and Android: tap or click to ring a chime, drag to paint, back or Esc to quit"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+velvet-host2d = { path = "../../crates/velvet-host2d" }
+velvet-sfx = { path = "../../crates/velvet-sfx" }
+velvet-platform = { workspace = true }
+
+# `velvet android apk -p hello-mobile` (docs/platforms/ANDROID.md).
+[package.metadata.velvet.android]
+package = "com.example.velvet.hellomobile"
+label = "Hello Mobile"
+version_code = 1
+min_sdk = 26
+target_sdk = 36
+abis = ["arm64-v8a"]
+orientation = "sensorLandscape"

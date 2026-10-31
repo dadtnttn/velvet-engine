@@ -7,6 +7,13 @@
 #![deny(missing_docs)]
 
 mod android;
+// Android apps without Gradle (`velvet android`): configuration, toolchain, manifest,
+// packaging, signing (see docs/platforms/ANDROID.md).
+pub mod android_config;
+pub mod android_manifest;
+pub mod android_package;
+pub mod android_toolchain;
+pub mod elf;
 mod export;
 mod localization;
 mod pack;

@@ -20,16 +20,11 @@ pub enum PlatformClass {
 impl PlatformClass {
     /// Detect roughly from target cfg (compile-time).
     pub fn current() -> Self {
-        #[cfg(target_arch = "wasm32")]
-        {
-            return Self::Web;
-        }
-        #[cfg(any(target_os = "android", target_os = "ios"))]
-        {
-            return Self::Mobile;
-        }
-        #[cfg(not(any(target_arch = "wasm32", target_os = "android", target_os = "ios")))]
-        {
+        if cfg!(target_arch = "wasm32") {
+            Self::Web
+        } else if cfg!(any(target_os = "android", target_os = "ios")) {
+            Self::Mobile
+        } else {
             Self::Desktop
         }
     }

@@ -1,0 +1,25 @@
+[package]
+name = "velvet-platform"
+description = "Platform layer of Velvet Engine games: one entry point for desktop and Android (winit's NativeActivity backend), packaged assets and save folders on every platform, the GPU surface's suspend and resume, screen insets, immersive mode and orientation, touch as pointer events, the back button and lifecycle events"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# Packaged assets go through velvet-assets' `Source` (the APK source lives there). Without VLZ by
+# default: a game that ships .vlz archives enables `velvet-assets/vlz` itself.
+velvet-assets = { path = "../velvet-assets", default-features = false }
+winit = { workspace = true }
+wgpu = { workspace = true }
+
+# Android: winit's NativeActivity backend (no Java code in the APK), JNI for the few calls that
+# need the Java side (immersive mode, insets, orientation, finishing the activity).
+[target.'cfg(target_os = "android")'.dependencies]
+winit = { workspace = true, features = ["android-native-activity"] }
+jni = "0.22"
+ndk = { version = "0.9", default-features = false }
+libc = "0.2"
+
+[dev-dependencies]
+tempfile = "3"

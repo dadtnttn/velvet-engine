@@ -8,6 +8,8 @@ description = "The host of a Velvet Engine 2D game: a window that shows a velvet
 [dependencies]
 velvet-canvas = { path = "../velvet-canvas" }
 velvet-stage = { path = "../velvet-stage" }
+# The event loop, GPU surface, touch and back button on Android as on desktop.
+velvet-platform = { path = "../velvet-platform" }
 winit = { workspace = true }
 wgpu = { workspace = true }
 pollster = { workspace = true }
