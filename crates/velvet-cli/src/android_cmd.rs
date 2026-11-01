@@ -37,7 +37,7 @@ pub enum AndroidCommand {
         build: BuildArgs,
         #[command(flatten)]
         sign: SignArgs,
-        /// Where to write the APK (default: target/velvet-android/<package>/<profile>/).
+        /// Where to write the APK (default: `target/velvet-android/<package>/<profile>/`).
         #[arg(long)]
         out: Option<PathBuf>,
     },
