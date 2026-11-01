@@ -312,7 +312,7 @@ impl Skinner3D {
         }
         let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some("velvet-skin"),
-            timestamp_writes: None,
+            timestamp_writes: crate::gpu_timer::compute_pass("skin"),
         });
         pass.set_pipeline(&self.pipeline);
         for s in self.skins.iter_mut().flatten().filter(|s| s.dirty) {

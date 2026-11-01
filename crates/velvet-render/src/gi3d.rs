@@ -382,7 +382,7 @@ impl ScreenGi {
         {
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("velvet-3d-gi-pass"),
-                timestamp_writes: None,
+                timestamp_writes: crate::gpu_timer::compute_pass("gi"),
             });
             pass.set_pipeline(&self.pipeline);
             pass.set_bind_group(0, &group, &[]);

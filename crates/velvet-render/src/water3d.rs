@@ -1031,7 +1031,7 @@ impl Water3D {
         }
         let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some("velvet-water-step"),
-            timestamp_writes: None,
+            timestamp_writes: crate::gpu_timer::compute_pass("water"),
         });
         // Droplets first (those that land add their splash to this frame's list).
         for _ in 0..sph_steps {

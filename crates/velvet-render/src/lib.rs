@@ -17,6 +17,7 @@ mod culling;
 mod debug_overlay;
 mod depth_read;
 mod gi3d;
+pub mod gpu_timer;
 mod gpu;
 mod iso;
 mod letterbox;

@@ -287,7 +287,7 @@ impl Upscaler3D {
                     },
                 })],
                 depth_stencil_attachment: None,
-                timestamp_writes: None,
+                timestamp_writes: crate::gpu_timer::pass("upscale"),
                 occlusion_query_set: None,
             });
             pass.set_pipeline(pipeline);

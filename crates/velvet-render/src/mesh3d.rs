@@ -4967,7 +4967,7 @@ impl Wgpu3DRenderer {
                             }),
                             stencil_ops: None,
                         }),
-                        timestamp_writes: None,
+                        timestamp_writes: crate::gpu_timer::pass("shadow"),
                         occlusion_query_set: None,
                     })
                     .forget_lifetime()
@@ -5182,7 +5182,7 @@ impl Wgpu3DRenderer {
                     }),
                     stencil_ops: None,
                 }),
-                timestamp_writes: None,
+                timestamp_writes: crate::gpu_timer::pass("reflection"),
                 occlusion_query_set: None,
             });
             pass.set_bind_group(0, &self.reflection.camera_bind_group, &[]);
@@ -5314,7 +5314,7 @@ impl Wgpu3DRenderer {
                     }),
                     stencil_ops: None,
                 }),
-                timestamp_writes: None,
+                timestamp_writes: crate::gpu_timer::pass("prepass"),
                 occlusion_query_set: None,
             });
             pass.set_pipeline(&self.probe_depth_pipeline);
@@ -5398,7 +5398,7 @@ impl Wgpu3DRenderer {
                     }),
                     stencil_ops: None,
                 }),
-                timestamp_writes: None,
+                timestamp_writes: crate::gpu_timer::pass("main"),
                 occlusion_query_set: None,
             });
             pass.set_bind_group(0, &self.camera_bind_group, &[]);
@@ -5560,6 +5560,7 @@ impl Wgpu3DRenderer {
             thread_local! {
                 static SUMS: std::cell::RefCell<(u32, Vec<(&'static str, f64)>)> = const { std::cell::RefCell::new((0, Vec::new())) };
             }
+            let triangles = self.last_drawn_triangles;
             SUMS.with(|sums| {
                 let mut sums = sums.borrow_mut();
                 let mut last = cpu_started;
@@ -5578,7 +5579,12 @@ impl Wgpu3DRenderer {
                         .iter()
                         .map(|(n, t)| format!("{n} {:.2}", t / 120.0))
                         .collect();
-                    eprintln!("[cpuprof] {} (draws {})", line.join(", "), draws.len());
+                    eprintln!(
+                        "[cpuprof] {} (draws {}, main pass triangles {})",
+                        line.join(", "),
+                        draws.len(),
+                        triangles
+                    );
                     sums.0 = 0;
                     sums.1.clear();
                 }
@@ -5672,7 +5678,7 @@ impl Wgpu3DRenderer {
                 },
             })],
             depth_stencil_attachment: None,
-            timestamp_writes: None,
+            timestamp_writes: crate::gpu_timer::pass("outline"),
             occlusion_query_set: None,
         });
         pass.set_pipeline(&self.outline_pipeline);
@@ -6593,10 +6599,17 @@ fn create_mesh_pipeline_with(
     mirrored: bool,
     compare: Option<wgpu::CompareFunction>,
 ) -> wgpu::RenderPipeline {
-    let constants = std::collections::HashMap::from([(
-        "NORMAL_MAP".to_string(),
-        if normal_map { 1.0 } else { 0.0 },
-    )]);
+    // The main view's camera never clips (its plane keeps everything): only the mirrored view
+    // and the blended draws, which it also shows, keep the clip test.
+    let clips = mirrored || mode != BlendMode3D::Solid;
+    let constants = std::collections::HashMap::from([
+        ("NORMAL_MAP".to_string(), if normal_map { 1.0 } else { 0.0 }),
+        ("CLIP_PLANE".to_string(), if clips { 1.0 } else { 0.0 }),
+    ]);
+    // On phones (tile-based GPUs) a solid draw that blends cannot have its hidden fragments
+    // dropped before shading; its alpha is 1 there (cut-out textures go to `fs_main`, reveal
+    // windows too), so writing it plainly is the same picture.
+    let plain = cfg!(target_os = "android") && mode == BlendMode3D::Solid && !cutout;
     let label = match (mode, cutout, normal_map) {
         (BlendMode3D::Translucent, _, _) => "velvet-3d-translucent-pipeline",
         (BlendMode3D::Additive, _, _) => "velvet-3d-additive-pipeline",
@@ -6630,7 +6643,7 @@ fn create_mesh_pipeline_with(
                 format,
                 // Premultiplied into the HDR buffer: its alpha is the coverage. Added light
                 // leaves the coverage alone.
-                blend: Some(if mode == BlendMode3D::Additive {
+                blend: (!plain).then_some(if mode == BlendMode3D::Additive {
                     wgpu::BlendState {
                         color: wgpu::BlendComponent {
                             src_factor: wgpu::BlendFactor::SrcAlpha,
@@ -7066,6 +7079,12 @@ fn shadow_visibility(light_clip: vec4<f32>, normal: vec3<f32>) -> f32 {
 // shade with the interpolated geometric normal directly.
 override NORMAL_MAP: bool = true;
 
+// Pipeline constant: false for the main view's solid draws, whose camera never
+// clips (only the water's mirrored view does). Their shader then has no
+// `discard` at all, so a tile-based GPU (phones) can drop hidden fragments
+// before shading them.
+override CLIP_PLANE: bool = true;
+
 // Reconstruct a tangent frame from screen-space derivatives so meshes that
 // only provide positions, normals and UVs (including the generated meadow)
 // can still use a tangent-space normal map. A flat [0.5, 0.5, 1] sample falls
@@ -7226,7 +7245,7 @@ fn shade(input: VertexOut, cutout: bool) -> vec4<f32> {
     object.base_color = input.base_color;
     object.occlusion_window = input.occlusion_window;
     object.light_mask = vec4<u32>(input.light_mask, 0u, 0u, 0u);
-    if (dot(camera.clip_plane.xyz, input.world_position) + camera.clip_plane.w < 0.0) {
+    if (CLIP_PLANE && dot(camera.clip_plane.xyz, input.world_position) + camera.clip_plane.w < 0.0) {
         discard;
     }
     let normal = normal_from_map(input);
