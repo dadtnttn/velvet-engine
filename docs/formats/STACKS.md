@@ -432,3 +432,7 @@ next step.
 `expect` holds `cards` (definition name to the number of cards of that definition on the table) and
 `stacks` (arrays of card ids; compared in any order). A case without `expect` checks only its steps.
 
+
+### Altura real de los obstáculos
+
+En una configuración de colocación `free`, `stack_offset` es opcional: un número binary32 finito y no negativo. Cuando está presente, `footprint[1]` mide una sola carta y la altura de cada obstáculo es `footprint[1] + (cantidad_de_cartas - 1) * stack_offset`, con redondeo binary32 en cada operación. La anchura y los pasos de la rejilla son los de `footprint`. Los rectángulos que solo se tocan no se solapan. El orden de desempate sigue siendo distancia, desplazamiento Y y desplazamiento X. Omitir el campo conserva la regla anterior de huellas uniformes. Es configuración del tablero y no se serializa en su guardado.

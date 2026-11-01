@@ -116,3 +116,13 @@ const restored = await Board.load(catalog, saved);
 cases that `crates/velvet-stacks` and `crates/velvet-wasm` run, and the unit tests next to the code. The
 output placement is tested through the real WebAssembly module, and against `findFreeSpot` on random
 tables: the position the module picks for each copy must equal the one the JavaScript search picks.
+
+### Huella compacta por altura de pila
+
+`OutputPlacement` de tipo `free` admite `stackOffset` en JavaScript (`stack_offset` en el documento del módulo). `footprint` describe una carta sola; cada carta adicional añade ese desplazamiento a la altura del obstáculo. La búsqueda conserva el mismo orden determinista y calcula en binary32. Sin esa opción conserva la colocación anterior.
+
+    const placement = { kind: "free", footprint: { width: 1.2, height: 1.6 }, stackOffset: 0.2 };
+    const board = await Board.create(catalog, 7, { outputPlacement: placement });
+    const point = board.freeSpot(near, placement.footprint, { stackOffset: placement.stackOffset });
+
+El desplazamiento debe ser finito y no negativo. También hay que pasarlo a `freeSpot` cuando se colocan cartas desde la interfaz. No se guarda en la partida: se vuelve a proporcionar al cargar. Las pruebas comparan las salidas Rust/WASM con la búsqueda JavaScript usando pilas de varias alturas.
