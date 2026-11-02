@@ -338,7 +338,7 @@ impl Crowds3D {
         }
         let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some("velvet-crowd"),
-            timestamp_writes: None,
+            timestamp_writes: crate::gpu_timer::compute_pass("crowd"),
         });
         pass.set_pipeline(&self.pipeline);
         for c in self.crowds.iter_mut().filter(|c| c.dirty) {
