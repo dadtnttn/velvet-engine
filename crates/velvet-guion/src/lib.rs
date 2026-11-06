@@ -1095,6 +1095,12 @@ impl Conversation {
         &lib.guiones[self.file].scenes[self.scene].id
     }
 
+    /// Where it stands in the library: the file, the scene and the step on show (what hangs off a
+    /// line, like its recorded voice, is found by this).
+    pub fn position(&self) -> (usize, usize, usize) {
+        (self.file, self.scene, self.step)
+    }
+
     fn goto(&mut self, lib: &Library, target: &str, vars: &mut Vars) {
         if slug(target) == "fin" {
             self.finished = true;
