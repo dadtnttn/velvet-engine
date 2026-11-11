@@ -41,6 +41,24 @@ impl Viewport {
         })
     }
 
+    /// The whole window, if its shape is within `tolerance` of the picture's (0.04 is 4 %): a maximised window that
+    /// is nearly the right shape gets no thin bars, and a stretch that small can't be seen. Otherwise as it was.
+    pub fn filling(self, window_width: u32, window_height: u32, tolerance: f32) -> Viewport {
+        let window = window_width as f32 / window_height.max(1) as f32;
+        let picture = self.logical_width / self.logical_height;
+        if tolerance > 0.0 && (window / picture - 1.0).abs() <= tolerance {
+            Viewport {
+                x: 0,
+                y: 0,
+                width: window_width,
+                height: window_height,
+                ..self
+            }
+        } else {
+            self
+        }
+    }
+
     /// A window pixel in logical coordinates, or None in the bars.
     pub fn to_logical(&self, px: f64, py: f64) -> Option<(f32, f32)> {
         let lx = (px - self.x as f64) * self.logical_width as f64 / self.width as f64;
@@ -74,6 +92,23 @@ impl Viewport {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_window_nearly_the_right_shape_is_filled() {
+        let fit = |w, h, t| {
+            Viewport::letterbox(w, h, 1920.0, 1080.0)
+                .unwrap()
+                .filling(w, h, t)
+        };
+        let near = fit(2000, 1154, 0.04);
+        assert_eq!(
+            (near.x, near.y, near.width, near.height),
+            (0, 0, 2000, 1154)
+        );
+        // A real 16:10 screen and a game that asked for nothing keep the picture's shape.
+        assert!(fit(2560, 1600, 0.04).y > 0);
+        assert!(fit(2000, 1154, 0.0).y > 0);
+    }
 
     #[test]
     fn a_wide_window_gets_bars_left_and_right() {

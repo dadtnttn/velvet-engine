@@ -4,11 +4,14 @@
 
 use std::collections::HashMap;
 use std::ops::Range;
+use std::sync::atomic::Ordering;
 
 use bytemuck::{Pod, Zeroable};
 use velvet_math::Mat4;
 
-use crate::stage::{Blend, CardId, PictureId, Space, Stage, MAX_LIGHTS};
+use crate::stage::{
+    Blend, CardId, Picture, PictureId, Space, Stage, DROPPED_STAGES, MAX_LIGHTS, STAGES_WATCHED,
+};
 
 /// The globals of a frame, as the shader reads them.
 #[repr(C)]
@@ -41,11 +44,15 @@ struct Instance {
 struct GpuPicture {
     bind: wgpu::BindGroup,
     version: u64,
+    texture: wgpu::Texture,
+    size: (u32, u32),
+    levels: u32,
 }
 
 /// The multisampled colour and the depth of the frames, for a target size.
 struct Targets {
     size: (u32, u32),
+    samples: u32,
     color: Option<wgpu::TextureView>,
     depth: wgpu::TextureView,
 }
@@ -61,6 +68,12 @@ enum Pass {
 /// Draws stages into a target of one texture format.
 pub struct StageRenderer {
     samples: u32,
+    /// See [`StageRenderer::frugal`].
+    frugal: bool,
+    /// The two screen pipelines for a frame of no world cards: one sample and no depth, straight on the target.
+    flat: Option<[wgpu::RenderPipeline; 2]>,
+    /// The four pipelines at one sample, with depth: world cards that all face the camera have no slanted edge to smooth.
+    single: Option<[wgpu::RenderPipeline; 4]>,
     picture_layout: wgpu::BindGroupLayout,
     pipelines: [wgpu::RenderPipeline; 4],
     sampler: wgpu::Sampler,
@@ -70,12 +83,18 @@ pub struct StageRenderer {
     lens_globals_bind: wgpu::BindGroup,
     instances: wgpu::Buffer,
     capacity: usize,
-    pictures: HashMap<PictureId, GpuPicture>,
+    /// By the stage's number and the picture's.
+    pictures: HashMap<(u64, PictureId), GpuPicture>,
     white: wgpu::BindGroup,
     targets: Option<Targets>,
 }
 
 const DEPTH: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+
+/// The bytes a frugal renderer writes to the graphics card before it sends them and waits for them to arrive. What is
+/// written waits in memory of its own until it is sent, and a driver keeps the most that memory ever was: a stage's
+/// pictures written all at once cost their size twice for as long as the game runs; in strips, once and a strip.
+const STRIP: usize = 1 << 20;
 
 /// sRGB to linear, for colours given in sRGB.
 fn linear(c: f32) -> f32 {
@@ -93,6 +112,33 @@ impl StageRenderer {
         queue: &wgpu::Queue,
         format: wgpu::TextureFormat,
         samples: u32,
+    ) -> StageRenderer {
+        Self::build(device, queue, format, samples, false)
+    }
+
+    /// A renderer for a game of still pictures that wants to use as little memory as it can, with the same picture on
+    /// the screen:
+    /// - a frame with no world cards is drawn straight on the target, with no multisampled colour and no depth (screen
+    ///   cards are upright: their edges have nothing to smooth);
+    /// - a picture only ever shown at its own pixels has no smaller copies;
+    /// - the textures of a stage stay while another is on show, until that stage is dropped, so the stage's pixels can
+    ///   be let go ([`Stage::release_uploaded`]) and a menu over a story costs no second upload.
+    pub fn frugal(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        format: wgpu::TextureFormat,
+        samples: u32,
+    ) -> StageRenderer {
+        STAGES_WATCHED.store(true, Ordering::Relaxed);
+        Self::build(device, queue, format, samples, true)
+    }
+
+    fn build(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        format: wgpu::TextureFormat,
+        samples: u32,
+        frugal: bool,
     ) -> StageRenderer {
         let globals_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("velvet-stage globals"),
@@ -162,57 +208,79 @@ impl StageRenderer {
                 operation: wgpu::BlendOperation::Add,
             },
         };
-        let pipeline =
-            |blend: wgpu::BlendState, write_depth: bool, compare: wgpu::CompareFunction| {
-                device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                    label: Some("velvet-stage"),
-                    layout: Some(&layout),
-                    vertex: wgpu::VertexState {
-                        module: &shader,
-                        entry_point: Some("vs_main"),
-                        compilation_options: Default::default(),
-                        buffers: &[wgpu::VertexBufferLayout {
-                            array_stride: std::mem::size_of::<Instance>() as u64,
-                            step_mode: wgpu::VertexStepMode::Instance,
-                            attributes: &attributes,
-                        }],
-                    },
-                    fragment: Some(wgpu::FragmentState {
-                        module: &shader,
-                        entry_point: Some("fs_main"),
-                        compilation_options: Default::default(),
-                        targets: &[Some(wgpu::ColorTargetState {
-                            format,
-                            blend: Some(blend),
-                            write_mask: wgpu::ColorWrites::ALL,
-                        })],
-                    }),
-                    primitive: wgpu::PrimitiveState {
-                        cull_mode: None,
-                        ..Default::default()
-                    },
-                    depth_stencil: Some(wgpu::DepthStencilState {
-                        format: DEPTH,
-                        depth_write_enabled: write_depth,
-                        depth_compare: compare,
-                        stencil: Default::default(),
-                        bias: Default::default(),
-                    }),
-                    multisample: wgpu::MultisampleState {
-                        count: samples,
-                        mask: !0,
-                        alpha_to_coverage_enabled: false,
-                    },
-                    multiview: None,
-                    cache: None,
-                })
-            };
+        let pipeline = |blend: wgpu::BlendState,
+                        depth: Option<(bool, wgpu::CompareFunction)>,
+                        samples: u32| {
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("velvet-stage"),
+                layout: Some(&layout),
+                vertex: wgpu::VertexState {
+                    module: &shader,
+                    entry_point: Some("vs_main"),
+                    compilation_options: Default::default(),
+                    buffers: &[wgpu::VertexBufferLayout {
+                        array_stride: std::mem::size_of::<Instance>() as u64,
+                        step_mode: wgpu::VertexStepMode::Instance,
+                        attributes: &attributes,
+                    }],
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &shader,
+                    entry_point: Some("fs_main"),
+                    compilation_options: Default::default(),
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format,
+                        blend: Some(blend),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                }),
+                primitive: wgpu::PrimitiveState {
+                    cull_mode: None,
+                    ..Default::default()
+                },
+                depth_stencil: depth.map(|(write_depth, compare)| wgpu::DepthStencilState {
+                    format: DEPTH,
+                    depth_write_enabled: write_depth,
+                    depth_compare: compare,
+                    stencil: Default::default(),
+                    bias: Default::default(),
+                }),
+                multisample: wgpu::MultisampleState {
+                    count: samples,
+                    mask: !0,
+                    alpha_to_coverage_enabled: false,
+                },
+                multiview: None,
+                cache: None,
+            })
+        };
         let pipelines = [
-            pipeline(normal, true, wgpu::CompareFunction::LessEqual),
-            pipeline(add, false, wgpu::CompareFunction::LessEqual),
-            pipeline(normal, false, wgpu::CompareFunction::Always),
-            pipeline(add, false, wgpu::CompareFunction::Always),
+            pipeline(
+                normal,
+                Some((true, wgpu::CompareFunction::LessEqual)),
+                samples,
+            ),
+            pipeline(
+                add,
+                Some((false, wgpu::CompareFunction::LessEqual)),
+                samples,
+            ),
+            pipeline(
+                normal,
+                Some((false, wgpu::CompareFunction::Always)),
+                samples,
+            ),
+            pipeline(add, Some((false, wgpu::CompareFunction::Always)), samples),
         ];
+        let flat = frugal.then(|| [pipeline(normal, None, 1), pipeline(add, None, 1)]);
+        let single = frugal.then(|| {
+            [
+                pipeline(normal, Some((true, wgpu::CompareFunction::LessEqual)), 1),
+                pipeline(add, Some((false, wgpu::CompareFunction::LessEqual)), 1),
+                pipeline(normal, Some((false, wgpu::CompareFunction::Always)), 1),
+                pipeline(add, Some((false, wgpu::CompareFunction::Always)), 1),
+            ]
+        });
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("velvet-stage"),
             address_mode_u: wgpu::AddressMode::ClampToEdge,
@@ -252,10 +320,16 @@ impl StageRenderer {
             &sampler,
             1,
             1,
+            1,
             &[255, 255, 255, 255],
-        );
+            None,
+        )
+        .bind;
         StageRenderer {
             samples,
+            frugal,
+            flat,
+            single,
             picture_layout,
             pipelines,
             sampler,
@@ -280,7 +354,9 @@ impl StageRenderer {
         })
     }
 
-    /// A texture with its smaller copies, from premultiplied RGBA pixels.
+    /// A texture of `levels` levels (itself and its smaller copies), from premultiplied RGBA pixels. `strips`: see
+    /// [`Self::write_levels`].
+    #[allow(clippy::too_many_arguments)]
     fn upload(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
@@ -288,9 +364,10 @@ impl StageRenderer {
         sampler: &wgpu::Sampler,
         width: u32,
         height: u32,
+        levels: u32,
         pixels: &[u8],
-    ) -> wgpu::BindGroup {
-        let levels = 32 - width.max(height).max(1).leading_zeros();
+        strips: Option<&mut usize>,
+    ) -> GpuPicture {
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("velvet-stage picture"),
             size: wgpu::Extent3d {
@@ -305,37 +382,11 @@ impl StageRenderer {
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
-        let mut level = pixels.to_vec();
-        let (mut w, mut h) = (width, height);
-        for mip in 0..levels {
-            queue.write_texture(
-                wgpu::TexelCopyTextureInfo {
-                    texture: &texture,
-                    mip_level: mip,
-                    origin: wgpu::Origin3d::ZERO,
-                    aspect: wgpu::TextureAspect::All,
-                },
-                &level,
-                wgpu::TexelCopyBufferLayout {
-                    offset: 0,
-                    bytes_per_row: Some(w * 4),
-                    rows_per_image: Some(h),
-                },
-                wgpu::Extent3d {
-                    width: w,
-                    height: h,
-                    depth_or_array_layers: 1,
-                },
-            );
-            if mip + 1 < levels {
-                let (next, nw, nh) = halve(&level, w, h);
-                level = next;
-                w = nw;
-                h = nh;
-            }
-        }
+        Self::write_levels(
+            device, queue, &texture, width, height, levels, pixels, strips,
+        );
         let view = texture.create_view(&Default::default());
-        device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("velvet-stage picture"),
             layout,
             entries: &[
@@ -348,42 +399,192 @@ impl StageRenderer {
                     resource: wgpu::BindingResource::Sampler(sampler),
                 },
             ],
-        })
+        });
+        GpuPicture {
+            bind,
+            version: 0,
+            texture,
+            size: (width, height),
+            levels,
+        }
     }
 
-    /// Sends the pictures painted since the last frame, and forgets the ones taken off the stage.
-    fn prepare(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, stage: &Stage) {
+    /// Sends the pixels and their smaller copies to a texture. With `strips` (a frugal renderer's count of the bytes
+    /// written and not yet sent) they go in strips of rows, and each [`STRIP`] of bytes is sent, and waited for, before
+    /// more is written.
+    #[allow(clippy::too_many_arguments)]
+    fn write_levels(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        texture: &wgpu::Texture,
+        width: u32,
+        height: u32,
+        levels: u32,
+        pixels: &[u8],
+        mut strips: Option<&mut usize>,
+    ) {
+        let mut smaller: Option<Vec<u8>> = None;
+        let (mut w, mut h) = (width, height);
+        for mip in 0..levels {
+            let level = smaller.as_deref().unwrap_or(pixels);
+            let row = w as usize * 4;
+            let rows_a_strip = match strips {
+                Some(_) => ((STRIP / row.max(1)) as u32).clamp(1, h.max(1)),
+                None => h.max(1),
+            };
+            let mut y = 0;
+            while y < h {
+                let rows = rows_a_strip.min(h - y);
+                let from = y as usize * row;
+                queue.write_texture(
+                    wgpu::TexelCopyTextureInfo {
+                        texture,
+                        mip_level: mip,
+                        origin: wgpu::Origin3d { x: 0, y, z: 0 },
+                        aspect: wgpu::TextureAspect::All,
+                    },
+                    &level[from..from + rows as usize * row],
+                    wgpu::TexelCopyBufferLayout {
+                        offset: 0,
+                        bytes_per_row: Some(w * 4),
+                        rows_per_image: Some(rows),
+                    },
+                    wgpu::Extent3d {
+                        width: w,
+                        height: rows,
+                        depth_or_array_layers: 1,
+                    },
+                );
+                y += rows;
+                if let Some(written) = strips.as_deref_mut() {
+                    *written += rows as usize * row;
+                    if *written >= STRIP {
+                        *written = 0;
+                        queue.submit(std::iter::empty());
+                        let _ = device.poll(wgpu::Maintain::Wait);
+                    }
+                }
+            }
+            if mip + 1 < levels {
+                let (next, nw, nh) = halve(level, w, h);
+                smaller = Some(next);
+                w = nw;
+                h = nh;
+            }
+        }
+    }
+
+    /// The levels a picture's texture has. A frugal renderer gives one to a picture whose cards are all on the screen
+    /// at about its own pixels (`scale`: the target's pixels a logical pixel of the screen takes).
+    fn levels_for(&self, stage: &Stage, id: PictureId, picture: &Picture, scale: f32) -> u32 {
+        let (w, h) = (picture.canvas.pixel_width(), picture.canvas.pixel_height());
+        let full = 32 - w.max(h).max(1).leading_zeros();
+        if !self.frugal {
+            return full;
+        }
+        let mut shown = false;
+        for (_, card) in stage.cards().filter(|(_, c)| c.picture == id) {
+            shown = true;
+            if card.space == Space::World {
+                return full;
+            }
+            let texels = w as f32 * (card.uv[2] - card.uv[0]).abs();
+            let pixels = card.size.x * card.scale * scale;
+            if texels > pixels * 1.25 {
+                return full;
+            }
+        }
+        if shown {
+            1
+        } else {
+            full
+        }
+    }
+
+    /// Sends the pictures painted since the last frame (over the texture they had, when it is the same size), and
+    /// forgets the ones taken off the stage.
+    fn prepare(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, stage: &Stage, scale: f32) {
+        let uid = stage.uid();
+        // (a frugal renderer's count of the bytes written and not yet sent: see `write_levels`)
+        let mut written = 0usize;
+        let frugal_strips = self.frugal;
+        if self.frugal {
+            if let Ok(mut gone) = DROPPED_STAGES.lock() {
+                if !gone.is_empty() {
+                    self.pictures.retain(|(owner, _), _| !gone.contains(owner));
+                    gone.clear();
+                }
+            }
+        }
         for (id, picture) in stage.pictures() {
+            let key = (uid, id);
             if self
                 .pictures
-                .get(&id)
+                .get(&key)
                 .is_some_and(|g| g.version == picture.version)
             {
                 continue;
             }
             let canvas = &picture.canvas;
-            let bind = Self::upload(
-                device,
-                queue,
-                &self.picture_layout,
-                &self.sampler,
-                canvas.pixel_width(),
-                canvas.pixel_height(),
-                canvas.pixels(),
-            );
-            self.pictures.insert(
-                id,
-                GpuPicture {
-                    bind,
-                    version: picture.version,
-                },
-            );
+            if canvas.is_released() {
+                continue;
+            }
+            let size = (canvas.pixel_width(), canvas.pixel_height());
+            let levels = self.levels_for(stage, id, picture, scale);
+            match self.pictures.get_mut(&key) {
+                Some(g) if g.size == size && g.levels == levels => {
+                    Self::write_levels(
+                        device,
+                        queue,
+                        &g.texture,
+                        size.0,
+                        size.1,
+                        levels,
+                        canvas.pixels(),
+                        frugal_strips.then_some(&mut written),
+                    );
+                    g.version = picture.version;
+                }
+                _ => {
+                    let mut g = Self::upload(
+                        device,
+                        queue,
+                        &self.picture_layout,
+                        &self.sampler,
+                        size.0,
+                        size.1,
+                        levels,
+                        canvas.pixels(),
+                        frugal_strips.then_some(&mut written),
+                    );
+                    g.version = picture.version;
+                    self.pictures.insert(key, g);
+                }
+            }
+            picture.uploaded.store(true, Ordering::Relaxed);
         }
-        self.pictures.retain(|id, _| stage.picture(*id).is_some());
+        let frugal = self.frugal;
+        self.pictures.retain(|(owner, id), _| {
+            if *owner == uid {
+                stage.picture(*id).is_some()
+            } else {
+                frugal
+            }
+        });
     }
 
-    fn targets(&mut self, device: &wgpu::Device, format: wgpu::TextureFormat, size: (u32, u32)) {
-        if self.targets.as_ref().is_some_and(|t| t.size == size) {
+    fn targets(
+        &mut self,
+        device: &wgpu::Device,
+        format: wgpu::TextureFormat,
+        size: (u32, u32),
+        samples: u32,
+    ) {
+        if self
+            .targets
+            .as_ref()
+            .is_some_and(|t| t.size == size && t.samples == samples)
+        {
             return;
         }
         let texture = |format: wgpu::TextureFormat, label: &str| {
@@ -396,7 +597,7 @@ impl StageRenderer {
                         depth_or_array_layers: 1,
                     },
                     mip_level_count: 1,
-                    sample_count: self.samples,
+                    sample_count: samples,
                     dimension: wgpu::TextureDimension::D2,
                     format,
                     usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
@@ -404,9 +605,14 @@ impl StageRenderer {
                 })
                 .create_view(&Default::default())
         };
-        let color = (self.samples > 1).then(|| texture(format, "velvet-stage colour"));
+        let color = (samples > 1).then(|| texture(format, "velvet-stage colour"));
         let depth = texture(DEPTH, "velvet-stage depth");
-        self.targets = Some(Targets { size, color, depth });
+        self.targets = Some(Targets {
+            size,
+            samples,
+            color,
+            depth,
+        });
     }
 
     /// Draws the stage into `target` (a view of a texture of `format` and `size`), inside `viewport` (x, y, width,
@@ -423,8 +629,8 @@ impl StageRenderer {
         viewport: [f32; 4],
         stage: &Stage,
     ) {
-        self.prepare(device, queue, stage);
-        self.targets(device, format, size);
+        self.prepare(device, queue, stage, viewport[2] / stage.screen.x.max(1.0));
+        let uid = stage.uid();
 
         // The cards in drawing order: the backdrop of the stage's colour, the world far to near within each order,
         // then the screen.
@@ -432,7 +638,7 @@ impl StageRenderer {
         let mut world: Vec<(i32, f32, CardId)> = Vec::new();
         let mut screen: Vec<(i32, usize, CardId)> = Vec::new();
         for (index, (id, card)) in stage.cards().enumerate() {
-            if !stage.shown(id) || !self.pictures.contains_key(&card.picture) {
+            if !stage.shown(id) || !self.pictures.contains_key(&(uid, card.picture)) {
                 continue;
             }
             match card.space {
@@ -450,6 +656,25 @@ impl StageRenderer {
         // Farther first: in view space the farther, the more negative.
         world.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.total_cmp(&b.1)));
         screen.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
+        // Only screen cards: straight on the target, and the big targets are let go.
+        let flat = self.flat.is_some() && world.is_empty() && stage.lens.is_none();
+        // A frugal renderer smooths edges only when a world card is turned away from the camera.
+        let turned = world.iter().any(|(_, _, id)| {
+            stage
+                .card(*id)
+                .is_some_and(|c| c.rotation.x != 0.0 || c.rotation.y != 0.0)
+        });
+        let one_sample = self.single.is_some() && !turned;
+        if flat {
+            self.targets = None;
+        } else {
+            self.targets(
+                device,
+                format,
+                size,
+                if one_sample { 1 } else { self.samples },
+            );
+        }
 
         let mut instances: Vec<Instance> = Vec::with_capacity(world.len() + screen.len() + 1);
         let mut draws: Vec<(Pass, Option<PictureId>)> = Vec::new();
@@ -567,8 +792,8 @@ impl StageRenderer {
         }
         queue.write_buffer(&self.instances, 0, bytemuck::cast_slice(&instances));
 
-        let targets = self.targets.as_ref().expect("made above");
-        let (view, resolve) = match &targets.color {
+        let targets = self.targets.as_ref();
+        let (view, resolve) = match targets.and_then(|t| t.color.as_ref()) {
             Some(msaa) => (msaa, Some(target)),
             None => (target, None),
         };
@@ -626,8 +851,8 @@ impl StageRenderer {
                     },
                 })],
                 // Each pass starts its own depth: the lens sees the world anew, and the screen does not test it.
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &targets.depth,
+                depth_stencil_attachment: targets.map(|t| wgpu::RenderPassDepthStencilAttachment {
+                    view: &t.depth,
                     depth_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Clear(1.0),
                         store: wgpu::StoreOp::Discard,
@@ -648,7 +873,7 @@ impl StageRenderer {
             };
             pass.set_bind_group(0, uniforms, &[]);
             pass.set_vertex_buffer(0, self.instances.slice(..));
-            self.draw_range(&mut pass, &draws, range);
+            self.draw_range(&mut pass, &draws, range, uid, flat, one_sample);
         }
     }
 
@@ -659,6 +884,9 @@ impl StageRenderer {
         pass: &mut wgpu::RenderPass<'_>,
         draws: &[(Pass, Option<PictureId>)],
         range: Range<usize>,
+        uid: u64,
+        flat: bool,
+        one_sample: bool,
     ) {
         let mut current: Option<Pass> = None;
         for (i, (kind, picture)) in draws.iter().enumerate().skip(range.start).take(range.len()) {
@@ -669,11 +897,18 @@ impl StageRenderer {
                     Pass::Screen => 2,
                     Pass::ScreenAdd => 3,
                 };
-                pass.set_pipeline(&self.pipelines[index]);
+                match (
+                    self.flat.as_ref().filter(|_| flat),
+                    self.single.as_ref().filter(|_| one_sample),
+                ) {
+                    (Some(flat), _) => pass.set_pipeline(&flat[index - 2]),
+                    (None, Some(single)) => pass.set_pipeline(&single[index]),
+                    (None, None) => pass.set_pipeline(&self.pipelines[index]),
+                }
                 current = Some(*kind);
             }
             let bind = match picture {
-                Some(id) => match self.pictures.get(id) {
+                Some(id) => match self.pictures.get(&(uid, *id)) {
                     Some(g) => &g.bind,
                     None => continue,
                 },

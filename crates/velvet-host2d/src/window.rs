@@ -1,11 +1,13 @@
 //! The window: winit for the window and its events, wgpu to show the canvas (or the stage) letterboxed.
 
+use std::cell::RefCell;
 use std::error::Error;
+use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Instant;
 
 use velvet_canvas::{Canvas, Point};
-use velvet_stage::{Stage, StageRenderer};
+use velvet_stage::{SharedRenderer, Stage, StageRenderer};
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalSize;
 use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
@@ -80,6 +82,9 @@ struct Running {
     cursor: Option<(f64, f64)>,
     /// True while the pointer is on the picture.
     on_picture: bool,
+    /// Whether the window is the one in use. One that is not takes no pointing: the pointer only crosses it on its
+    /// way elsewhere (its place is still kept, for the click that comes back to the window).
+    focused: bool,
     /// Whether the system's arrow is shown (the game hides it while it draws its own).
     pointer_shown: bool,
 }
@@ -93,7 +98,8 @@ impl<G: Game2D> App<G> {
         running.presenter.resize(width, height);
         // The logical size follows the window's shape as far as the game allows; the canvas is made again at it.
         let (lw, lh) = self.config.logical_for(width, height);
-        running.viewport = Viewport::letterbox(width, height, lw, lh);
+        running.viewport = Viewport::letterbox(width, height, lw, lh)
+            .map(|v| v.filling(width, height, self.config.fill_near_shape));
         if (lw, lh) != (self.canvas.width(), self.canvas.height()) {
             let (pw, ph) = (self.canvas.pixel_width(), self.canvas.pixel_height());
             self.canvas = Canvas::with_pixels(lw, lh, pw, ph);
@@ -133,6 +139,15 @@ impl<G: Game2D> App<G> {
         let Some(running) = self.running.as_mut() else {
             return;
         };
+        // The game asked for fullscreen or a window (its settings).
+        if let Some(full) = self.game.take_fullscreen_request() {
+            if full != running.window.fullscreen().is_some() {
+                running
+                    .window
+                    .set_fullscreen(full.then_some(Fullscreen::Borderless(None)));
+            }
+            self.game.fullscreen_changed(full);
+        }
         // The system's arrow hides while the game draws its own pointer, over the picture only (on the bars it is the
         // window's).
         let shown = self.game.shows_pointer() || !running.on_picture;
@@ -159,6 +174,7 @@ impl<G: Game2D> App<G> {
         if let Err(e) = shown {
             eprintln!("[velvet-host2d] frame not shown: {e}");
         }
+        self.game.frame_drawn();
         self.frames += 1;
         if let Some((after, path)) = self.capture_after.clone() {
             if self.frames >= after {
@@ -197,6 +213,9 @@ impl<G: Game2D> App<G> {
             return;
         };
         running.cursor = Some((x, y));
+        if !running.focused {
+            return;
+        }
         match running.viewport.and_then(|v| v.to_logical(x, y)) {
             Some((lx, ly)) => {
                 running.on_picture = true;
@@ -283,7 +302,12 @@ impl<G: Game2D> ApplicationHandler for App<G> {
                 self.config.min_width,
                 self.config.min_height,
             ))
-            .with_maximized(self.config.maximized);
+            .with_maximized(self.config.maximized)
+            .with_fullscreen(
+                self.config
+                    .fullscreen
+                    .then_some(Fullscreen::Borderless(None)),
+            );
         let window = match event_loop.create_window(attributes) {
             Ok(w) => Arc::new(w),
             Err(e) => {
@@ -292,14 +316,18 @@ impl<G: Game2D> ApplicationHandler for App<G> {
                 return;
             }
         };
-        let presenter = match pollster::block_on(Presenter::new(window.clone())) {
-            Ok(p) => p,
-            Err(e) => {
-                self.error = Some(e);
-                event_loop.exit();
-                return;
-            }
-        };
+        let mut presenter =
+            match pollster::block_on(Presenter::new(window.clone(), self.config.frugal)) {
+                Ok(p) => p,
+                Err(e) => {
+                    self.error = Some(e);
+                    event_loop.exit();
+                    return;
+                }
+            };
+        if self.game.stage().is_some() {
+            self.game.stage_renderer_ready(presenter.stage_renderer());
+        }
         let size = window.inner_size();
         self.running = Some(Running {
             window,
@@ -307,6 +335,7 @@ impl<G: Game2D> ApplicationHandler for App<G> {
             viewport: None,
             cursor: None,
             on_picture: false,
+            focused: true,
             pointer_shown: true,
         });
         self.resized(size.width, size.height);
@@ -322,6 +351,15 @@ impl<G: Game2D> ApplicationHandler for App<G> {
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::Resized(size) => self.resized(size.width, size.height),
             WindowEvent::CursorMoved { position, .. } => self.pointer_to(position.x, position.y),
+            WindowEvent::Focused(focused) => {
+                if let Some(running) = self.running.as_mut() {
+                    running.focused = focused;
+                    if !focused && running.on_picture {
+                        running.on_picture = false;
+                        self.input.push(InputEvent::PointerLeft);
+                    }
+                }
+            }
             WindowEvent::CursorLeft { .. } => {
                 if let Some(running) = self.running.as_mut() {
                     running.cursor = None;
@@ -359,6 +397,7 @@ impl<G: Game2D> ApplicationHandler for App<G> {
                                     running.window.set_fullscreen(
                                         full.then_some(Fullscreen::Borderless(None)),
                                     );
+                                    self.game.fullscreen_changed(full);
                                 }
                             }
                             self.input.push(InputEvent::KeyDown(code));
@@ -434,9 +473,10 @@ struct Presenter {
     source: Option<Source>,
     /// The canvas laid over a stage (premultiplied).
     overlay: wgpu::RenderPipeline,
-    /// The stage's renderer for the window, and one for captures (another texture format).
-    stage: Option<StageRenderer>,
-    capture: Option<StageRenderer>,
+    /// The stage's renderer for the window (also draws its captures).
+    stage: Option<SharedRenderer>,
+    /// See [`crate::HostConfig::frugal`].
+    frugal: bool,
 }
 
 /// The canvas's texture, and its bindings with each sampler.
@@ -448,12 +488,35 @@ struct Source {
 }
 
 impl Presenter {
-    async fn new(window: Arc<Window>) -> Result<Presenter, String> {
+    async fn new(window: Arc<Window>, frugal: bool) -> Result<Presenter, String> {
+        // As in Demon Queen: DX12 on Windows (Vulkan lost the device on the development machine). A frugal game tries
+        // OpenGL first.
+        let attempts: &[Option<wgpu::Backends>] = if !cfg!(target_os = "windows") {
+            &[None]
+        } else if frugal {
+            &[Some(wgpu::Backends::GL), Some(wgpu::Backends::DX12)]
+        } else {
+            &[Some(wgpu::Backends::DX12)]
+        };
+        let mut failure = String::from("no graphics backend");
+        for backends in attempts {
+            match Self::open(window.clone(), *backends, frugal).await {
+                Ok(presenter) => return Ok(presenter),
+                Err(e) => failure = e,
+            }
+        }
+        Err(failure)
+    }
+
+    async fn open(
+        window: Arc<Window>,
+        backends: Option<wgpu::Backends>,
+        frugal: bool,
+    ) -> Result<Presenter, String> {
         // One backend on Android (Vulkan or OpenGL ES, never both: see instance_descriptor).
         let mut descriptor = velvet_platform::gpu::instance_descriptor();
-        // As in Demon Queen: DX12 on Windows (Vulkan lost the device on the development machine).
-        if cfg!(target_os = "windows") {
-            descriptor.backends = wgpu::Backends::DX12;
+        if let Some(backends) = backends {
+            descriptor.backends = backends;
             descriptor = descriptor.with_env();
         }
         let instance = wgpu::Instance::new(&descriptor);
@@ -586,8 +649,26 @@ impl Presenter {
             source: None,
             overlay,
             stage: None,
-            capture: None,
+            frugal,
         })
+    }
+
+    /// The stage's renderer, made the first time.
+    fn stage_renderer(&mut self) -> SharedRenderer {
+        let (device, queue, format, frugal) =
+            (&self.device, &self.queue, self.config.format, self.frugal);
+        self.stage
+            .get_or_insert_with(|| SharedRenderer {
+                device: device.clone(),
+                queue: queue.clone(),
+                renderer: Rc::new(RefCell::new(if frugal {
+                    StageRenderer::frugal(device, queue, format, 4)
+                } else {
+                    StageRenderer::new(device, queue, format, 4)
+                })),
+                format,
+            })
+            .clone()
     }
 
     fn resize(&mut self, width: u32, height: u32) {
@@ -764,9 +845,8 @@ impl Presenter {
                 label: Some("velvet-host2d stage"),
             });
         let format = self.config.format;
-        let renderer = self
-            .stage
-            .get_or_insert_with(|| StageRenderer::new(&self.device, &self.queue, format, 4));
+        let shared = self.stage_renderer();
+        let mut renderer = shared.renderer.borrow_mut();
         let rect = [
             viewport.x as f32,
             viewport.y as f32,
@@ -805,6 +885,7 @@ impl Presenter {
             pass.set_viewport(rect[0], rect[1], rect[2], rect[3], 0.0, 1.0);
             pass.draw(0..3, 0..1);
         }
+        drop(renderer);
         self.queue.submit(Some(encoder.finish()));
         frame.present();
         let _ = self.device.poll(wgpu::Maintain::Poll);
@@ -813,14 +894,6 @@ impl Presenter {
 
     /// The stage drawn again at a size and read back (sRGB RGBA), for screenshots and captures.
     fn capture_stage(&mut self, stage: &Stage, width: u32, height: u32) -> Vec<u8> {
-        let renderer = self.capture.get_or_insert_with(|| {
-            StageRenderer::new(
-                &self.device,
-                &self.queue,
-                wgpu::TextureFormat::Rgba8UnormSrgb,
-                4,
-            )
-        });
-        velvet_stage::render_rgba(&self.device, &self.queue, renderer, stage, width, height)
+        self.stage_renderer().render_rgba(stage, width, height)
     }
 }

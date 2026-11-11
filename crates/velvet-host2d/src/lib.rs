@@ -75,6 +75,15 @@ pub struct HostConfig {
     pub overlay: bool,
     /// Whether the window opens maximised (it can always go fullscreen with F11 or Alt+Enter).
     pub maximized: bool,
+    /// Whether the window opens fullscreen (borderless, on its own screen); a game's settings remember it.
+    pub fullscreen: bool,
+    /// A game of still pictures, as light as it can be: on Windows OpenGL before DX12 (whose driver alone can take
+    /// hundreds of megabytes, and which old graphics cards lack), and a frugal stage renderer
+    /// ([`velvet_stage::StageRenderer::frugal`]).
+    pub frugal: bool,
+    /// How far the window's shape may be from the picture's and still be filled, with no bars (0.04 is 4 %; 0 keeps
+    /// the exact shape).
+    pub fill_near_shape: f32,
 }
 
 impl HostConfig {
@@ -95,6 +104,9 @@ impl HostConfig {
             captures_dir: Some(PathBuf::from("captures")),
             overlay: true,
             maximized: false,
+            fullscreen: false,
+            frugal: false,
+            fill_near_shape: 0.0,
         }
     }
 
@@ -187,6 +199,23 @@ pub trait Game2D {
     fn shows_pointer(&self) -> bool {
         true
     }
+
+    /// The window's stage renderer, once it exists: for drawing a stage elsewhere (a save's picture) with the same
+    /// device and textures.
+    fn stage_renderer_ready(&mut self, _renderer: velvet_stage::SharedRenderer) {}
+
+    /// A frame went to the screen: what the stage sent to the graphics card may be let go
+    /// ([`velvet_stage::Stage::release_uploaded`]).
+    fn frame_drawn(&mut self) {}
+
+    /// The game asks for fullscreen (`Some(true)`) or a window (`Some(false)`), once: the host asks after every frame
+    /// and acts on the answer (a settings screen's switch, say). None leaves it as it is.
+    fn take_fullscreen_request(&mut self) -> Option<bool> {
+        None
+    }
+
+    /// The window went fullscreen or back to a window (by F11 or Alt+Enter, or as the game asked).
+    fn fullscreen_changed(&mut self, _fullscreen: bool) {}
 }
 
 #[cfg(test)]

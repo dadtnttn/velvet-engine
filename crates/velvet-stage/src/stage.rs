@@ -2,6 +2,8 @@
 //! where the pointer lands, and where a point of the world shows on the screen.
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::Mutex;
 
 use velvet_canvas::Canvas;
 use velvet_math::{Mat4, Vec2, Vec3};
@@ -234,7 +236,16 @@ pub const MAX_LIGHTS: usize = 16;
 pub struct Picture {
     pub canvas: Canvas,
     pub version: u64,
+    /// A renderer holds this version (see [`Stage::release_uploaded`]).
+    pub(crate) uploaded: AtomicBool,
 }
+
+/// Each stage's number, so that a renderer can keep the textures of several stages apart.
+static NEXT_STAGE: AtomicU64 = AtomicU64::new(1);
+/// Set by a renderer that keeps the textures of stages not on show: it then needs to hear which stages are gone.
+pub(crate) static STAGES_WATCHED: AtomicBool = AtomicBool::new(false);
+/// The stages dropped since a frugal renderer last looked.
+pub(crate) static DROPPED_STAGES: Mutex<Vec<u64>> = Mutex::new(Vec::new());
 
 /// Where the pointer landed on a card.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -253,6 +264,7 @@ pub struct Hit {
 /// The pictures, the cards, the camera and the lights.
 #[derive(Debug)]
 pub struct Stage {
+    uid: u64,
     pub camera: Camera,
     /// The screen's logical size (the HUD's coordinates and the pointer's).
     pub screen: Vec2,
@@ -270,10 +282,21 @@ pub struct Stage {
     next_card: CardId,
 }
 
+impl Drop for Stage {
+    fn drop(&mut self) {
+        if STAGES_WATCHED.load(Ordering::Relaxed) {
+            if let Ok(mut gone) = DROPPED_STAGES.lock() {
+                gone.push(self.uid);
+            }
+        }
+    }
+}
+
 impl Stage {
     /// An empty stage for a screen of a logical size.
     pub fn new(width: f32, height: f32) -> Stage {
         Stage {
+            uid: NEXT_STAGE.fetch_add(1, Ordering::Relaxed),
             camera: Camera::new(Vec3::new(0.0, 0.0, 10.0), Vec3::ZERO),
             screen: Vec2::new(width, height),
             clear: [0.0, 0.0, 0.0],
@@ -302,6 +325,7 @@ impl Stage {
             Picture {
                 canvas,
                 version: next_version(),
+                uploaded: AtomicBool::new(false),
             },
         );
         id
@@ -314,8 +338,34 @@ impl Stage {
             Picture {
                 canvas,
                 version: next_version(),
+                uploaded: AtomicBool::new(false),
             },
         );
+    }
+
+    /// This stage's number among all stages.
+    pub fn uid(&self) -> u64 {
+        self.uid
+    }
+
+    /// Lets go of the pixels of every picture a renderer already holds (its texture stays), except those of pickable
+    /// cards, whose clear pixels decide what the pointer hits. For a frugal renderer, which keeps the textures of a
+    /// stage while another is on show: another renderer could not draw these pictures any more.
+    pub fn release_uploaded(&mut self) {
+        let pinned: Vec<PictureId> = self
+            .cards
+            .iter()
+            .filter(|(_, c)| c.pickable)
+            .map(|(_, c)| c.picture)
+            .collect();
+        for (id, picture) in &mut self.pictures {
+            if !picture.canvas.is_released()
+                && picture.uploaded.load(Ordering::Relaxed)
+                && !pinned.contains(id)
+            {
+                picture.canvas.release_pixels();
+            }
+        }
     }
 
     pub fn remove_picture(&mut self, id: PictureId) {

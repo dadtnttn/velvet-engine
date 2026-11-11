@@ -1,5 +1,8 @@
 //! Drawing a stage without a window: for tests, bots and captures.
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use crate::render::StageRenderer;
 use crate::stage::Stage;
 
@@ -36,7 +39,13 @@ impl Offscreen {
             None,
         ))
         .map_err(|e| format!("the graphics device: {e}"))?;
-        let renderer = StageRenderer::new(&device, &queue, FORMAT, 4);
+        // VELVET_FRUGAL=1: the renderer a frugal window uses, to check that its picture is the same.
+        let make = if std::env::var_os("VELVET_FRUGAL").is_some() {
+            StageRenderer::frugal
+        } else {
+            StageRenderer::new
+        };
+        let renderer = make(&device, &queue, FORMAT, 4);
         Ok(Offscreen {
             device,
             queue,
@@ -70,11 +79,50 @@ impl Offscreen {
     }
 }
 
-/// Draws a stage into a texture of its own and reads it back (also used for screenshots of a window).
+/// The renderer a window draws with, for drawing a stage elsewhere too (a save's picture) with the same device and the
+/// textures already there. Stays on the thread of the window.
+#[derive(Clone)]
+pub struct SharedRenderer {
+    pub device: wgpu::Device,
+    pub queue: wgpu::Queue,
+    pub renderer: Rc<RefCell<StageRenderer>>,
+    /// The format the renderer draws in.
+    pub format: wgpu::TextureFormat,
+}
+
+impl SharedRenderer {
+    /// The stage drawn at `width`×`height` pixels: sRGB RGBA, row after row.
+    pub fn render_rgba(&self, stage: &Stage, width: u32, height: u32) -> Vec<u8> {
+        render_rgba_as(
+            &self.device,
+            &self.queue,
+            &mut self.renderer.borrow_mut(),
+            self.format,
+            stage,
+            width,
+            height,
+        )
+    }
+}
+
+/// Draws a stage into a texture of its own and reads it back (for a renderer made for [`FORMAT`]).
 pub fn render_rgba(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     renderer: &mut StageRenderer,
+    stage: &Stage,
+    width: u32,
+    height: u32,
+) -> Vec<u8> {
+    render_rgba_as(device, queue, renderer, FORMAT, stage, width, height)
+}
+
+/// Draws a stage into a texture of `format` (the renderer's) and reads it back as RGBA.
+fn render_rgba_as(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    renderer: &mut StageRenderer,
+    format: wgpu::TextureFormat,
     stage: &Stage,
     width: u32,
     height: u32,
@@ -89,7 +137,7 @@ pub fn render_rgba(
         mip_level_count: 1,
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
-        format: FORMAT,
+        format,
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
         view_formats: &[],
     });
@@ -102,7 +150,7 @@ pub fn render_rgba(
         queue,
         &mut encoder,
         &view,
-        FORMAT,
+        format,
         (width, height),
         [0.0, 0.0, width as f32, height as f32],
         stage,
@@ -147,5 +195,13 @@ pub fn render_rgba(
     }
     drop(data);
     buffer.unmap();
+    if matches!(
+        format,
+        wgpu::TextureFormat::Bgra8Unorm | wgpu::TextureFormat::Bgra8UnormSrgb
+    ) {
+        for i in (0..out.len()).step_by(4) {
+            out.swap(i, i + 2);
+        }
+    }
     out
 }
