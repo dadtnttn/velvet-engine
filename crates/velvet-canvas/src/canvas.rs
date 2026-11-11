@@ -134,6 +134,8 @@ pub struct Canvas {
     saved: Vec<State>,
     /// Shadows already blurred: a shadow of the same shape is only placed again.
     shadows: HashMap<ShadowKey, Pixmap>,
+    /// The pixels were let go (see [`Canvas::release_pixels`]): the size they had.
+    released: Option<(u32, u32)>,
 }
 
 impl std::fmt::Debug for Canvas {
@@ -170,7 +172,24 @@ impl Canvas {
             },
             saved: Vec::new(),
             shadows: HashMap::new(),
+            released: None,
         }
+    }
+
+    /// Lets the pixels go, keeping the sizes: for a picture the graphics card already holds, which nobody will read or
+    /// paint again. Afterwards [`Canvas::pixels`] is one clear pixel and drawing on it is lost.
+    pub fn release_pixels(&mut self) {
+        if self.released.is_none() {
+            self.released = Some((self.pixmap.width(), self.pixmap.height()));
+            self.pixmap = Pixmap::new(1, 1).expect("one pixel");
+            self.shadows = HashMap::new();
+            self.saved = Vec::new();
+        }
+    }
+
+    /// True once the pixels were let go.
+    pub fn is_released(&self) -> bool {
+        self.released.is_some()
     }
 
     /// A layer for this canvas: a canvas of its own of a logical size, at this canvas's pixels per logical pixel. What
@@ -210,11 +229,11 @@ impl Canvas {
     }
 
     pub fn pixel_width(&self) -> u32 {
-        self.pixmap.width()
+        self.released.map_or(self.pixmap.width(), |r| r.0)
     }
 
     pub fn pixel_height(&self) -> u32 {
-        self.pixmap.height()
+        self.released.map_or(self.pixmap.height(), |r| r.1)
     }
 
     /// The pixels: premultiplied RGBA, row by row.
@@ -543,32 +562,28 @@ impl Canvas {
             Align::Right => x - width,
         };
         let baseline = y + style.baseline_offset();
-        let glyphs = style.font.layout(text, style.size, style.letter_spacing);
-        let scale = style.font.scale(style.size);
+        let laid = style.font.layout(text, style.size, style.letter_spacing);
+        let glyphs = laid.glyphs.as_slice();
         if let Some((offset, color)) = style.shadow {
             if let Some((w, _)) = style.outline {
-                self.glyphs(
-                    &glyphs,
-                    left + offset.x,
-                    baseline + offset.y,
-                    scale,
-                    color,
-                    Some(w),
-                );
+                self.glyphs(glyphs, left + offset.x, baseline + offset.y, color, Some(w));
             }
-            self.glyphs(
-                &glyphs,
-                left + offset.x,
-                baseline + offset.y,
-                scale,
-                color,
-                None,
-            );
+            self.glyphs(glyphs, left + offset.x, baseline + offset.y, color, None);
         }
         if let Some((w, color)) = style.outline {
-            self.glyphs(&glyphs, left, baseline, scale, color, Some(w));
+            self.glyphs(glyphs, left, baseline, color, Some(w));
         }
-        self.glyphs(&glyphs, left, baseline, scale, style.color, None);
+        self.glyphs(glyphs, left, baseline, style.color, None);
+        // The pictures among the letters (colour emoji): standing on the line as a capital does, as see-through as
+        // the text.
+        let side = style.size * crate::font::PICTURE_SIDE;
+        for (picture, pen) in &laid.pictures {
+            let image = picture
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            let place = Rect::new(left + pen, baseline - side * 0.84, side, side);
+            self.draw_image(&image, place, style.color.a as f32 / 255.0);
+        }
         width
     }
 
@@ -647,10 +662,9 @@ impl Canvas {
     /// Fills (or, with `outline`, strokes by that many logical pixels outside) the glyphs of a line.
     fn glyphs(
         &mut self,
-        glyphs: &[(Option<tiny_skia::Path>, f32)],
+        glyphs: &[crate::font::Glyph],
         left: f32,
         baseline: f32,
-        scale: f32,
         color: Color,
         outline: Option<f32>,
     ) {
@@ -658,21 +672,21 @@ impl Canvas {
             return;
         };
         let base = self.to_pixels();
-        let stroke = outline.map(|w| Stroke {
-            width: 2.0 * w / scale,
-            line_join: LineJoin::Round,
-            line_cap: LineCap::Round,
-            ..Stroke::default()
-        });
-        for (path, pen) in glyphs {
-            let Some(path) = path else { continue };
+        for glyph in glyphs {
+            let Some(path) = &glyph.path else { continue };
             let t = base
-                .pre_translate(left + pen, baseline)
-                .pre_scale(scale, scale);
-            match &stroke {
-                Some(stroke) => {
+                .pre_translate(left + glyph.x, baseline + glyph.y)
+                .pre_scale(glyph.scale, glyph.scale);
+            match outline {
+                Some(w) => {
+                    let stroke = Stroke {
+                        width: 2.0 * w / glyph.scale,
+                        line_join: LineJoin::Round,
+                        line_cap: LineCap::Round,
+                        ..Stroke::default()
+                    };
                     self.pixmap
-                        .stroke_path(path, &paint, stroke, t, self.state.clip.as_deref())
+                        .stroke_path(path, &paint, &stroke, t, self.state.clip.as_deref())
                 }
                 None => self.pixmap.fill_path(
                     path,

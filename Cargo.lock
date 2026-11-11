@@ -5024,6 +5024,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "unicode-bidi"
+version = "0.3.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5c1cb5db39152898a79168971543b1cb5020dff7fe43c8dc468b0885f5e29df5"
+
+[[package]]
 name = "unicode-bidi-mirroring"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5304,7 +5310,9 @@ dependencies = [
  "ab_glyph",
  "image",
  "resvg",
+ "rustybuzz",
  "tiny-skia",
+ "unicode-bidi",
  "usvg",
 ]
 

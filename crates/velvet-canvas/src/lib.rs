@@ -32,7 +32,7 @@ mod svg;
 
 pub use canvas::{Blend, Canvas, Fill, StrokeStyle};
 pub use color::Color;
-pub use font::{Align, Font, FontError, TextStyle};
+pub use font::{Align, Font, FontError, Pictures, TextStyle};
 pub use geometry::{Point, Rect};
 pub use image::{Fit, Image, ImageError};
 pub use path::{Path, PathBuilder};
