@@ -55,7 +55,7 @@ use play_cmd::{cmd_play_project_opts, cmd_play_story_product, cmd_recheck_replay
 use scene3d_cmd::{cmd_scene3d_check, cmd_scene3d_flatten};
 use script_cmd::{cmd_script_check, cmd_script_fmt, cmd_script_lsp, cmd_script_run};
 use story_cmd::{
-    cmd_story_build, cmd_story_check, cmd_story_dump_ast, cmd_story_dump_lowered,
+    cmd_story_build, cmd_story_check, cmd_story_dump_ast, cmd_story_dump_program,
     cmd_story_extract_loc, cmd_story_format, cmd_story_run, cmd_story_studio_model,
 };
 use style_cmd::{
@@ -903,12 +903,12 @@ enum StoryCommands {
         /// Path to `.vstory`.
         path: PathBuf,
     },
-    /// Lower to Velvet Script 2 IR / OpVs2 unit.
+    /// Build the StoryProgram (the canonical IR StoryPlayer runs).
     Build {
         /// Path to `.vstory`.
         path: PathBuf,
     },
-    /// Execute via existing VS2 host (OpVs2), not a second VM.
+    /// Play the story on StoryPlayer.
     Run {
         /// Path to `.vstory`.
         path: PathBuf,
@@ -927,9 +927,9 @@ enum StoryCommands {
     /// Dump narrative AST as JSON (developer tool).
     #[command(name = "dump-ast")]
     DumpAst { path: PathBuf },
-    /// Dump lowered OpVs2 disassembly (developer tool).
-    #[command(name = "dump-lowered")]
-    DumpLowered { path: PathBuf },
+    /// Dump the StoryProgram as JSON (developer tool).
+    #[command(name = "dump-program")]
+    DumpProgram { path: PathBuf },
     /// Emit Studio structured model JSON.
     #[command(name = "studio-model")]
     StudioModel { path: PathBuf },
@@ -1126,7 +1126,7 @@ fn dispatch(cli: Cli) -> Result<()> {
                 StoryCommands::Run { path, choice } => cmd_story_run(path, choice),
                 StoryCommands::Format { path, check } => cmd_story_format(path, check),
                 StoryCommands::DumpAst { path } => cmd_story_dump_ast(path),
-                StoryCommands::DumpLowered { path } => cmd_story_dump_lowered(path),
+                StoryCommands::DumpProgram { path } => cmd_story_dump_program(path),
                 StoryCommands::StudioModel { path } => cmd_story_studio_model(path),
                 StoryCommands::ExtractLoc { path, out } => cmd_story_extract_loc(path, out),
             };

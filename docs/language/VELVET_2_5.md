@@ -13,15 +13,14 @@ Velvet **2.5** no es “VS2 terminado” ni “+30k LOC”. Es el hito **post-li
 ```text
 .vstory → parser → AST → sema
        → StoryProgram          ← IR canónica
-            ├→ StoryPlayer / VnSession   ← runtime preferido
-            └→ OpVs2 (derivado de StoryProgram)  ← fallback; no es un lower paralelo
+            └→ StoryPlayer / VnSession   ← el runtime (lógica: Velvet Script 3, `logic "…"`)
 ```
 
 Instrucciones de presentación (`sound`, `pause`, `with`/`transition`, `return`) ya bajan a `StoryOp` reales (no `Nop`).
 
 ```bash
 velvet story check stories/main.vstory
-velvet story build stories/main.vstory   # StoryProgram + OpVs2 summary
+velvet story build stories/main.vstory   # resumen del StoryProgram
 velvet story run stories/main.vstory --choice 0   # product path first
 ```
 

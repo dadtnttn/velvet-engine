@@ -203,6 +203,12 @@ pub enum StoryOp {
         /// Transition id.
         name: String,
     },
+    /// Jump to the scene the story's logic function answers with (`goto logic.name`); an empty
+    /// or non-text answer goes on with the next op.
+    JumpLogic {
+        /// Function of the story's logic file.
+        function: String,
+    },
     /// Return from a Call scene (pops call stack).
     Return,
     /// No-op / pause beat.
@@ -236,6 +242,12 @@ pub enum StoryExpr {
     Neg {
         /// Inner.
         inner: Box<StoryExpr>,
+    },
+    /// What a function of the story's logic file answers (`logic.name`): it is called with a map
+    /// of the story's variables.
+    Logic {
+        /// Function name.
+        function: String,
     },
 }
 
@@ -278,6 +290,11 @@ pub enum StoryOperand {
     Value {
         /// Literal.
         value: StoryValue,
+    },
+    /// What a function of the story's logic file answers (`logic.name`).
+    Logic {
+        /// Function name.
+        function: String,
     },
 }
 
@@ -340,6 +357,11 @@ pub enum StoryCond {
         op: StoryCmpOp,
         /// Right operand.
         right: StoryOperand,
+    },
+    /// Truthiness of what a function of the story's logic file answers (`if logic.name:`).
+    Logic {
+        /// Function name.
+        function: String,
     },
 }
 
@@ -418,6 +440,19 @@ pub struct StoryProgram {
     pub transforms: IndexMap<String, crate::atl::TransformDef>,
     /// Entry scene name.
     pub entry: String,
+    /// The story's logic file (Velvet Script 3), whose functions `logic.name` calls.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub logic: Option<StoryLogic>,
+}
+
+/// A story's logic file: Velvet Script 3 (`// @edition 3`). Each `logic.name` of the story calls
+/// its function `name` with one argument, a map of the story's variables.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct StoryLogic {
+    /// Where it was read from (for messages).
+    pub path: String,
+    /// Its source.
+    pub source: String,
 }
 
 impl StoryProgram {
@@ -435,6 +470,7 @@ impl StoryProgram {
             "screens": &self.screens,
             "transforms": &self.transforms,
             "initial_vars": &self.initial_vars,
+            "logic": &self.logic,
         });
         let bytes = serde_json::to_vec(&payload).unwrap_or_default();
         let hash = Sha256::digest(&bytes);
@@ -451,6 +487,7 @@ impl StoryProgram {
             screens: IndexMap::new(),
             transforms: IndexMap::new(),
             entry: "main".into(),
+            logic: None,
         }
     }
 

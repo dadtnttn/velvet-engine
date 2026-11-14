@@ -1327,6 +1327,16 @@ impl StoryPlayer {
                 self.jump_to(&target);
                 false
             }
+            StoryOp::JumpLogic { function } => match self.logic_value(&function) {
+                StoryValue::String(target) if !target.trim().is_empty() => {
+                    self.exec_stack.clear();
+                    self.pending_menu = None;
+                    self.choice_advances_scene = false;
+                    self.jump_to(target.trim());
+                    false
+                }
+                _ => true,
+            },
             StoryOp::Call { target } => {
                 // Save scene IP + nested stack so return resumes the outer body.
                 let cont = if self.exec_stack.is_empty() {
@@ -1501,9 +1511,31 @@ impl StoryPlayer {
         }
     }
 
+    /// What function `function` of the story's logic file answers, given the story's variables.
+    /// With no logic file, or on an error (which is reported), the answer is null.
+    fn logic_value(&self, function: &str) -> StoryValue {
+        let Some(logic) = self.program.logic.as_ref() else {
+            eprintln!("[story] logic.{function}: the story has no logic file");
+            return StoryValue::Null;
+        };
+        match crate::vs3_bridge::call_vs3_with_vars(
+            &logic.source,
+            Some(&logic.path),
+            function,
+            self.vars.play.iter(),
+        ) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("[story] logic.{function} ({}): {e}", logic.path);
+                StoryValue::Null
+            }
+        }
+    }
+
     /// Evaluate a narrative condition against current variables.
     fn eval_cond(&self, cond: &StoryCond) -> bool {
         match cond {
+            StoryCond::Logic { function } => self.logic_value(function).is_truthy(),
             StoryCond::Var { name } => self.vars.get(name).is_truthy(),
             StoryCond::Const { value } => *value,
             StoryCond::Not { inner } => !self.eval_cond(inner),
@@ -1521,6 +1553,7 @@ impl StoryPlayer {
         match expr {
             StoryExpr::Value { value } => value.clone(),
             StoryExpr::Var { name } => self.vars.get(name),
+            StoryExpr::Logic { function } => self.logic_value(function),
             StoryExpr::Neg { inner } => {
                 let v = self.eval_expr(inner);
                 if let Some(i) = v.as_i64() {
@@ -1583,6 +1616,7 @@ impl StoryPlayer {
         match op {
             StoryOperand::Var { name } => self.vars.get(name),
             StoryOperand::Value { value } => value.clone(),
+            StoryOperand::Logic { function } => self.logic_value(function),
         }
     }
 

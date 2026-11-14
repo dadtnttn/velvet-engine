@@ -6,8 +6,9 @@
 //! - `parseGuion(text, file, castJson)` reads one guion and returns its id, title, room, scenes,
 //!   problems and metadata.
 //! - `GuionLibrary(castJson)` holds the guiones of one game, read with one cast. Its methods:
-//!   `add(file, text)`, `problems()`, `scenes()`, `entry(who, place, varsJson)` (the scene to play
-//!   on meeting someone or using a place) and `start(scene, varsJson)`.
+//!   `add(file, text)`, `addLogic(file, text)` (a guion's Velvet Script 3 logic file, for
+//!   `@decide`), `problems()`, `scenes()`, `entry(who, place, varsJson)` (the scene to play on
+//!   meeting someone or using a place) and `start(scene, varsJson)`.
 //! - `GuionPortraits(json)` holds the faces of the dialogue box (a `retratos.json`). Its methods:
 //!   `find(who, mood)` and `entries()`.
 //! - `GuionConversation`, from `start`, is a conversation in progress with the story's variables.
@@ -487,6 +488,39 @@ impl GuionLibrary {
         lib.problems.extend(problems);
         lib.guiones.push(guion);
         summary
+    }
+
+    /// Gives a guion its logic file (`<file>.vel`, Velvet Script 3, for `@decide`) and returns the
+    /// problems found: the file does not compile, or a `@decide` of that guion names a function it
+    /// does not export. The guion is the one added from the file with the same name (`lydia.vel`
+    /// goes with `lydia.md`), else the one whose id is that name. Add the guion first.
+    #[wasm_bindgen(js_name = addLogic)]
+    pub fn add_logic(&mut self, file: &str, text: &str) -> String {
+        let lib = Rc::make_mut(&mut self.lib);
+        let path = Path::new(file);
+        let stem = path
+            .file_stem()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let id = lib
+            .guiones
+            .iter()
+            .find(|g| {
+                g.path
+                    .file_stem()
+                    .is_some_and(|s| s.to_string_lossy() == stem)
+            })
+            .map(|g| g.id.clone())
+            .unwrap_or(stem);
+        let before = lib.problems.len();
+        lib.add_logic(&id, text, path);
+        let decides = lib.decide_problems(&id);
+        lib.problems.extend(decides);
+        let problems: Vec<ProblemJson> = lib.problems[before..]
+            .iter()
+            .map(ProblemJson::from)
+            .collect();
+        json(&problems)
     }
 
     /// Every problem of every guion added, in the order they were found.

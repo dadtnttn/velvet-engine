@@ -59,6 +59,20 @@ export class GuionLibrary {
     return decode<GuionFile>(this.#native.add(file, text));
   }
 
+  /**
+   * Gives a guion its logic file: `<file>.vel`, in Velvet Script 3, whose functions answer the
+   * guion's `@decide` steps. Add the guion first; the logic goes with the guion added from the
+   * file of the same name (`lydia.vel` with `lydia.md`).
+   *
+   * @param file - the logic file's name, such as `lydia.vel`.
+   * @param text - its Velvet Script 3 source.
+   * @returns the problems found: the file does not compile, or a `@decide` names a function it
+   *   does not export. They are kept in the library too.
+   */
+  addLogic(file: string, text: string): GuionProblem[] {
+    return decode<GuionProblem[]>(this.#native.addLogic(file, text));
+  }
+
   /** Every problem of every guion added, in the order they were found. */
   problems(): GuionProblem[] {
     return decode<GuionProblem[]>(this.#native.problems());

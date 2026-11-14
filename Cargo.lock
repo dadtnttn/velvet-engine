@@ -1740,8 +1740,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ff2abc00be7fca6ebc474524697ae276ad847ad0a6b3faa4bcb027e9a4614ad0"
 dependencies = [
  "cfg-if",
+ "js-sys",
  "libc",
  "wasi",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -5560,8 +5562,11 @@ dependencies = [
 name = "velvet-guion"
 version = "0.3.0"
 dependencies = [
+ "indexmap",
  "serde",
  "serde_json",
+ "velvet-script-vs3",
+ "velvet-story",
 ]
 
 [[package]]
@@ -6054,11 +6059,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror 2.0.18",
- "velvet-script-bytecode",
- "velvet-script-compiler",
- "velvet-script-hir",
  "velvet-script-i18n",
- "velvet-script-vm",
  "velvet-story",
 ]
 
@@ -6165,6 +6166,7 @@ dependencies = [
 name = "velvet-wasm"
 version = "0.3.0"
 dependencies = [
+ "getrandom 0.2.17",
  "serde",
  "serde_json",
  "velvet-guion",

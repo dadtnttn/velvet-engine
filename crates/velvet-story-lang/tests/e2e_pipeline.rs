@@ -1,7 +1,8 @@
-//! End-to-end: Velvet Story → lower → OpVs2 → Vs2Host → observable result.
+//! End-to-end: Velvet Story → StoryProgram → StoryPlayer → observable result.
 
+use velvet_story::StoryOp;
 use velvet_story_lang::commands::CommandRegistry;
-use velvet_story_lang::pipeline::{build_source, check_source, run_source};
+use velvet_story_lang::pipeline::{build_story_program, check_source, run_source_product};
 use velvet_story_lang::{format_source, is_idempotent, WELCOME_SAMPLE};
 
 #[test]
@@ -10,41 +11,13 @@ fn e2e_welcome_story() {
     let check = check_source(WELCOME_SAMPLE, "welcome.vstory", &cmds);
     assert!(check.ok, "{:?}", check.diags);
 
-    let build = build_source(WELCOME_SAMPLE, "welcome.vstory", &cmds);
-    assert!(build.ok);
-    let unit = build.lowered.as_ref().unwrap();
-    assert!(!unit.unit.code.is_empty());
-    assert!(unit.unit.entry_scenes.contains_key("start"));
-    assert!(unit.unit.entry_scenes.contains_key("ending"));
-    assert!(!unit.msg_ids.is_empty());
-    assert!(!unit.map.entries.is_empty());
+    let program = build_story_program(WELCOME_SAMPLE, "welcome.vstory", &cmds, "welcome").unwrap();
+    assert!(program.scenes.contains_key("start"));
+    assert!(program.scenes.contains_key("ending"));
 
-    let run = run_source(WELCOME_SAMPLE, "welcome.vstory", &cmds, 0);
-    assert!(run.ok);
+    let run = run_source_product(WELCOME_SAMPLE, "welcome.vstory", &cmds, 0).unwrap();
     assert!(run.steps > 0);
-    // Host should produce dialogue or presentation side-effects
-    assert!(
-        !run.dialogue.is_empty() || run.log.iter().any(|l| l.contains("say")),
-        "dialogue={:?} log={:?}",
-        run.dialogue,
-        run.log
-    );
-}
-
-#[test]
-fn e2e_uses_existing_vs2_opcodes() {
-    let cmds = CommandRegistry::builtin();
-    let build = build_source(WELCOME_SAMPLE, "w.vstory", &cmds);
-    let unit = build.lowered.unwrap();
-    // At least one story opcode from velvet-script-bytecode
-    use velvet_script_bytecode::opcodes_vs2::OpVs2;
-    let has_story = unit.unit.code.iter().any(|i| {
-        matches!(
-            i.op,
-            OpVs2::Say | OpVs2::Background | OpVs2::ShowChar | OpVs2::JumpScene | OpVs2::Menu
-        )
-    });
-    assert!(has_story);
+    assert!(!run.dialogue.is_empty(), "dialogue={:?}", run.dialogue);
 }
 
 #[test]
@@ -56,20 +29,7 @@ fn e2e_format_idempotent() {
 }
 
 #[test]
-fn e2e_source_map_points_to_vstory() {
-    let cmds = CommandRegistry::builtin();
-    let build = build_source(WELCOME_SAMPLE, "stories/welcome.vstory", &cmds);
-    let map = &build.lowered.unwrap().map;
-    assert_eq!(map.file, "stories/welcome.vstory");
-    assert!(map.entries.iter().any(|e| e.node_kind == "scene"));
-    assert!(map
-        .entries
-        .iter()
-        .any(|e| e.origin.file.contains("welcome")));
-}
-
-#[test]
-fn e2e_command_from_vs2_registry() {
+fn e2e_command_reaches_the_program_as_a_host_call() {
     let src = r#"
 scene start
 call combat.start:
@@ -80,29 +40,29 @@ end
 "#;
     let cmds = CommandRegistry::builtin();
     assert!(check_source(src, "c.vstory", &cmds).ok);
-    let r = run_source(src, "c.vstory", &cmds, 0);
-    assert!(r.ok);
+    let program = build_story_program(src, "c.vstory", &cmds, "c").unwrap();
+    let (name, args) = program
+        .scenes
+        .values()
+        .flat_map(|s| s.ops.iter())
+        .find_map(|op| match op {
+            StoryOp::HostCall { name, args } => Some((name.clone(), args.clone())),
+            _ => None,
+        })
+        .expect("a host call");
+    assert_eq!(name, "combat.start");
     assert!(
-        r.log.iter().any(|l| l.contains("command combat.start")),
-        "log={:?}",
-        r.log
+        args.values()
+            .any(|v| v.display_str().contains("forest_guardian")),
+        "a bare identifier stays a value: {args:?}"
     );
-    assert!(
-        r.log.iter().any(|l| l.contains("forest_guardian")),
-        "bare Ident enemy must lower as LoadConst, log={:?}",
-        r.log
-    );
-    assert!(r
-        .state
-        .iter()
-        .any(|(k, v)| k == "__last_command" && v.contains("combat.start")));
 }
 
 #[test]
 fn e2e_include_multi_file_goto() {
     use std::fs;
     use tempfile::tempdir;
-    use velvet_story_lang::pipeline::{check_path, run_path};
+    use velvet_story_lang::pipeline::{check_path, run_path_product};
 
     let dir = tempdir().unwrap();
     let part = dir.path().join("part.vstory");
@@ -121,8 +81,7 @@ fn e2e_include_multi_file_goto() {
         .items
         .iter()
         .any(|i| matches!(i, velvet_story_lang::ast::TopItem::Scene(s) if s.name == "hallway")));
-    let r = run_path(&main, &cmds, 0).unwrap();
-    assert!(r.ok);
+    let r = run_path_product(&main, &cmds, 0).unwrap();
     assert!(
         r.dialogue
             .iter()

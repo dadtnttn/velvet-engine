@@ -80,6 +80,13 @@ fn merge_includes(
     let items = std::mem::take(&mut file.items);
     for item in items {
         match item {
+            TopItem::Logic { path, span } => {
+                let resolved = resolve_include(base, &path).to_string_lossy().to_string();
+                out_items.push(TopItem::Logic {
+                    path: resolved,
+                    span,
+                });
+            }
             TopItem::Include { path, span } => {
                 let resolved = resolve_include(base, &path);
                 if !resolved.exists() {

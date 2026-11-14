@@ -1,13 +1,13 @@
 //! Lower Velvet Story AST → product [`StoryProgram`] (velvet-story IR).
 //!
 //! Preferred product path for Velvet 2.5 writers (not a second VM).
-//! Also builds parallel [`OpSrc`] trees so StoryProgram → OpVs2 can emit
-//! source maps with real PCs and include-aware origins.
+//! Also builds parallel [`OpSrc`] trees (the include-aware origin of each op) for tools that
+//! map ops back to their source.
 
 use indexmap::IndexMap;
 use velvet_story::{
-    AssignOp, Character, StoryArithOp, StoryChoice, StoryCmpOp, StoryCond, StoryExpr, StoryOp,
-    StoryOperand, StoryProgram, StoryScene, StoryValue,
+    AssignOp, Character, StoryArithOp, StoryChoice, StoryCmpOp, StoryCond, StoryExpr, StoryLogic,
+    StoryOp, StoryOperand, StoryProgram, StoryScene, StoryValue,
 };
 
 use crate::ast::{BinOp, Expr, Stmt, StoryFile, TopItem};
@@ -128,8 +128,12 @@ pub fn to_story_program_with_origins(
             TopItem::Include { .. } => {
                 // includes must be expanded before this lower
             }
+            TopItem::Logic { path, span } => {
+                program.logic = Some(load_logic(&file.file, path, span.line)?);
+            }
         }
     }
+    check_logic_calls(&program)?;
 
     if !program.scenes.contains_key(&program.entry) {
         if let Some(s) = first_scene {
@@ -260,6 +264,12 @@ fn lower_stmt(
                 }],
             )
         }
+        Stmt::Goto { target, span } if target.starts_with("logic.") => (
+            vec![StoryOp::JumpLogic {
+                function: target["logic.".len()..].to_owned(),
+            }],
+            vec![leaf(origin, *span, "goto", target.clone())],
+        ),
         Stmt::Goto { target, span } => (
             vec![StoryOp::Jump {
                 target: target.clone(),
@@ -413,6 +423,9 @@ fn lower_stmt(
 /// Lower a writer condition expression into product [`StoryCond`].
 fn expr_to_cond(e: &Expr, line: u32) -> Result<StoryCond, ToProgramError> {
     match e {
+        Expr::Ident(name, _) if name.starts_with("logic.") => Ok(StoryCond::Logic {
+            function: name["logic.".len()..].to_owned(),
+        }),
         Expr::Ident(name, _) => Ok(StoryCond::Var { name: name.clone() }),
         Expr::Bool(b, _) => Ok(StoryCond::Const { value: *b }),
         Expr::Unary {
@@ -478,6 +491,9 @@ fn binop_to_cmp(op: BinOp) -> Result<StoryCmpOp, ToProgramError> {
 
 fn expr_to_operand(e: &Expr, line: u32) -> Result<StoryOperand, ToProgramError> {
     match e {
+        Expr::Ident(name, _) if name.starts_with("logic.") => Ok(StoryOperand::Logic {
+            function: name["logic.".len()..].to_owned(),
+        }),
         Expr::Ident(name, _) => Ok(StoryOperand::var(name.clone())),
         _ => match expr_to_literal_value(e) {
             Some(v) => Ok(StoryOperand::value(v)),
@@ -499,6 +515,9 @@ fn expr_to_story_expr(e: &Expr) -> Option<StoryExpr> {
             .map(|f| StoryExpr::value(StoryValue::Float(f))),
         Expr::Bool(b, _) => Some(StoryExpr::value(StoryValue::Bool(*b))),
         Expr::Str(s, _) => Some(StoryExpr::value(StoryValue::String(s.clone()))),
+        Expr::Ident(name, _) if name.starts_with("logic.") => Some(StoryExpr::Logic {
+            function: name["logic.".len()..].to_owned(),
+        }),
         Expr::Ident(name, _) => Some(StoryExpr::var(name.clone())),
         Expr::Unary {
             op: UnaryOp::Neg,
@@ -574,6 +593,124 @@ fn collect_from_ops(ops: &[StoryOp], out: &mut Vec<(Option<String>, String)>) {
             }
             _ => {}
         }
+    }
+}
+
+/// Reads the logic file `path` of story `story_file` (a relative path is taken from the story's
+/// folder) and checks that it compiles.
+fn load_logic(story_file: &str, path: &str, line: u32) -> Result<StoryLogic, ToProgramError> {
+    let p = std::path::Path::new(path);
+    let full = if p.is_absolute() {
+        p.to_path_buf()
+    } else {
+        std::path::Path::new(story_file)
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new("."))
+            .join(p)
+    };
+    let shown = full.to_string_lossy().to_string();
+    let source = std::fs::read_to_string(&full).map_err(|e| ToProgramError {
+        message: format!("logic file {shown}: {e}"),
+        line,
+    })?;
+    velvet_story::vs3_logic_functions(&source, Some(&shown)).map_err(|e| ToProgramError {
+        message: format!("logic file {shown}: {e}"),
+        line,
+    })?;
+    Ok(StoryLogic {
+        path: shown,
+        source,
+    })
+}
+
+/// Every `logic.name` of the program names a function its logic file exports (and there is one).
+fn check_logic_calls(program: &StoryProgram) -> Result<(), ToProgramError> {
+    let mut used = Vec::new();
+    for scene in program.scenes.values() {
+        logic_in_ops(&scene.ops, &mut used);
+    }
+    if used.is_empty() {
+        return Ok(());
+    }
+    let Some(logic) = &program.logic else {
+        return Err(ToProgramError {
+            message: format!(
+                "logic.{} is called, but the story declares no `logic \"file.vel\"`",
+                used[0]
+            ),
+            line: 0,
+        });
+    };
+    let functions =
+        velvet_story::vs3_logic_functions(&logic.source, Some(&logic.path)).map_err(|e| {
+            ToProgramError {
+                message: format!("logic file {}: {e}", logic.path),
+                line: 0,
+            }
+        })?;
+    for f in used {
+        if !functions.contains(&f) {
+            return Err(ToProgramError {
+                message: format!("logic.{f}: {} has no function `{f}`", logic.path),
+                line: 0,
+            });
+        }
+    }
+    Ok(())
+}
+
+fn logic_in_ops(ops: &[StoryOp], out: &mut Vec<String>) {
+    for op in ops {
+        match op {
+            StoryOp::JumpLogic { function } => out.push(function.clone()),
+            StoryOp::Assign { value, .. } => logic_in_expr(value, out),
+            StoryOp::If {
+                cond,
+                then_ops,
+                else_ops,
+            } => {
+                logic_in_cond(cond, out);
+                logic_in_ops(then_ops, out);
+                logic_in_ops(else_ops, out);
+            }
+            StoryOp::Choice { options } => {
+                for o in options {
+                    logic_in_ops(&o.body, out);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn logic_in_expr(e: &StoryExpr, out: &mut Vec<String>) {
+    match e {
+        StoryExpr::Logic { function } => out.push(function.clone()),
+        StoryExpr::Binary { left, right, .. } => {
+            logic_in_expr(left, out);
+            logic_in_expr(right, out);
+        }
+        StoryExpr::Neg { inner } => logic_in_expr(inner, out),
+        _ => {}
+    }
+}
+
+fn logic_in_cond(c: &StoryCond, out: &mut Vec<String>) {
+    match c {
+        StoryCond::Logic { function } => out.push(function.clone()),
+        StoryCond::Not { inner } => logic_in_cond(inner, out),
+        StoryCond::And { left, right } | StoryCond::Or { left, right } => {
+            logic_in_cond(left, out);
+            logic_in_cond(right, out);
+        }
+        StoryCond::Cmp { left, right, .. } => {
+            for o in [left, right] {
+                if let StoryOperand::Logic { function } = o {
+                    out.push(function.clone());
+                }
+            }
+        }
+        _ => {}
     }
 }
 

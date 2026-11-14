@@ -24,6 +24,14 @@ pub enum TopItem {
         /// Span.
         span: Span,
     },
+    /// `logic "rules.vel"`: the story's logic file (Velvet Script 3), whose functions
+    /// `logic.name` calls.
+    Logic {
+        /// Path string (resolved against the file's folder when loaded from disk).
+        path: String,
+        /// Span.
+        span: Span,
+    },
     /// Character declaration (optional metadata).
     CharacterDecl {
         /// Id.

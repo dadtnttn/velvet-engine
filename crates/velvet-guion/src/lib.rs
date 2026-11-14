@@ -21,8 +21,14 @@
 //! @si ana_confianza >= 3 -> confianza
 //! @var ana_confianza +1
 //! @vn recuerdo_1         (opens the visual novel at that scene)
+//! @decide confia -> confianza, recelo   (asks the guion's logic file which scene comes next)
 //! @fin
 //! ```
+//!
+//! A guion can have a logic file beside it, `<file>.vel` in Velvet Script 3 (read by
+//! [`Library::load`] when the crate's `vs3` feature is on). `@decide name -> a, b` calls its
+//! function `name` with a map of the guion's variables; the function answers with one of the
+//! scenes listed, or `""` to go on with the next line.
 //!
 //! Any other `key: value` line in the front matter is the file's metadata ([`Guion::meta`], read
 //! with [`Guion::meta_value`]), kept in file order with its value as written.
@@ -42,6 +48,11 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
+
+#[cfg(feature = "story")]
+mod story;
+#[cfg(feature = "story")]
+pub use story::compile_story;
 
 // ------------------------------------------------------------------ the script
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -149,6 +160,13 @@ pub enum Step {
     },
     Set {
         effects: Vec<Effect>,
+    },
+    /// `@decide name -> a, b`: function `name` of the guion's logic file picks which of the scenes
+    /// listed comes next (an empty answer: on with the next line).
+    Decide {
+        name: String,
+        to: Vec<String>,
+        line: usize,
     },
     End,
     Vn {
@@ -650,6 +668,19 @@ pub fn parse(source: &str, path: &Path, cast: &Cast) -> (Guion, Vec<Problem>) {
                     })
                 }),
                 "var" => parse_effects(arg).map(|effects| Step::Set { effects }),
+                "decide" => arg.split_once("->").and_then(|(name, to)| {
+                    let name = name.trim();
+                    let to: Vec<String> = to
+                        .split(',')
+                        .map(|t| t.trim().to_owned())
+                        .filter(|t| !t.is_empty())
+                        .collect();
+                    (!name.is_empty() && !to.is_empty()).then(|| Step::Decide {
+                        name: name.to_owned(),
+                        to,
+                        line: n,
+                    })
+                }),
                 "vn" => Some(Step::Vn {
                     to: arg.to_owned(),
                     line: n,
@@ -750,6 +781,9 @@ pub fn parse(source: &str, path: &Path, cast: &Cast) -> (Guion, Vec<Problem>) {
                 Step::Jump { to, .. } | Step::Vn { to, .. } if !to.contains('.') => {
                     targets.insert(slug(to));
                 }
+                Step::Decide { to, .. } => {
+                    targets.extend(to.iter().filter(|t| !t.contains('.')).map(|t| slug(t)))
+                }
                 Step::Choice { options, .. } => targets.extend(
                     options
                         .iter()
@@ -770,6 +804,7 @@ pub fn parse(source: &str, path: &Path, cast: &Cast) -> (Guion, Vec<Problem>) {
         for step in &s.steps {
             let targets: Vec<(&str, usize)> = match step {
                 Step::Jump { to, line, .. } | Step::Vn { to, line } => vec![(to.as_str(), *line)],
+                Step::Decide { to, line, .. } => to.iter().map(|t| (t.as_str(), *line)).collect(),
                 Step::Choice { options, line, .. } => options
                     .iter()
                     .filter_map(|o| o.to.as_deref().map(|t| (t, *line)))
@@ -803,6 +838,78 @@ pub struct Library {
     pub problems: Vec<Problem>,
     /// Who is who in them (the staging of [`compile_vn`] names sprites by it too).
     pub cast: Cast,
+    /// The logic files, by the id of the guion they belong to.
+    pub logic: BTreeMap<String, Logic>,
+}
+
+/// A guion's logic file (`<file>.vel` beside `<file>.md`, Velvet Script 3): its functions answer
+/// the guion's `@decide` steps.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Logic {
+    pub path: PathBuf,
+    pub source: String,
+    /// The functions it exports.
+    pub functions: BTreeSet<String>,
+}
+
+/// Every variable a guion reads or writes (an unset one reads 0).
+fn guion_vars(g: &Guion) -> BTreeSet<String> {
+    let mut out = BTreeSet::new();
+    for s in &g.scenes {
+        out.extend(s.attrs.si.iter().map(|c| c.var.clone()));
+        for step in &s.steps {
+            match step {
+                Step::Set { effects } => out.extend(effects.iter().map(|e| e.var.clone())),
+                Step::Jump { cond, .. } => out.extend(cond.iter().map(|c| c.var.clone())),
+                Step::Choice { options, .. } => {
+                    for o in options {
+                        out.extend(o.cond.iter().map(|c| c.var.clone()));
+                        out.extend(o.effects.iter().map(|e| e.var.clone()));
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    out
+}
+
+#[cfg(feature = "vs3")]
+mod vs3 {
+    use std::cell::RefCell;
+    use std::collections::BTreeMap;
+    use std::rc::Rc;
+
+    use velvet_script_vs3::{compile, Value};
+
+    pub fn functions(source: &str, file: &str) -> Result<Vec<String>, String> {
+        compile(source, Some(file))
+            .map(|m| m.function_names())
+            .map_err(|e| e.to_string())
+    }
+
+    /// Calls `name(vars)` in a fresh session: a scene label, or None for an empty answer.
+    pub fn decide(
+        source: &str,
+        file: &str,
+        name: &str,
+        vars: BTreeMap<String, i64>,
+    ) -> Result<Option<String>, String> {
+        let module = compile(source, Some(file)).map_err(|e| e.to_string())?;
+        let map: BTreeMap<String, Value> =
+            vars.into_iter().map(|(k, v)| (k, Value::Int(v))).collect();
+        let answer = module
+            .call(name, &[Value::Map(Rc::new(RefCell::new(map)))])
+            .map_err(|e| e.to_string())?;
+        match answer {
+            Value::Null => Ok(None),
+            Value::String(s) if s.trim().is_empty() => Ok(None),
+            Value::String(s) => Ok(Some(s.trim().to_owned())),
+            other => Err(format!(
+                "respondió {other}; se esperaba el nombre de una escena o \"\""
+            )),
+        }
+    }
 }
 
 impl Library {
@@ -812,6 +919,144 @@ impl Library {
             guiones: Vec::new(),
             problems: Vec::new(),
             cast,
+            logic: BTreeMap::new(),
+        }
+    }
+
+    /// Gives guion `id` its logic file (`source`, read from `path`); a file that does not compile
+    /// is a problem of the library.
+    pub fn add_logic(&mut self, id: &str, source: &str, path: &Path) {
+        let file = path.display().to_string();
+        #[cfg(feature = "vs3")]
+        let functions = vs3::functions(source, &file);
+        #[cfg(not(feature = "vs3"))]
+        let functions: Result<Vec<String>, String> = Err(
+            "velvet-guion se compiló sin su función `vs3`: no lee archivos de lógica".to_owned(),
+        );
+        match functions {
+            Ok(fns) => {
+                self.logic.insert(
+                    id.to_owned(),
+                    Logic {
+                        path: path.to_owned(),
+                        source: source.to_owned(),
+                        functions: fns.into_iter().collect(),
+                    },
+                );
+            }
+            Err(message) => self.problems.push(Problem {
+                file,
+                line: 0,
+                message,
+            }),
+        }
+    }
+
+    /// Reads the logic file of every guion that has one and checks each `@decide` against it.
+    fn load_logic(&mut self) {
+        let found: Vec<(String, PathBuf)> = self
+            .guiones
+            .iter()
+            .map(|g| (g.id.clone(), g.path.with_extension("vel")))
+            .filter(|(_, p)| p.is_file())
+            .collect();
+        for (id, path) in found {
+            match std::fs::read_to_string(&path) {
+                Ok(source) => self.add_logic(&id, &source, &path),
+                Err(e) => self.problems.push(Problem {
+                    file: path.display().to_string(),
+                    line: 0,
+                    message: e.to_string(),
+                }),
+            }
+        }
+        let problems: Vec<Problem> = self
+            .guiones
+            .iter()
+            .flat_map(|g| self.decide_problems(&g.id))
+            .collect();
+        self.problems.extend(problems);
+    }
+
+    /// What is wrong with the `@decide` steps of guion `id`: no logic file, or a function its
+    /// logic file does not export.
+    pub fn decide_problems(&self, id: &str) -> Vec<Problem> {
+        let mut problems = Vec::new();
+        for g in self.guiones.iter().filter(|g| g.id == id) {
+            for s in &g.scenes {
+                for step in &s.steps {
+                    let Step::Decide { name, line, .. } = step else {
+                        continue;
+                    };
+                    let message = match self.logic.get(&g.id) {
+                        None => Some(format!(
+                            "@decide {name}: este guion no tiene archivo de lógica ({}.vel)",
+                            g.id
+                        )),
+                        Some(l) if !l.functions.contains(name) => Some(format!(
+                            "@decide {name}: {} no tiene ninguna función «{name}»",
+                            l.path.display()
+                        )),
+                        _ => None,
+                    };
+                    if let Some(message) = message {
+                        problems.push(Problem {
+                            file: g.path.display().to_string(),
+                            line: *line,
+                            message,
+                        });
+                    }
+                }
+            }
+        }
+        problems
+    }
+
+    /// What the logic of the guion at file index `file` answers to `@decide name`, given `vars`:
+    /// the scene to go to, or None to go on.
+    pub fn decide(&self, file: usize, name: &str, vars: &Vars) -> Result<Option<String>, String> {
+        let values: BTreeMap<String, i64> = vars
+            .values
+            .iter()
+            .map(|(k, v)| (k.clone(), i64::from(*v)))
+            .collect();
+        self.decide_values(&self.guiones[file].id, name, &values)
+    }
+
+    /// [`Self::decide`] for a host that keeps the story's variables itself (a visual novel playing
+    /// [`compile_vn`]'s nodes): guion `id`'s function `name`, given `vars`; the guion's variables
+    /// missing from `vars` read 0.
+    pub fn decide_values(
+        &self,
+        id: &str,
+        name: &str,
+        vars: &BTreeMap<String, i64>,
+    ) -> Result<Option<String>, String> {
+        let g = self
+            .guiones
+            .iter()
+            .find(|g| g.id == id)
+            .ok_or_else(|| format!("no hay ningún guion «{id}»"))?;
+        let logic = self
+            .logic
+            .get(&g.id)
+            .ok_or_else(|| format!("el guion «{}» no tiene archivo de lógica", g.id))?;
+        let mut values: BTreeMap<String, i64> = guion_vars(g).into_iter().map(|v| (v, 0)).collect();
+        values.extend(vars.iter().map(|(k, v)| (k.clone(), *v)));
+        #[cfg(feature = "vs3")]
+        return vs3::decide(
+            &logic.source,
+            &logic.path.display().to_string(),
+            name,
+            values,
+        );
+        #[cfg(not(feature = "vs3"))]
+        {
+            let _ = (logic, name, values);
+            Err(
+                "velvet-guion se compiló sin su función `vs3`: no lee archivos de lógica"
+                    .to_owned(),
+            )
         }
     }
 
@@ -836,6 +1081,7 @@ impl Library {
                 }),
             }
         }
+        lib.load_logic();
         lib
     }
 
@@ -869,6 +1115,9 @@ impl Library {
                         if let Some(next) = self.find(to, Some(f)) {
                             todo.push(next);
                         }
+                    }
+                    Step::Decide { to, .. } => {
+                        todo.extend(to.iter().filter_map(|t| self.find(t, Some(f))));
                     }
                     _ => {}
                 }
@@ -1160,6 +1409,25 @@ impl Conversation {
                     self.staged.push((cmd.clone(), arg.clone()));
                     self.step += 1;
                 }
+                Step::Decide { name, to, line } => {
+                    let pick = lib.decide(self.file, name, vars).unwrap_or_else(|e| {
+                        eprintln!("[guion] {}:{line}: @decide {name}: {e}", g.path.display());
+                        None
+                    });
+                    match pick {
+                        Some(t) if to.iter().any(|x| slug(x) == slug(&t)) => {
+                            self.goto(lib, &t, vars)
+                        }
+                        Some(t) => {
+                            eprintln!(
+                                "[guion] {}:{line}: @decide {name} respondió «{t}», que no está en su lista",
+                                g.path.display()
+                            );
+                            self.step += 1;
+                        }
+                        None => self.step += 1,
+                    }
+                }
                 Step::End => self.finished = true,
                 Step::Vn { to, .. } => {
                     let full = if to.contains('.') {
@@ -1360,6 +1628,7 @@ pub fn compile_vn(
         for step in &scene.steps {
             let targets: Vec<&str> = match step {
                 Step::Jump { to, .. } | Step::Vn { to, .. } => vec![to.as_str()],
+                Step::Decide { to, .. } => to.iter().map(String::as_str).collect(),
                 Step::Choice { options, .. } => {
                     options.iter().filter_map(|o| o.to.as_deref()).collect()
                 }
@@ -1644,6 +1913,24 @@ pub fn compile_vn(
                             let node = crossroads(&room, &description);
                             push(&mut items, node, then, &mut pending);
                         }
+                    }
+                    // A crossroads that asks the logic file: `decide` names the guion and its
+                    // function, and where each label leads; with no answer it goes on (`next`).
+                    Step::Decide { name, to, .. } => {
+                        let routes: Vec<serde_json::Value> = to
+                            .iter()
+                            .map(|t| {
+                                let target = entry(t).unwrap_or_else(|| {
+                                    end_used = true;
+                                    end_id.clone()
+                                });
+                                json!({ "label": slug(t), "to": target })
+                            })
+                            .collect();
+                        let mut node = crossroads(&room, &description);
+                        node["decide"] =
+                            json!({ "guion": g.id, "function": name, "routes": routes });
+                        push(&mut items, node, Then::Next, &mut pending);
                     }
                     Step::End => {
                         if pending.is_empty() && !items.is_empty() {
@@ -2344,5 +2631,121 @@ La alcoba sigue.
         );
         assert_eq!(g.title, "uno");
         assert_eq!(g.scenes.len(), 1, "the body still plays");
+    }
+
+    #[cfg(feature = "vs3")]
+    #[test]
+    fn decide_asks_the_logic_file_which_scene_comes_next() {
+        let dir = std::env::temp_dir().join(format!("velvet-guion-decide-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("ana.md"),
+            "---
+id: ana
+---
+## inicio
+? ¿Qué?
+- Té -> sigue {confianza +1}
+- Nada -> sigue
+## sigue
+@decide trato -> amiga, recelo
+**Ana:** —Bueno.
+@fin
+## amiga
+**Ana:** —Gracias.
+@fin
+## recelo
+**Ana:** —Hum.
+@fin
+",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("ana.vel"),
+            "// @edition 3
+function trato(v: map) {
+    if v[\"confianza\"] >= 1 { return \"amiga\" }
+    return \"\"
+}
+",
+        )
+        .unwrap();
+        let lib = Library::load(&dir, Cast::new());
+        assert!(lib.problems.is_empty(), "{:?}", lib.problems);
+        let play = |pick: usize| {
+            let mut vars = Vars::default();
+            let mut c = Conversation::start(&lib, lib.find("ana.inicio", None).unwrap(), &mut vars);
+            assert!(c.choose(&lib, &mut vars, pick));
+            match c.shown(&lib, &vars) {
+                Shown::Line { text, .. } => text,
+                other => panic!("{other:?}"),
+            }
+        };
+        assert_eq!(play(0), "Gracias.", "the logic file sent it to «amiga»");
+        assert_eq!(
+            play(1),
+            "Bueno.",
+            "an empty answer goes on with the next line"
+        );
+        std::fs::write(
+            dir.join("ana.vel"),
+            "// @edition 3
+function otra(v: map) { return \"\" }
+",
+        )
+        .unwrap();
+        let lib = Library::load(&dir, Cast::new());
+        assert!(
+            lib.problems
+                .iter()
+                .any(|p| p.message.contains("no tiene ninguna función «trato»")),
+            "{:?}",
+            lib.problems
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn decide_in_a_visual_novel_scene_is_a_crossroads_that_names_its_routes() {
+        let mut lib = Library::new(Cast::new());
+        lib.add(
+            "---
+id: ana
+---
+## inicio {vn}
+**Ana:** —Hola.
+@decide trato -> amiga, recelo
+**Ana:** —Bueno.
+## amiga
+**Ana:** —Gracias.
+## recelo
+**Ana:** —Hum.
+",
+            Path::new("ana.md"),
+        );
+        let vn = compile_vn(&lib, "sala", serde_json::Value::Null, &VnLayout::default());
+        let node = vn
+            .nodes
+            .iter()
+            .find(|n| n.get("decide").is_some())
+            .expect("a decide node");
+        assert_eq!(node["pass"], serde_json::json!(true));
+        assert_eq!(node["decide"]["guion"], "ana");
+        assert_eq!(node["decide"]["function"], "trato");
+        let routes = node["decide"]["routes"].as_array().unwrap();
+        assert_eq!(routes.len(), 2);
+        assert_eq!(routes[0]["label"], "amiga");
+        assert_eq!(routes[0]["to"], vn_start_node("ana.amiga"));
+        assert!(
+            node["next"].is_string(),
+            "with no answer it goes on: {node}"
+        );
+        assert!(
+            vn.nodes
+                .iter()
+                .any(|n| n["id"] == vn_start_node("ana.recelo")),
+            "both routes are compiled"
+        );
     }
 }

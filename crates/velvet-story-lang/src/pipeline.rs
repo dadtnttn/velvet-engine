@@ -1,12 +1,6 @@
-//! Full pipeline: parse → include resolve → sema → **StoryProgram** (product) → StoryPlayer.
-//!
-//! OpVs2 / Vs2MiniVm is a **secondary** host path derived from StoryProgram
-//! (debug / fallback), not a parallel writer language VM.
+//! Full pipeline: parse → include resolve → sema → **StoryProgram** → StoryPlayer.
 
 use std::path::Path;
-
-use velvet_script_bytecode::opcodes_vs2::OpVs2;
-use velvet_script_vm::{Vs2Host, Vs2MiniVm};
 
 use crate::ast::StoryFile;
 use crate::commands::CommandRegistry;
@@ -14,12 +8,10 @@ use crate::diag::StoryDiag;
 use crate::format::format_source;
 use crate::load::{load_story_path, load_story_source};
 use crate::locale::{with_diag_locale, DiagLocale};
-use crate::lower::{dump_lowered, lower, LowerOutput};
 use crate::parser::{parse, ParseResult};
 use crate::sema::{self, SemaResult};
-use crate::source_map::SourceMap;
 use crate::studio::StudioModel;
-use crate::to_story_program::{to_story_program_cmds, to_story_program_with_origins};
+use crate::to_story_program::to_story_program_cmds;
 use velvet_story::{StoryPlayer, StoryProgram, StoryValue, StoryWait};
 
 /// Options for check/build that must be isolation-safe across concurrent docs.
@@ -155,128 +147,6 @@ fn check_path_inner(path: &Path, cmds: &CommandRegistry) -> Result<CheckResult, 
     })
 }
 
-/// Build result (lowered unit).
-#[derive(Debug)]
-pub struct BuildResult {
-    /// Check.
-    pub check: CheckResult,
-    /// Lowered (if check ok or partial).
-    pub lowered: Option<LowerOutput>,
-    /// Ok.
-    pub ok: bool,
-}
-
-/// Build: check + lower (on include-resolved file).
-///
-/// Prefer **StoryProgram** as the canonical IR. The OpVs2 unit is derived from
-/// that program when possible (single spine); legacy direct HIR lower is only
-/// a last-resort fallback.
-pub fn build_source(source: &str, file: &str, cmds: &CommandRegistry) -> BuildResult {
-    let check = check_source(source, file, cmds);
-    if !check.ok {
-        return BuildResult {
-            check,
-            lowered: None,
-            ok: false,
-        };
-    }
-    // Single spine: AST → StoryProgram → OpVs2 (same as build_path).
-    let _ = source; // already consumed by check_source
-    finish_build(check, file, cmds)
-}
-
-/// Build from path (includes on disk).
-///
-/// Same spine as [`build_source`]: AST → StoryProgram → OpVs2 (not legacy direct lower).
-pub fn build_path(path: &Path, cmds: &CommandRegistry) -> Result<BuildResult, String> {
-    let file = path.to_string_lossy().to_string();
-    // check_path resolves includes from disk; then same StoryProgram → OpVs2 spine.
-    let check = check_path(path, cmds)?;
-    if !check.ok {
-        return Ok(BuildResult {
-            check,
-            lowered: None,
-            ok: false,
-        });
-    }
-    Ok(finish_build(check, &file, cmds))
-}
-
-/// Shared post-check spine: StoryProgram → OpVs2 (+ PC-aware source map).
-fn finish_build(mut check: CheckResult, file: &str, cmds: &CommandRegistry) -> BuildResult {
-    let lowered = match to_story_program_with_origins(&check.file, file, Some(cmds)) {
-        Ok(with) => {
-            let (unit, map) =
-                crate::from_program::story_program_to_vs2_mapped(&with.program, &with.origins);
-            let mut lo = lower(&check.file);
-            // Map built simultaneously with OpVs2 emission (real PCs + include origins).
-            lo.map = map;
-            lo.unit = unit;
-            lo
-        }
-        Err(e) => {
-            let detail = e.to_string();
-            check.diags.push(crate::diag::StoryDiag::error_key(
-                "VST060",
-                &[("detail", detail.as_str())],
-                file,
-                crate::span::Span::unknown(),
-            ));
-            let mut lo = lower(&check.file);
-            lo.map = crate::source_map::map_from_story_file(&check.file);
-            lo
-        }
-    };
-    check.diags.extend(lowered.diags.clone());
-    let ok = !check.diags.iter().any(|d| d.is_error());
-    BuildResult {
-        check,
-        lowered: Some(lowered),
-        ok,
-    }
-}
-
-/// Run result (observable host state).
-#[derive(Debug)]
-pub struct RunResult {
-    /// Build.
-    pub build: BuildResult,
-    /// Dialogue lines produced.
-    pub dialogue: Vec<String>,
-    /// Host log.
-    pub log: Vec<String>,
-    /// Variables in host state.
-    pub state: Vec<(String, String)>,
-    /// Instructions executed.
-    pub steps: usize,
-    /// Ok.
-    pub ok: bool,
-}
-
-/// Execute on **secondary** VS2 host (OpVs2 / Vs2MiniVm derived from StoryProgram).
-///
-/// Prefer [`run_source_product`] for author-facing execution. This path is for
-/// parity tests, debug dumps, and explicit fallback — not the product default.
-pub fn run_source(
-    source: &str,
-    file: &str,
-    cmds: &CommandRegistry,
-    choice_index: usize,
-) -> RunResult {
-    let build = build_source(source, file, cmds);
-    run_build(build, choice_index)
-}
-
-/// Secondary VS2 host run from path (includes on disk). Prefer [`run_path_product`].
-pub fn run_path(
-    path: &Path,
-    cmds: &CommandRegistry,
-    choice_index: usize,
-) -> Result<RunResult, String> {
-    let build = build_path(path, cmds)?;
-    Ok(run_build(build, choice_index))
-}
-
 /// Product path from disk: StoryProgram → StoryPlayer (author default).
 pub fn run_path_product(
     path: &Path,
@@ -286,117 +156,6 @@ pub fn run_path_product(
     let source = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
     let file = path.to_string_lossy().to_string();
     run_source_product(&source, &file, cmds, choice)
-}
-
-fn run_build(build: BuildResult, choice_index: usize) -> RunResult {
-    // shared body was previously inline in run_source
-    let _cmds_marker = choice_index;
-    if !build.ok {
-        return RunResult {
-            build,
-            dialogue: vec![],
-            log: vec![],
-            state: vec![],
-            steps: 0,
-            ok: false,
-        };
-    }
-    let lowered = build.lowered.as_ref().unwrap();
-    let mut host = Vs2Host::new();
-    host.pool = lowered.unit.pool.strings.clone();
-    // seed translations from msg ids
-    for (id, text) in &lowered.msg_ids {
-        host.set_translation(id, text);
-    }
-    // also map pool strings that look like msg keys if host LoadMsg uses pool
-    for (i, s) in host.pool.clone().iter().enumerate() {
-        if let Some((_, t)) = lowered.msg_ids.iter().find(|(id, _)| id == s) {
-            host.set_translation(s, t);
-        }
-        let _ = i;
-    }
-
-    let code: Vec<(OpVs2, u32, u32)> = lowered
-        .unit
-        .code
-        .iter()
-        .map(|ins| (ins.op, ins.a, ins.b))
-        .collect();
-
-    // Prefer `start` scene; else earliest entry PC among scenes.
-    let start_pc = lowered
-        .unit
-        .entry_scenes
-        .get("start")
-        .copied()
-        .or_else(|| lowered.unit.entry_scenes.values().copied().min())
-        .unwrap_or(0) as usize;
-
-    let mut vm = Vs2MiniVm::new(host);
-    vm.load(code);
-    vm.pc = start_pc;
-
-    // Seed choice before run so LoadState("__choice") works on first Menu.
-    vm.host.store_state("__choice", &choice_index.to_string());
-    // Also prime local slot  if lower stored choice early — host state is enough.
-
-    let mut steps = 0usize;
-    let max = 10_000usize;
-    while steps < max && !vm.halted {
-        if vm.pc >= vm.code.len() {
-            break;
-        }
-        let (op, a, b) = vm.code[vm.pc];
-        if op == OpVs2::Menu {
-            vm.host.store_state("__choice", &choice_index.to_string());
-        }
-        if op == OpVs2::JumpScene {
-            // resolve entry by pool name
-            let name = vm.host.pool_str(a);
-            if let Some(&pc) = lowered.unit.entry_scenes.get(&name) {
-                vm.pc = if b != 0 { b as usize } else { pc as usize };
-                steps += 1;
-                continue;
-            }
-        }
-        if op == OpVs2::CallScene {
-            let name = vm.host.pool_str(a);
-            if let Some(&pc) = lowered.unit.entry_scenes.get(&name) {
-                // return to next instruction after CallScene
-                vm.call_stack.push(vm.pc + 1);
-                vm.pc = if b != 0 { b as usize } else { pc as usize };
-                steps += 1;
-                continue;
-            }
-        }
-        if op == OpVs2::Choice {
-            // Menu option labels only; arm selection is JumpIf-guarded in the
-            // StoryProgram → OpVs2 lower (see from_program choice emission).
-            let _ = (a, b);
-        }
-        if !vm.step() {
-            break;
-        }
-        steps += 1;
-    }
-
-    let dialogue: Vec<String> = vm
-        .host
-        .dialogue
-        .iter()
-        .map(|d| format!("{}: {}", d.speaker, d.text))
-        .collect();
-    let log = vm.host.log.clone();
-    let state: Vec<(String, String)> = vm.host.state.into_iter().collect();
-
-    RunResult {
-        build,
-        dialogue,
-        log,
-        state,
-        steps,
-        ok: true,
-    }
 }
 
 /// Format path in place (or check-only).
@@ -421,24 +180,21 @@ pub fn format_path(path: &Path, check_only: bool) -> Result<String, String> {
     Ok(pretty)
 }
 
+/// Dump the canonical [`StoryProgram`] as JSON (what StoryPlayer runs).
+pub fn dump_program_json(
+    source: &str,
+    file: &str,
+    cmds: &CommandRegistry,
+    title: &str,
+) -> Result<String, String> {
+    let program = build_story_program(source, file, cmds, title)?;
+    serde_json::to_string_pretty(&program).map_err(|e| e.to_string())
+}
+
 /// Dump AST as JSON.
 pub fn dump_ast_json(source: &str, file: &str) -> Result<String, String> {
     let p = parse(source, file);
     serde_json::to_string_pretty(&p.file).map_err(|e| e.to_string())
-}
-
-/// Dump lowered disasm.
-pub fn dump_lowered_text(
-    source: &str,
-    file: &str,
-    cmds: &CommandRegistry,
-) -> Result<String, String> {
-    let b = build_source(source, file, cmds);
-    if !b.ok {
-        let msgs: Vec<_> = b.check.diags.iter().map(|d| d.display()).collect();
-        return Err(msgs.join("\n"));
-    }
-    Ok(dump_lowered(&b.lowered.unwrap().unit))
 }
 
 /// Studio model from source.
@@ -525,7 +281,7 @@ pub fn run_story_program(program: StoryProgram, choice: usize, max_steps: u32) -
 
 /// Check → StoryProgram → product run (**writer primary path**).
 ///
-/// This is the default authoring runtime surface. OpVs2 is not used here.
+/// This is the authoring runtime surface.
 pub fn run_source_product(
     source: &str,
     file: &str,
@@ -561,10 +317,4 @@ pub fn build_story_program_with(
         return Err(msgs.join("\n"));
     }
     to_story_program_cmds(&check.file, title, cmds).map_err(|e| e.to_string())
-}
-
-/// Source map from build.
-pub fn source_map_of(source: &str, file: &str, cmds: &CommandRegistry) -> Option<SourceMap> {
-    let b = build_source(source, file, cmds);
-    b.lowered.map(|l| l.map)
 }

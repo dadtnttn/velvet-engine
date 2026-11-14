@@ -318,6 +318,23 @@ fn check_gotos(r: &mut SemaResult, file: &StoryFile, scene: &Scene, stmts: &[Stm
     let origin = diag_file(file, scene);
     for st in stmts {
         match st {
+            Stmt::Goto { target, span } if target.starts_with("logic.") => {
+                if !file
+                    .items
+                    .iter()
+                    .any(|i| matches!(i, TopItem::Logic { .. }))
+                {
+                    r.diags.push(
+                        StoryDiag::error_key(
+                            "VST070",
+                            &[("name", target.as_str())],
+                            &origin,
+                            *span,
+                        )
+                        .with_node("goto"),
+                    );
+                }
+            }
             Stmt::Goto { target, span } | Stmt::CallScene { target, span } => {
                 if !r.scenes.contains(target) && !r.labels.contains(target) {
                     r.diags.push(

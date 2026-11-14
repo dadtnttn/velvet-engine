@@ -4,7 +4,6 @@ use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
 use crate::ast::{Stmt, TopItem};
-use crate::lower::stable_msg_id;
 use crate::parser::parse;
 use velvet_script_i18n::{MessageCatalog, MsgEntry, MsgId};
 
@@ -127,4 +126,14 @@ pub fn obsolete_keys(source: &ExtractedMessages, target: &MessageCatalog) -> Vec
         .filter(|k| !live.contains(*k))
         .cloned()
         .collect()
+}
+
+/// Stable message id from content (not line numbers).
+pub fn stable_msg_id(scene: &str, speaker: &str, text: &str) -> String {
+    let mut h: u64 = 0xcbf29ce484222325;
+    for b in scene.bytes().chain(speaker.bytes()).chain(text.bytes()) {
+        h ^= b as u64;
+        h = h.wrapping_mul(0x100000001b3);
+    }
+    format!("msg.{scene}.{speaker}.{:016x}", h)
 }

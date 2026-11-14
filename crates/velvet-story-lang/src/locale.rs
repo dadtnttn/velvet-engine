@@ -445,6 +445,13 @@ fn template_message(loc: DiagLocale, code: &str) -> &'static str {
             }
             DiagLocale::Zh => "命令 `{cmd}` 的参数 `{name}` 需要 {expected}，实际为 {got}。",
         },
+        "VST070" => match loc {
+            DiagLocale::Es => "`{name}` llama a la lógica, pero la historia no declara `logic \"archivo.vel\"`.",
+            DiagLocale::En => "`{name}` calls the logic, but the story declares no `logic \"file.vel\"`.",
+            DiagLocale::Ja => "`{name}` はロジックを呼び出しますが、ストーリーに `logic \"file.vel\"` がありません。",
+            DiagLocale::De => "`{name}` ruft die Logik auf, aber die Geschichte deklariert kein `logic \"datei.vel\"`.",
+            DiagLocale::Zh => "`{name}` 调用了逻辑，但故事没有声明 `logic \"file.vel\"`。",
+        },
         "VST027" => match loc {
             DiagLocale::Es => "No existe la escena o etiqueta `{target}`.",
             DiagLocale::En => "Scene or label `{target}` does not exist.",
@@ -588,6 +595,19 @@ fn template_suggestion(loc: DiagLocale, code: &str) -> Option<&'static str> {
             DiagLocale::Ja => "コマンドが宣言した型の値を使ってください。",
             DiagLocale::De => "Verwenden Sie einen Wert des deklarierten Parametertyps.",
             DiagLocale::Zh => "请使用与命令参数类型匹配的值。",
+        }),
+        "VST070" => Some(match loc {
+            DiagLocale::Es => {
+                "Añade arriba `logic \"reglas.vel\"` con un archivo de Velvet Script 3."
+            }
+            DiagLocale::En => "Add `logic \"rules.vel\"` at the top, with a Velvet Script 3 file.",
+            DiagLocale::Ja => {
+                "先頭に Velvet Script 3 のファイルを指す `logic \"rules.vel\"` を追加してください。"
+            }
+            DiagLocale::De => {
+                "Oben `logic \"regeln.vel\"` mit einer Velvet-Script-3-Datei ergänzen."
+            }
+            DiagLocale::Zh => "在开头添加指向 Velvet Script 3 文件的 `logic \"rules.vel\"`。",
         }),
         "VST027" => Some(match loc {
             DiagLocale::Es => "Revisa el nombre o crea la escena con `scene …`.",

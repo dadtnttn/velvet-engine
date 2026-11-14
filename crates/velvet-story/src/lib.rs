@@ -64,8 +64,8 @@ pub use host::{
     StoryCommandHost,
 };
 pub use ir::{
-    ShowMotion, StoryArithOp, StoryChoice, StoryCmpOp, StoryCond, StoryExpr, StoryOp, StoryOperand,
-    StoryProgram, StoryScene,
+    ShowMotion, StoryArithOp, StoryChoice, StoryCmpOp, StoryCond, StoryExpr, StoryLogic, StoryOp,
+    StoryOperand, StoryProgram, StoryScene,
 };
 pub use load::{load_program_from_source, lower_module, LoadError, StoryDiagnostic};
 pub use localization_hook::{
@@ -129,5 +129,7 @@ pub use variables::{AssignOp, StoryVariables};
 pub use video_state::VideoState;
 pub use voice::{VoiceClip, VoiceError, VoicePlayState, VoiceQueue};
 pub use voice_cast::{CharacterVoice, VoiceCast, VoiceCastFile};
-pub use vs3_bridge::{call_vs3_logic, Vs3BridgeError, VS3_HOST_CMD};
+pub use vs3_bridge::{
+    call_vs3_logic, call_vs3_with_vars, vs3_logic_functions, Vs3BridgeError, VS3_HOST_CMD,
+};
 pub use web_story::program_to_web_json;

@@ -39,6 +39,8 @@ fn op_to_json(op: &StoryOp) -> Value {
         }
         StoryOp::Jump { target } => json!({ "kind": "jump", "target": target }),
         StoryOp::Call { target } => json!({ "kind": "jump", "target": target }),
+        // The web player has no Velvet Script 3: it goes on past a logic jump.
+        StoryOp::JumpLogic { function } => json!({ "kind": "logic_jump", "function": function }),
         StoryOp::End { ending } => json!({ "kind": "end", "ending": ending }),
         StoryOp::Background { path } => json!({ "kind": "background", "path": path }),
         StoryOp::Music { path, fade_in } => json!({

@@ -157,6 +157,22 @@ impl Parser {
                 self.expect_newline_or_eof();
                 Some(TopItem::Include { path, span: t.span })
             }
+            TokenKind::Ident(name) if name == "logic" => {
+                self.bump();
+                let path = match self.peek_kind() {
+                    TokenKind::String(s) => {
+                        let s = s.clone();
+                        self.bump();
+                        s
+                    }
+                    _ => {
+                        self.error("VST011", &[], t.span);
+                        return None;
+                    }
+                };
+                self.expect_newline_or_eof();
+                Some(TopItem::Logic { path, span: t.span })
+            }
             TokenKind::Ident(name) if name == "character" => {
                 self.bump();
                 let n = self.expect_ident()?;

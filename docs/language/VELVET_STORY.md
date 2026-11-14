@@ -1,8 +1,8 @@
 # Velvet Story — lenguaje narrativo para escritores (**ALPHA**)
 
-> Capa amigable para autores. **IR canónica: `StoryProgram`**. Runtime de producto:
-> **`StoryPlayer`**. OpVs2 se deriva de esa IR (debug / fallback), no es un
-> segundo lenguaje ni un lower paralelo del AST.
+> Capa amigable para autores. **IR canónica: `StoryProgram`**. Runtime: **`StoryPlayer`**.
+> La lógica que no cabe en las variables de la historia se escribe en **Velvet Script 3**
+> (ver [Lógica en Velvet Script 3](#lógica-en-velvet-script-3)).
 
 ## En 15 minutos
 
@@ -30,30 +30,69 @@ end
 ```text
 .vstory → lexer → parser → AST → sema
        → StoryProgram              ← IR canónica
-            ├→ StoryPlayer         ← runtime de producto (CLI `story run`)
-            └→ OpVs2 (derivado)    ← host secundario / dump-lowered / fallback
+            └→ StoryPlayer         ← runtime (CLI `story run`)
 ```
 
-No uses “AST → lower → OpVs2 only” como arquitectura primaria: el camino de
-autores es **StoryProgram → StoryPlayer**.
+Hay un solo camino de ejecución. La antigua salida derivada a OpVs2 (Velvet Script 2) se quitó
+el 2026-11-11.
 
 ## CLI
 
 ```bash
 velvet story check stories/main.vstory
 velvet story --lang en check stories/main.vstory   # diags es|en|ja|de|zh
-velvet story build stories/main.vstory              # StoryProgram + OpVs2 summary
-velvet story run stories/main.vstory --choice 0     # product path first
+velvet story build stories/main.vstory              # resumen del StoryProgram
+velvet story run stories/main.vstory --choice 0     # StoryPlayer, sin interfaz
 velvet play stories/main.vstory                     # same product boot (.vstory via story-lang)
 velvet-runtime stories/main.vstory 0 256            # packaged host headless play
 velvet story format stories/main.vstory
 velvet story dump-ast stories/main.vstory
-velvet story dump-lowered stories/main.vstory       # secondary OpVs2 dump
+velvet story dump-program stories/main.vstory       # el StoryProgram en JSON
 velvet story studio-model stories/main.vstory
 velvet story extract-loc stories/main.vstory --out tl/source.json
 ```
 
 Variable de entorno: `VELVET_STORY_LANG=en` (el flag `--lang` tiene prioridad).
+
+## Lógica en Velvet Script 3
+
+Una historia puede declarar arriba su archivo de lógica, en Velvet Script 3 (`// @edition 3`),
+con una ruta relativa a la historia:
+
+```velvet-story
+logic "reglas.vel"
+
+scene start
+set premio = logic.premio
+if logic.rico:
+    narrator:
+        Te sobra el oro.
+goto logic.siguiente
+```
+
+```velvet
+// @edition 3
+function premio(v: map) { return v["oro"] * 2 }
+function rico(v: map) { return v["oro"] >= 3 }
+function siguiente(v: map) {
+    if v["premio"] >= 10 { return "tesoro" }
+    return "calle"
+}
+```
+
+- `logic.nombre` llama a la función `nombre` con un solo argumento: un mapa con las variables de
+  la historia. Vale como valor (`set`, comparaciones) y como condición (`if logic.rico:`).
+- `goto logic.nombre` salta a la escena cuyo nombre devuelve la función; si devuelve `""` (o algo
+  que no es texto), la escena sigue con la línea siguiente.
+- Cada llamada usa una sesión nueva: la lógica no guarda estado propio. Las variables siguen siendo
+  de la historia, así que las partidas guardadas no cambian.
+- Al compilar se comprueba que el archivo existe, compila y exporta cada función usada. Un
+  `logic.x` sin `logic "…"` es el diagnóstico `VST070`.
+- El reproductor web (`web_story`) no ejecuta Velvet Script 3: un `goto logic.x` le llega como
+  `logic_jump` y lo pasa de largo.
+
+Los guiones en Markdown usan el mismo archivo de lógica con `@decide` (ver
+[GUION.md](../formats/GUION.md)).
 
 ## Diagnósticos multiidioma y multi-doc
 

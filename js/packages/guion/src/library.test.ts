@@ -84,4 +84,26 @@ describe("GuionLibrary", () => {
     const badVars = { values: { oro: 1.5 }, seen: [] };
     expect(() => library.start("taberna.llegada", badVars)).toThrow(GuionError);
   });
+
+  it("asks a guion's logic file which scene comes next at a @decide", async () => {
+    const library = await GuionLibrary.create();
+    library.add(
+      "ana.md",
+      "## inicio\n? ¿Qué?\n- Té -> sigue {confianza +1}\n- Nada -> sigue\n## sigue\n@decide trato -> amiga\n**Ana:** —Bueno.\n@fin\n## amiga\n**Ana:** —Gracias.\n@fin\n",
+    );
+    const logic =
+      '// @edition 3\nfunction trato(v: map) {\n    if v["confianza"] >= 1 { return "amiga" }\n    return ""\n}\n';
+    expect(library.addLogic("ana.vel", logic)).toEqual([]);
+    const tea = library.start("ana.inicio");
+    expect(tea.choose(0)).toMatchObject({ type: "line", text: "Gracias." });
+    const none = library.start("ana.inicio");
+    expect(none.choose(1)).toMatchObject({ type: "line", text: "Bueno." });
+
+    const other = await GuionLibrary.create();
+    other.add("ana.md", "## inicio\n@decide trato -> fin\n**Ana:** —Hola.\n");
+    const problems = other.addLogic("ana.vel", '// @edition 3\nfunction otra(v: map) { return "" }\n');
+    expect(problems.map((p) => p.message)).toEqual([
+      expect.stringContaining("no tiene ninguna función «trato»"),
+    ]);
+  });
 });

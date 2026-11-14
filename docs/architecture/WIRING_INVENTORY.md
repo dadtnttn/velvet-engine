@@ -12,7 +12,7 @@ Status legend: **wired** · **orphan** · **partial** · **intentional**
 | `DialogueBridge` → player | `velvet-rpg` | `start_dialogue` + test | **wired** | dialogue_bridge |
 | Studio model API | `velvet-story-lang` / editor | CLI `studio-model`, palette `story-outline` | **wired** | commands + CLI |
 | `StoryPlugin` | `velvet-story` | windowed play tick, docs | **wired** | plugin + docs |
-| OpVs2 from StoryProgram | story-lang | dump-lowered / fallback | **intentional** secondary | pipeline |
+| VS3 logic in stories | story-lang + story + guion | `logic "rules.vel"` / `logic.name`, guion `@decide` | **wired** | pipeline + runtime + tests |
 | Full Studio visual edit | editor | limited | **intentional** residual | future GUI work |
 
 ## Spine (product)

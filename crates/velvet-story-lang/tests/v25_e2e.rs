@@ -284,11 +284,7 @@ end
 }
 
 #[test]
-fn call_return_product_and_vs2_fallback() {
-    use velvet_script_bytecode::opcodes_vs2::OpVs2;
-    use velvet_story_lang::from_program::story_program_to_vs2;
-    use velvet_story_lang::pipeline::run_source;
-
+fn call_return_product() {
     let src = r#"
 scene helper
 set marker = 7
@@ -302,7 +298,7 @@ narrator:
 end
 "#;
     let cmds = CommandRegistry::builtin();
-    // Product path: Return pops call stack → dialogue after call runs.
+    // Return pops the call stack: the dialogue after the call runs.
     let r = run_source_product(src, "ret.vstory", &cmds, 0).unwrap();
     assert!(
         r.dialogue.iter().any(|l| l.contains("back_from_helper")),
@@ -315,37 +311,10 @@ end
         .find(|(k, _)| k == "marker")
         .map(|(_, v)| v.as_str());
     assert_eq!(marker, Some("7"), "vars={:?}", r.vars);
-
-    // Fallback OpVs2: Return lowers to Ret (not Nop); CallScene present; run observes marker.
-    let prog = build_story_program(src, "ret.vstory", &cmds, "ret").unwrap();
-    let unit = story_program_to_vs2(&prog);
-    assert!(
-        unit.code.iter().any(|i| matches!(i.op, OpVs2::CallScene)),
-        "expected CallScene"
-    );
-    assert!(
-        unit.code.iter().any(|i| matches!(i.op, OpVs2::Ret)),
-        "expected Ret from return"
-    );
-    // Must not emit Nop for return in helper body before trailing Ret alone is OK —
-    // stronger: CallScene + Ret appear and host run sets marker.
-    let vs2 = run_source(src, "ret.vstory", &cmds, 0);
-    assert!(vs2.ok, "vs2 fallback run failed");
-    assert!(
-        vs2.state.iter().any(|(k, v)| k == "marker" && v == "7"),
-        "vs2 state={:?}",
-        vs2.state
-    );
-    assert!(
-        vs2.dialogue.iter().any(|l| l.contains("back_from_helper")),
-        "vs2 dialogue={:?} (return must resume caller)",
-        vs2.dialogue
-    );
 }
 
 #[test]
-fn vs2_add_sub_runtime_parity() {
-    use velvet_story_lang::pipeline::run_source;
+fn add_sub_runtime() {
     let src = r#"
 scene start
 set score = 5
@@ -356,28 +325,17 @@ narrator:
 end
 "#;
     let cmds = CommandRegistry::builtin();
-    // Product path
     let prod = run_source_product(src, "as.vstory", &cmds, 0).unwrap();
-    let score_prod = prod
+    let score = prod
         .vars
         .iter()
         .find(|(k, _)| k == "score")
         .map(|(_, v)| v.as_str());
-    assert_eq!(score_prod, Some("6"), "product vars={:?}", prod.vars);
-    // VS2 fallback path
-    let vs2 = run_source(src, "as.vstory", &cmds, 0);
-    assert!(vs2.ok, "vs2 failed");
-    let score_vs2 = vs2
-        .state
-        .iter()
-        .find(|(k, _)| k == "score")
-        .map(|(_, v)| v.as_str());
-    assert_eq!(score_vs2, Some("6"), "vs2 state={:?}", vs2.state);
+    assert_eq!(score, Some("6"), "product vars={:?}", prod.vars);
 }
 
 #[test]
-fn vs2_choice_runs_only_selected_arm() {
-    use velvet_story_lang::pipeline::run_source;
+fn choice_runs_only_selected_arm() {
     let src = r#"
 scene start
 choice:
@@ -392,95 +350,30 @@ choice:
 end
 "#;
     let cmds = CommandRegistry::builtin();
-    let a = run_source(src, "ch.vstory", &cmds, 0);
-    assert!(a.ok);
-    let path_a = a
-        .state
-        .iter()
-        .find(|(k, _)| k == "path")
-        .map(|(_, v)| v.as_str());
-    assert_eq!(path_a, Some("1"), "choice0 state={:?}", a.state);
-    // Must not also run arm B (path would become 2 if both arms executed).
-    assert!(
-        !a.dialogue.iter().any(|l| l.contains("arm_b")),
-        "dialogue leaked arm B: {:?}",
-        a.dialogue
-    );
-    let b = run_source(src, "ch.vstory", &cmds, 1);
-    assert!(b.ok);
-    let path_b = b
-        .state
-        .iter()
-        .find(|(k, _)| k == "path")
-        .map(|(_, v)| v.as_str());
-    assert_eq!(path_b, Some("2"), "choice1 state={:?}", b.state);
-    assert!(
-        !b.dialogue.iter().any(|l| l.contains("arm_a")),
-        "dialogue leaked arm A: {:?}",
-        b.dialogue
-    );
-}
-
-#[test]
-fn build_path_uses_story_program_spine() {
-    use std::io::Write;
-    use tempfile::NamedTempFile;
-    use velvet_script_bytecode::opcodes_vs2::OpVs2;
-    use velvet_story_lang::pipeline::build_path;
-
-    let mut f = NamedTempFile::new().unwrap();
-    write!(
-        f,
-        "scene start\nset score = 1\nadd score 3\nnarrator:\n    hi\nend\n"
-    )
-    .unwrap();
-    let cmds = CommandRegistry::builtin();
-    let b = build_path(f.path(), &cmds).unwrap();
-    assert!(b.ok, "{:?}", b.check.diags);
-    let unit = &b.lowered.as_ref().unwrap().unit;
-    assert!(
-        unit.code.iter().any(|i| matches!(i.op, OpVs2::Add)),
-        "build_path must emit Add via StoryProgram spine"
-    );
-}
-
-#[test]
-fn source_map_include_origin_not_only_root() {
-    use tempfile::tempdir;
-    use velvet_story_lang::pipeline::build_path;
-
-    let dir = tempdir().unwrap();
-    let child = dir.path().join("chapter2.vstory");
-    let root = dir.path().join("main.vstory");
-    std::fs::write(
-        &child,
-        "scene from_ch2\nnarrator:\n    inside_include\nend\n",
-    )
-    .unwrap();
-    std::fs::write(
-        &root,
-        "include \"chapter2.vstory\"\n\nscene start\ngoto from_ch2\n",
-    )
-    .unwrap();
-    let cmds = CommandRegistry::builtin();
-    let b = build_path(&root, &cmds).unwrap();
-    assert!(b.ok, "{:?}", b.check.diags);
-    let map = &b.lowered.as_ref().unwrap().map;
-    assert!(
-        map.by_file_substring("chapter2").is_some(),
-        "source map must attribute include content to chapter2, entries={:?}",
-        map.entries
+    for (pick, path, own, other) in [(0, "1", "arm_a", "arm_b"), (1, "2", "arm_b", "arm_a")] {
+        let r = run_source_product(src, "ch.vstory", &cmds, pick).unwrap();
+        let got = r
+            .vars
             .iter()
-            .map(|e| e.origin.file.clone())
-            .collect::<Vec<_>>()
-    );
+            .find(|(k, _)| k == "path")
+            .map(|(_, v)| v.as_str());
+        assert_eq!(got, Some(path), "choice {pick} vars={:?}", r.vars);
+        assert!(
+            r.dialogue.iter().any(|l| l.contains(own)),
+            "{:?}",
+            r.dialogue
+        );
+        assert!(
+            !r.dialogue.iter().any(|l| l.contains(other)),
+            "dialogue leaked {other}: {:?}",
+            r.dialogue
+        );
+    }
 }
 
 #[test]
-fn source_map_product_spine_has_real_pcs_and_include_by_pc() {
+fn include_scenes_reach_the_program() {
     use tempfile::tempdir;
-    use velvet_story_lang::pipeline::build_path;
-
     let dir = tempdir().unwrap();
     let child = dir.path().join("chapter2.vstory");
     let root = dir.path().join("main.vstory");
@@ -494,33 +387,17 @@ fn source_map_product_spine_has_real_pcs_and_include_by_pc() {
         "include \"chapter2.vstory\"\n\nscene start\ngoto from_ch2\n",
     )
     .unwrap();
-    let cmds = CommandRegistry::builtin();
-    let b = build_path(&root, &cmds).unwrap();
-    assert!(b.ok, "{:?}", b.check.diags);
-    let lo = b.lowered.as_ref().unwrap();
-    let map = &lo.map;
-    let unit = &lo.unit;
+    let program = velvet_story_lang::load_story_program_from_path(&root).expect("program");
     assert!(
-        map.has_pc_mappings(),
-        "product spine map must set real PCs, entries={:?}",
-        map.entries
+        program.scenes.contains_key("from_ch2"),
+        "{:?}",
+        program.scenes.keys().collect::<Vec<_>>()
     );
-    let with_pc = map
-        .entries
-        .iter()
-        .find(|e| e.pc.is_some() && e.origin.file.contains("chapter2"))
-        .expect("chapter2 entry with pc");
-    let pc = with_pc.pc.unwrap();
+    let r = run_story_program(program, 0, 200);
     assert!(
-        (pc as usize) < unit.code.len(),
-        "pc {pc} out of range len={}",
-        unit.code.len()
-    );
-    let hit = map.by_pc(pc).expect("by_pc");
-    assert!(
-        hit.origin.file.contains("chapter2"),
-        "by_pc must resolve include origin, got {}",
-        hit.origin.file
+        r.dialogue.iter().any(|l| l.contains("inside_include")),
+        "{:?}",
+        r.dialogue
     );
 }
 
@@ -804,4 +681,51 @@ fn include_error_attributes_origin_file() {
         "must not only blame root: {}",
         d.loc.file
     );
+}
+
+#[test]
+fn logic_file_answers_values_conditions_and_jumps() {
+    use tempfile::tempdir;
+    let dir = tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("rules.vel"),
+        "// @edition 3\nfunction premio(v: map) { return v[\"oro\"] * 2 }\nfunction rico(v: map) { return v[\"oro\"] >= 3 }\nfunction siguiente(v: map) {\n    if v[\"premio\"] >= 10 { return \"tesoro\" }\n    return \"calle\"\n}\n",
+    )
+    .unwrap();
+    let story = dir.path().join("main.vstory");
+    let write = |oro: i64| {
+        std::fs::write(
+            &story,
+            format!("logic \"rules.vel\"\n\nscene start\nset oro = {oro}\nset premio = logic.premio\nif logic.rico:\n    narrator:\n        rico\ngoto logic.siguiente\n\nscene tesoro\nnarrator:\n    en_el_tesoro\nend\n\nscene calle\nnarrator:\n    en_la_calle\nend\n"),
+        )
+        .unwrap();
+    };
+    write(5);
+    let program = velvet_story_lang::load_story_program_from_path(&story).expect("program");
+    assert!(program.logic.is_some());
+    let r = run_story_program(program, 0, 200);
+    assert!(r.dialogue.iter().any(|l| l.contains("rico")), "{:?}", r.dialogue);
+    assert!(r.dialogue.iter().any(|l| l.contains("en_el_tesoro")), "{:?}", r.dialogue);
+    let premio = r.vars.iter().find(|(k, _)| k == "premio").map(|(_, v)| v.as_str());
+    assert_eq!(premio, Some("10"), "{:?}", r.vars);
+    write(2);
+    let r = run_story_program(velvet_story_lang::load_story_program_from_path(&story).unwrap(), 0, 200);
+    assert!(!r.dialogue.iter().any(|l| l.contains("rico")), "{:?}", r.dialogue);
+    assert!(r.dialogue.iter().any(|l| l.contains("en_la_calle")), "{:?}", r.dialogue);
+}
+
+#[test]
+fn logic_calls_are_checked_against_the_logic_file() {
+    use tempfile::tempdir;
+    let dir = tempdir().unwrap();
+    std::fs::write(dir.path().join("rules.vel"), "// @edition 3\nfunction otra(v: map) { return \"\" }\n").unwrap();
+    let story = dir.path().join("main.vstory");
+    std::fs::write(&story, "logic \"rules.vel\"\n\nscene start\ngoto logic.nada\n").unwrap();
+    let err = velvet_story_lang::load_story_program_from_path(&story).unwrap_err().to_string();
+    assert!(err.contains("no function `nada`"), "{err}");
+
+    let cmds = CommandRegistry::builtin();
+    let c = velvet_story_lang::check_source("scene start\ngoto logic.siguiente\n", "x.vstory", &cmds);
+    assert!(c.diags.iter().any(|d| d.code == "VST070"), "{:?}", c.diags);
+    assert!(!c.diags.iter().any(|d| d.code == "VST027"), "a logic jump is not a missing scene");
 }

@@ -1,4 +1,4 @@
-//! Velvet Story CLI: check, build, run, format, dump-ast, dump-lowered.
+//! Velvet Story CLI: check, build, run, format, dump-ast, dump-program.
 
 use std::path::PathBuf;
 
@@ -6,8 +6,7 @@ use anyhow::{bail, Context, Result};
 use velvet_story_lang::commands::CommandRegistry;
 use velvet_story_lang::i18n_extract::{extract, to_catalog};
 use velvet_story_lang::pipeline::{
-    build_path, build_story_program, check_path, dump_ast_json, dump_lowered_text, run_path,
-    run_path_product,
+    build_story_program, check_path, dump_ast_json, dump_program_json, run_path_product,
 };
 use velvet_story_lang::studio::{build_model, model_json};
 use velvet_story_lang::{format_source, is_idempotent};
@@ -32,13 +31,12 @@ pub fn cmd_story_check(path: PathBuf) -> Result<()> {
     Ok(())
 }
 
-/// `velvet story build` — product StoryProgram (+ optional OpVs2 unit).
+/// `velvet story build` — the StoryProgram (canonical IR) StoryPlayer runs.
 pub fn cmd_story_build(path: PathBuf) -> Result<()> {
     let cmds = CommandRegistry::builtin();
     let source =
         std::fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
     let file = path.to_string_lossy().to_string();
-    // Primary: StoryProgram
     let prog = build_story_program(
         &source,
         &file,
@@ -47,60 +45,23 @@ pub fn cmd_story_build(path: PathBuf) -> Result<()> {
     )
     .map_err(|e| anyhow::anyhow!(e))?;
     println!(
-        "ok: StoryProgram entry={} scenes={} (product IR)",
+        "ok: StoryProgram entry={} scenes={}",
         prog.entry,
         prog.scenes.len()
     );
-    // Secondary: OpVs2 host unit
-    let r = build_path(&path, &cmds).map_err(|e| anyhow::anyhow!(e))?;
-    if let Some(unit) = r.lowered.as_ref() {
-        println!(
-            "ok: OpVs2 fallback {} instruction(s), {} scene entr(y/ies)",
-            unit.unit.code.len(),
-            unit.unit.entry_scenes.len()
-        );
-        if unit.unit.has_errors() {
-            for d in &unit.unit.diags {
-                println!("{}", d.display());
-            }
-        }
-    }
     Ok(())
 }
 
-/// `velvet story run` — **product** StoryPlayer path (author default).
-///
-/// OpVs2 host is only used if the product path fails (documented fallback).
+/// `velvet story run` — plays the story on StoryPlayer, taking choice `choice` at every menu.
 pub fn cmd_story_run(path: PathBuf, choice: usize) -> Result<()> {
     let cmds = CommandRegistry::builtin();
-    match run_path_product(&path, &cmds, choice) {
-        Ok(r) => {
-            for line in &r.dialogue {
-                println!("{line}");
-            }
-            println!(
-                "=> product steps={} ended={} vars={:?}",
-                r.steps, r.ended, r.vars
-            );
-            Ok(())
-        }
-        Err(e) => {
-            // Documented secondary path only — not the happy path.
-            eprintln!("# product path failed ({e}); falling back to vs2-host (secondary)");
-            let r = run_path(&path, &cmds, choice).map_err(|e| anyhow::anyhow!(e))?;
-            if !r.ok {
-                bail!("story run failed for {}", path.display());
-            }
-            for line in &r.dialogue {
-                println!("{line}");
-            }
-            for line in &r.log {
-                println!("# {line}");
-            }
-            println!("=> vs2-host steps={} state={:?}", r.steps, r.state);
-            Ok(())
-        }
+    let r = run_path_product(&path, &cmds, choice)
+        .map_err(|e| anyhow::anyhow!("story run failed for {}: {e}", path.display()))?;
+    for line in &r.dialogue {
+        println!("{line}");
     }
+    println!("=> steps={} ended={} vars={:?}", r.steps, r.ended, r.vars);
+    Ok(())
 }
 
 /// `velvet story format`
@@ -134,14 +95,15 @@ pub fn cmd_story_dump_ast(path: PathBuf) -> Result<()> {
     Ok(())
 }
 
-/// `velvet story dump-lowered`
-pub fn cmd_story_dump_lowered(path: PathBuf) -> Result<()> {
+/// `velvet story dump-program` — the StoryProgram as JSON (developer tool).
+pub fn cmd_story_dump_program(path: PathBuf) -> Result<()> {
     let source =
         std::fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
     let file = path.to_string_lossy().to_string();
     let cmds = CommandRegistry::builtin();
-    let text = dump_lowered_text(&source, &file, &cmds).map_err(|e| anyhow::anyhow!(e))?;
-    println!("{text}");
+    let title = path.file_stem().and_then(|s| s.to_str()).unwrap_or("story");
+    let json = dump_program_json(&source, &file, &cmds, title).map_err(|e| anyhow::anyhow!(e))?;
+    println!("{json}");
     Ok(())
 }
 

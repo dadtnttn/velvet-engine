@@ -67,6 +67,9 @@ fn format_top(item: &TopItem, out: &mut String, level: usize, opt: &FormatOption
         TopItem::Include { path, .. } => {
             out.push_str(&format!("{}include \"{}\"\n", ind(opt, level), path));
         }
+        TopItem::Logic { path, .. } => {
+            out.push_str(&format!("{}logic \"{}\"\n", ind(opt, level), path));
+        }
         TopItem::CharacterDecl { name, display, .. } => {
             out.push_str(&format!("{}character {}", ind(opt, level), name));
             if let Some(d) = display {

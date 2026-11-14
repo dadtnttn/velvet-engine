@@ -46,6 +46,37 @@ pub fn call_vs3_logic(
     Ok(vs3_to_story(out))
 }
 
+/// Compile VS3 source and call `fn_name` with one argument: a map of `vars` (a story's
+/// variables), as `logic.name` does.
+pub fn call_vs3_with_vars<'a>(
+    source: &str,
+    file: Option<&str>,
+    fn_name: &str,
+    vars: impl IntoIterator<Item = (&'a String, &'a StoryValue)>,
+) -> Result<StoryValue, Vs3BridgeError> {
+    let module = velvet_script_vs3::compile(source, file)
+        .map_err(|e| Vs3BridgeError::new(format!("vs3 compile: {e}")))?;
+    let map: std::collections::BTreeMap<String, velvet_script_vs3::Value> = vars
+        .into_iter()
+        .map(|(k, v)| (k.clone(), story_to_vs3(v)))
+        .collect();
+    let arg = velvet_script_vs3::Value::Map(std::rc::Rc::new(std::cell::RefCell::new(map)));
+    let out = module
+        .call(fn_name, &[arg])
+        .map_err(|e| Vs3BridgeError::new(format!("vs3 call: {e}")))?;
+    Ok(vs3_to_story(out))
+}
+
+/// The functions a VS3 logic file exports (it must compile).
+pub fn vs3_logic_functions(
+    source: &str,
+    file: Option<&str>,
+) -> Result<Vec<String>, Vs3BridgeError> {
+    velvet_script_vs3::compile(source, file)
+        .map(|m| m.function_names())
+        .map_err(|e| Vs3BridgeError::new(format!("vs3 compile: {e}")))
+}
+
 fn story_to_vs3(v: &StoryValue) -> velvet_script_vs3::Value {
     match v {
         StoryValue::Null => velvet_script_vs3::Value::Null,

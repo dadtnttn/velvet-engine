@@ -7,12 +7,11 @@
 //! ```text
 //! .vstory → lexer → parser → AST → sema
 //!        → StoryProgram          ← canonical IR
-//!             ├→ StoryPlayer     ← product runtime (default)
-//!             └→ OpVs2 (derived) ← secondary / debug / fallback host
+//!             └→ StoryPlayer     ← the runtime
 //! ```
 //!
-//! The primary execution path is **StoryProgram → StoryPlayer**. OpVs2 / Vs2Host
-//! are **not** the primary product pipeline; they are derived for dump/fallback.
+//! Logic beyond the story's own variables lives in Velvet Script 3: a story names its logic
+//! file with `logic "rules.vel"` and calls its functions as `logic.name(...)`.
 //!
 //! Diagnostic locale is **context-scoped** ([`with_diag_locale`] /
 //! [`pipeline::CheckOptions`]) so concurrent multi-doc tools do not race.
@@ -26,16 +25,13 @@ pub mod boot;
 pub mod commands;
 pub mod diag;
 pub mod format;
-pub mod from_program;
 pub mod i18n_extract;
 pub mod lexer;
 pub mod load;
 pub mod locale;
-pub mod lower;
 pub mod parser;
 pub mod pipeline;
 pub mod sema;
-pub mod source_map;
 pub mod span;
 pub mod studio;
 pub mod to_story_program;
@@ -54,10 +50,9 @@ pub use locale::{
     set_diag_locale, with_diag_locale, DiagLocale, DiagLocaleGuard,
 };
 pub use pipeline::{
-    build_path, build_source, build_story_program, build_story_program_with, check_path,
-    check_path_with, check_source, check_source_with, dump_ast_json, dump_lowered_text, run_path,
-    run_path_product, run_source, run_source_product, run_source_product_with, run_story_program,
-    BuildResult, CheckOptions, CheckResult, ProgramRunResult, RunResult,
+    build_story_program, build_story_program_with, check_path, check_path_with, check_source,
+    check_source_with, dump_ast_json, dump_program_json, run_path_product, run_source_product,
+    run_source_product_with, run_story_program, CheckOptions, CheckResult, ProgramRunResult,
 };
 pub use studio::{build_model, StudioModel};
 pub use to_story_program::{to_story_program, to_story_program_cmds, ToProgramError};
@@ -120,15 +115,8 @@ mod tests {
     #[test]
     fn welcome_run_e2e() {
         let cmds = CommandRegistry::builtin();
-        let r = run_source(WELCOME_SAMPLE, "welcome.vstory", &cmds, 0);
-        assert!(r.ok, "run failed");
-        assert!(
-            !r.dialogue.is_empty() || !r.log.is_empty() || r.steps > 0,
-            "expected observable output; dialogue={:?} log={:?} steps={}",
-            r.dialogue,
-            r.log,
-            r.steps
-        );
+        let r = run_source_product(WELCOME_SAMPLE, "welcome.vstory", &cmds, 0).expect("run");
+        assert!(!r.dialogue.is_empty() && r.steps > 0, "{r:?}");
     }
 
     #[test]
@@ -162,24 +150,25 @@ end
         let cmds = CommandRegistry::builtin();
         let c = check_source(src, "combat.vstory", &cmds);
         assert!(c.ok, "{:?}", c.diags);
-        let r = run_source(src, "combat.vstory", &cmds, 0);
-        assert!(r.ok);
+        let program = build_story_program(src, "combat.vstory", &cmds, "combat").expect("program");
+        let call = program
+            .scenes
+            .values()
+            .flat_map(|s| s.ops.iter())
+            .find_map(|op| match op {
+                velvet_story::StoryOp::HostCall { name, args } => {
+                    Some((name.clone(), args.clone()))
+                }
+                _ => None,
+            })
+            .expect("a host call");
+        assert_eq!(call.0, "combat.start");
         assert!(
-            r.log.iter().any(|l| l.contains("command combat.start")),
-            "expected host log for combat.start, got {:?}",
-            r.log
-        );
-        assert!(
-            r.log.iter().any(|l| l.contains("forest_guardian")),
-            "expected enemy ident forest_guardian in command args log, got {:?}",
-            r.log
-        );
-        assert!(
-            r.state
-                .iter()
-                .any(|(k, v)| k == "__last_command" && v == "combat.start"),
-            "state={:?}",
-            r.state
+            call.1
+                .values()
+                .any(|v| v.display_str().contains("forest_guardian")),
+            "{:?}",
+            call.1
         );
     }
 
@@ -325,19 +314,5 @@ end
             run_source_product(WELCOME_SAMPLE, "welcome.vstory", &cmds, 0).expect("product run");
         assert!(!r.dialogue.is_empty(), "product dialogue empty");
         assert!(r.steps > 0);
-        // VS2 secondary still works but is not required for product success.
-        let vs2 = run_source(WELCOME_SAMPLE, "welcome.vstory", &cmds, 0);
-        assert!(vs2.ok, "secondary vs2 host should still succeed");
-    }
-
-    #[test]
-    fn no_second_vm_types() {
-        // Vs2MiniVm and OpVs2 come from velvet-script-* (existing stack):
-        // fail if anyone redefines them locally under a different path.
-        assert!(std::any::type_name::<velvet_script_vm::Vs2MiniVm>().contains("velvet_script_vm"));
-        assert!(
-            std::any::type_name::<velvet_script_bytecode::opcodes_vs2::OpVs2>()
-                .contains("opcodes_vs2")
-        );
     }
 }

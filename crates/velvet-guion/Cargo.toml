@@ -6,6 +6,15 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
+[features]
+# Logic files (`<guion>.vel`, Velvet Script 3) for `@decide`.
+vs3 = ["dep:velvet-script-vs3"]
+# Guiones compiled into a Velvet Story program (`compile_story`), played by StoryPlayer.
+story = ["vs3", "dep:velvet-story", "dep:indexmap"]
+
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }
+velvet-script-vs3 = { workspace = true, optional = true }
+velvet-story = { workspace = true, optional = true }
+indexmap = { workspace = true, optional = true }
