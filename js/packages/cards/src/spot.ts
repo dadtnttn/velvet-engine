@@ -58,15 +58,16 @@ function ringCells(r: number): Cell[] {
  *   without them.
  */
 export function findFreeSpot(
-  obstacles: readonly BoardPoint[],
+  obstacles: readonly (BoardPoint & {readonly cards?: readonly unknown[]})[],
   near: BoardPoint,
   size: BoardSize,
   bounds?: BoardRect,
+  stackOffset?: number,
 ): BoardPoint | null {
   const width = f32(size.width);
   const height = f32(size.height);
   const start = { x: f32(near.x), y: f32(near.y) };
-  const stacks = obstacles.map((stack) => ({ x: f32(stack.x), y: f32(stack.y) }));
+  const stacks = obstacles.map((stack) => ({ x: f32(stack.x), y: f32(stack.y), h: f32(height + f32(f32(Math.max(0,(stack.cards?.length ?? 1)-1)) * f32(stackOffset ?? 0))) }));
   const area =
     bounds === undefined
       ? undefined
@@ -83,7 +84,7 @@ export function findFreeSpot(
   const clearY = f32(height - tolerance);
   const overlaps = (spot: BoardPoint): boolean =>
     stacks.some(
-      (stack) => Math.abs(f32(stack.x - spot.x)) < clearX && Math.abs(f32(stack.y - spot.y)) < clearY,
+      (stack) => Math.abs(f32(stack.x - spot.x)) < clearX && (stackOffset === undefined ? Math.abs(f32(stack.y - spot.y)) < clearY : f32(f32(spot.y + height) - tolerance) > stack.y && f32(f32(stack.y + stack.h) - tolerance) > spot.y),
     );
   const inside = (spot: BoardPoint): boolean =>
     area === undefined ||
@@ -99,7 +100,7 @@ export function findFreeSpot(
   if (area === undefined) {
     // An obstacle blocks only the cells within one step of it, so the rings past the farthest obstacle are free.
     let farthest = 0;
-    for (const stack of stacks) farthest = Math.max(farthest, steps(stack.x, stack.y));
+    for (const stack of stacks) { farthest = Math.max(farthest, steps(stack.x, stack.y)); if (stackOffset !== undefined) farthest = Math.max(farthest, steps(stack.x,f32(stack.y+stack.h))); }
     lastRing = Math.min(Math.ceil(farthest) + 2, MAX_FREE_RING);
   } else {
     // Cells inside the bounds lie between the nearest point of the bounds and its far corner.

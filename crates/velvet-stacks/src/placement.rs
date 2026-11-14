@@ -47,6 +47,9 @@ pub enum OutputPlacement {
         /// The size of a stack, `[width, height]`: both sides finite and above zero. Every stack
         /// covers this size from its position.
         footprint: (f32, f32),
+        /// Extra vertical height per card above the bottom card.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        stack_offset: Option<f32>,
         /// The rectangle `[x, y, width, height]` that a spot must lie in, edges included: finite
         /// numbers, with a width and a height of zero or more. `None` means the whole table.
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -57,9 +60,19 @@ pub enum OutputPlacement {
 impl OutputPlacement {
     /// Refuses a free placement whose numbers cannot hold a stack. The row placement has none to check.
     pub(crate) fn check(&self) -> Result<(), StacksError> {
-        let OutputPlacement::Free { footprint, bounds } = *self else {
+        let OutputPlacement::Free {
+            footprint,
+            bounds,
+            stack_offset,
+        } = *self
+        else {
             return Ok(());
         };
+        if stack_offset.is_some_and(|n| !n.is_finite() || n < 0.0) {
+            return Err(StacksError::BadPlacement(
+                "stack_offset must be finite and non-negative".into(),
+            ));
+        }
         let (width, height) = footprint;
         if !(width.is_finite() && width > 0.0 && height.is_finite() && height > 0.0) {
             return Err(StacksError::BadPlacement(format!(
@@ -111,7 +124,31 @@ impl Board {
         let row = (origin.0 + OUTPUT_STEP * (made as f32 + 1.0), origin.1);
         match self.output_placement {
             OutputPlacement::Row => row,
-            OutputPlacement::Free { footprint, bounds } => {
+            OutputPlacement::Free {
+                footprint,
+                bounds,
+                stack_offset,
+            } => {
+                if let Some(offset) = stack_offset {
+                    let near = (origin.0 + footprint.0, origin.1);
+                    let obstacles: Vec<(f32, f32, f32)> = self
+                        .stacks
+                        .values()
+                        .filter_map(|stack| {
+                            self.stack_position(stack.id).map(|(x, y)| {
+                                (
+                                    x,
+                                    y,
+                                    footprint.1
+                                        + stack.cards.len().saturating_sub(1) as f32 * offset,
+                                )
+                            })
+                        })
+                        .collect();
+                    return sized_spot(&obstacles, near, footprint, bounds)
+                        .or_else(|| sized_spot(&obstacles, near, footprint, None))
+                        .unwrap_or(row);
+                }
                 let near = (origin.0 + footprint.0, origin.1);
                 let obstacles: Vec<(f32, f32)> = self
                     .stacks
@@ -150,9 +187,30 @@ pub(crate) fn free_spot(
     size: (f32, f32),
     bounds: Option<Rect>,
 ) -> Option<(f32, f32)> {
+    let sized: Vec<_> = obstacles.iter().map(|&(x, y)| (x, y, size.1)).collect();
+    search_spot(&sized, near, size, bounds, false)
+}
+
+fn sized_spot(
+    obstacles: &[(f32, f32, f32)],
+    near: (f32, f32),
+    size: (f32, f32),
+    bounds: Option<Rect>,
+) -> Option<(f32, f32)> {
+    search_spot(obstacles, near, size, bounds, true)
+}
+
+fn search_spot(
+    obstacles: &[(f32, f32, f32)],
+    near: (f32, f32),
+    size: (f32, f32),
+    bounds: Option<Rect>,
+    compact: bool,
+) -> Option<(f32, f32)> {
     let (width, height) = size;
     let mut search = Search {
         obstacles,
+        compact,
         near,
         size,
         bounds,
@@ -187,7 +245,8 @@ struct Candidate {
 
 /// One search over one table: the inputs of the rule and the best candidate so far.
 struct Search<'a> {
-    obstacles: &'a [(f32, f32)],
+    obstacles: &'a [(f32, f32, f32)],
+    compact: bool,
     near: (f32, f32),
     size: (f32, f32),
     bounds: Option<Rect>,
@@ -207,10 +266,14 @@ impl Search<'_> {
         let steps = |x: f32, y: f32| ((x - near_x).abs() / width).max((y - near_y).abs() / height);
         match self.bounds {
             None => {
-                let farthest = self
-                    .obstacles
-                    .iter()
-                    .fold(0.0_f32, |far, &(x, y)| far.max(steps(x, y)));
+                let farthest = self.obstacles.iter().fold(0.0_f32, |far, &(x, y, h)| {
+                    let far = far.max(steps(x, y));
+                    if self.compact {
+                        far.max(steps(x, y + h))
+                    } else {
+                        far
+                    }
+                });
                 (
                     0,
                     whole_steps(farthest).saturating_add(2).min(MAX_FREE_RING),
@@ -238,9 +301,14 @@ impl Search<'_> {
         let (width, height) = self.size;
         let clear_x = width - self.tolerance;
         let clear_y = height - self.tolerance;
-        self.obstacles
-            .iter()
-            .any(|&(x, y)| (x - spot.0).abs() < clear_x && (y - spot.1).abs() < clear_y)
+        self.obstacles.iter().any(|&(x, y, h)| {
+            (x - spot.0).abs() < clear_x
+                && if self.compact {
+                    spot.1 + height - self.tolerance > y && y + h - self.tolerance > spot.1
+                } else {
+                    (y - spot.1).abs() < clear_y
+                }
+        })
     }
 
     /// Whether `spot` lies inside the bounds, edges included. Without bounds every spot does.
@@ -450,6 +518,7 @@ mod tests {
         assert_eq!(board.output_placement(), OutputPlacement::Row);
         board
             .set_output_placement(OutputPlacement::Free {
+                stack_offset: None,
                 footprint: (1.0, 1.0),
                 bounds: None,
             })
@@ -463,6 +532,7 @@ mod tests {
     #[test]
     fn a_refused_placement_changes_nothing() {
         let good = OutputPlacement::Free {
+            stack_offset: None,
             footprint: (1.0, 1.0),
             bounds: Some((0.0, 0.0, 4.0, 4.0)),
         };
@@ -470,26 +540,32 @@ mod tests {
         board.set_output_placement(good).expect("a valid placement");
         let refused = [
             OutputPlacement::Free {
+                stack_offset: None,
                 footprint: (0.0, 1.0),
                 bounds: None,
             },
             OutputPlacement::Free {
+                stack_offset: None,
                 footprint: (f32::NAN, 1.0),
                 bounds: None,
             },
             OutputPlacement::Free {
+                stack_offset: None,
                 footprint: (1.0, f32::INFINITY),
                 bounds: None,
             },
             OutputPlacement::Free {
+                stack_offset: None,
                 footprint: (1.0, 1.0),
                 bounds: Some((0.0, 0.0, -1.0, 2.0)),
             },
             OutputPlacement::Free {
+                stack_offset: None,
                 footprint: (1.0, 1.0),
                 bounds: Some((0.0, 0.0, f32::INFINITY, 1.0)),
             },
             OutputPlacement::Free {
+                stack_offset: None,
                 footprint: (1.0, 1.0),
                 bounds: Some((f32::MAX, 0.0, f32::MAX, 1.0)),
             },
@@ -511,6 +587,7 @@ mod tests {
         // Zero-sized bounds are allowed: they hold one spot.
         board
             .set_output_placement(OutputPlacement::Free {
+                stack_offset: None,
                 footprint: (1.0, 1.0),
                 bounds: Some((0.0, 0.0, 0.0, 0.0)),
             })
@@ -527,6 +604,7 @@ mod tests {
         board.drop_on(worker, bush).expect("drop");
         board
             .set_output_placement(OutputPlacement::Free {
+                stack_offset: None,
                 footprint: (1.0, 1.0),
                 bounds: None,
             })
@@ -577,6 +655,7 @@ mod tests {
         // first copy takes the spot to the right of the bush, and the second one the spot at (1, -1).
         board
             .set_output_placement(OutputPlacement::Free {
+                stack_offset: None,
                 footprint: (1.0, 1.0),
                 bounds: Some((0.0, 0.0, 0.0, 0.0)),
             })
@@ -624,7 +703,8 @@ mod tests {
         // The stack is so far away, in steps of this footprint, that the last ring would lie past the cap.
         let obstacles = [(1.0e3_f32, 0.0_f32)];
         let search = Search {
-            obstacles: &obstacles,
+            obstacles: &[(obstacles[0].0, obstacles[0].1, 1.0)],
+            compact: false,
             near: (0.0, 0.0),
             size: (1.0e-30, 1.0e-30),
             bounds: None,
@@ -642,5 +722,44 @@ mod tests {
             free_spot(&[(1.0e3, 0.0)], (1.0e-30, 0.0), (1.0e-30, 1.0e-30), None),
             Some((-9.99e-28_f32, -1.0e-27_f32))
         );
+    }
+}
+
+#[cfg(test)]
+mod compact_tests {
+    use super::*;
+    #[test]
+    fn a_tall_stack_blocks_its_tail_but_a_single_card_leaves_it_free() {
+        assert_eq!(
+            sized_spot(&[(0.0, 0.0, 3.0)], (0.0, 2.0), (1.0, 1.0), None),
+            Some((-1.0, 2.0))
+        );
+        assert_eq!(
+            sized_spot(&[(0.0, 0.0, 1.0)], (0.0, 2.0), (1.0, 1.0), None),
+            Some((0.0, 2.0))
+        );
+    }
+    #[test]
+    fn compact_placement_round_trips_and_checks_offset() {
+        let placement = OutputPlacement::Free {
+            footprint: (1.0, 1.0),
+            bounds: None,
+            stack_offset: Some(0.25),
+        };
+        assert_eq!(
+            serde_json::from_str::<OutputPlacement>(&serde_json::to_string(&placement).unwrap())
+                .unwrap(),
+            placement
+        );
+        assert!(placement.check().is_ok());
+        for offset in [-1.0, f32::INFINITY, f32::NAN] {
+            assert!(OutputPlacement::Free {
+                footprint: (1.0, 1.0),
+                bounds: None,
+                stack_offset: Some(offset)
+            }
+            .check()
+            .is_err());
+        }
     }
 }

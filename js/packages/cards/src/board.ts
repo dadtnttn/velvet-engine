@@ -38,6 +38,7 @@ type WirePlacement =
   | {
       readonly kind: "free";
       readonly footprint: readonly [number, number];
+      readonly stack_offset?: number;
       readonly bounds?: readonly [number, number, number, number];
     };
 
@@ -123,6 +124,7 @@ function toWire(placement: OutputPlacement): WirePlacement {
   if (placement.kind === "row") return { kind: "row" };
   const { footprint, bounds } = placement;
   const numbers: unknown[] = [footprint?.width, footprint?.height];
+  if (placement.stackOffset !== undefined) numbers.push(placement.stackOffset);
   if (bounds !== undefined) numbers.push(bounds.x, bounds.y, bounds.width, bounds.height);
   if (placement.kind !== "free" || !numbers.every(isBinary32)) {
     throw new CardsError(
@@ -132,14 +134,15 @@ function toWire(placement: OutputPlacement): WirePlacement {
     );
   }
   const wireFootprint: [number, number] = [f32(footprint.width), f32(footprint.height)];
-  if (bounds === undefined) return { kind: "free", footprint: wireFootprint };
+  const offset = placement.stackOffset === undefined ? {} : {stack_offset:f32(placement.stackOffset)};
+  if (bounds === undefined) return { kind: "free", footprint: wireFootprint, ...offset };
   const wireBounds: [number, number, number, number] = [
     f32(bounds.x),
     f32(bounds.y),
     f32(bounds.width),
     f32(bounds.height),
   ];
-  return { kind: "free", footprint: wireFootprint, bounds: wireBounds };
+  return { kind: "free", footprint: wireFootprint, bounds: wireBounds, ...offset };
 }
 
 /** The placement that the module wrote, in the shape the cards API uses. */
@@ -147,9 +150,10 @@ function fromWire(wire: WirePlacement): OutputPlacement {
   if (wire.kind === "row") return { kind: "row" };
   const [width, height] = wire.footprint;
   const footprint = { width, height };
-  if (wire.bounds === undefined) return { kind: "free", footprint };
+  const offset = wire.stack_offset === undefined ? {} : {stackOffset:wire.stack_offset};
+  if (wire.bounds === undefined) return { kind: "free", footprint, ...offset };
   const [x, y, w, h] = wire.bounds;
-  return { kind: "free", footprint, bounds: { x, y, width: w, height: h } };
+  return { kind: "free", footprint, bounds: { x, y, width: w, height: h }, ...offset };
 }
 
 /**
@@ -400,7 +404,8 @@ export class Board {
       }
       obstacles = stacks.filter((stack) => stack.id !== holder.id);
     }
-    return findFreeSpot(obstacles, near, size, options.bounds);
+    if (options.stackOffset !== undefined && (!Number.isFinite(f32(options.stackOffset)) || options.stackOffset < 0)) throw new CardsError("bad-input", "stackOffset must be finite and non-negative");
+    return findFreeSpot(obstacles, near, size, options.bounds, options.stackOffset);
   }
 
   /**

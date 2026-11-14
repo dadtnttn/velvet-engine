@@ -127,6 +127,8 @@ export interface FreeSpotOptions {
   readonly bounds?: BoardRect;
   /** A card whose stack is not an obstacle: the stack that is being moved, for example. */
   readonly except?: number;
+  /** Extra height of each card above the bottom card. */
+  readonly stackOffset?: number;
 }
 
 /**
@@ -139,7 +141,7 @@ export interface FreeSpotOptions {
  */
 export type OutputPlacement =
   | { readonly kind: "row" }
-  | { readonly kind: "free"; readonly footprint: BoardSize; readonly bounds?: BoardRect };
+  | { readonly kind: "free"; readonly footprint: BoardSize; readonly stackOffset?: number; readonly bounds?: BoardRect };
 
 /** Options of `Board.create` and `Board.load`. */
 export interface BoardOptions {
