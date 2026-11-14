@@ -1327,15 +1327,23 @@ impl StoryPlayer {
                 self.jump_to(&target);
                 false
             }
-            StoryOp::JumpLogic { function } => match self.logic_value(&function) {
-                StoryValue::String(target) if !target.trim().is_empty() => {
+            // Only a text answer naming a scene (or a label) jumps; anything else goes on with the
+            // next op, as an empty answer does.
+            StoryOp::JumpLogic { function } => match self.logic_text(&function) {
+                Some(target) if self.can_jump(&target) => {
                     self.exec_stack.clear();
                     self.pending_menu = None;
                     self.choice_advances_scene = false;
-                    self.jump_to(target.trim());
+                    self.jump_to(&target);
                     false
                 }
-                _ => true,
+                Some(target) => {
+                    eprintln!(
+                        "[story] goto logic.{function}: there is no scene or label «{target}»; going on"
+                    );
+                    true
+                }
+                None => true,
             },
             StoryOp::Call { target } => {
                 // Save scene IP + nested stack so return resumes the outer body.
@@ -1532,6 +1540,40 @@ impl StoryPlayer {
         }
     }
 
+    /// [`Self::logic_value`] for `goto logic.name`: the answer when it is text (trimmed, not
+    /// empty), else None.
+    fn logic_text(&self, function: &str) -> Option<String> {
+        let Some(logic) = self.program.logic.as_ref() else {
+            eprintln!("[story] logic.{function}: the story has no logic file");
+            return None;
+        };
+        crate::vs3_bridge::call_vs3_text_with_vars(
+            &logic.source,
+            Some(&logic.path),
+            function,
+            self.vars.play.iter(),
+        )
+        .unwrap_or_else(|e| {
+            eprintln!("[story] logic.{function} ({}): {e}", logic.path);
+            None
+        })
+    }
+
+    /// Whether [`Self::jump_to`] would find `target`: a scene, `scene:label`, or a label of the
+    /// current scene.
+    fn can_jump(&self, target: &str) -> bool {
+        if let Some((scene, _)) = target.split_once(':') {
+            if self.program.scenes.contains_key(scene) {
+                return true;
+            }
+        }
+        self.program.scenes.contains_key(target)
+            || self
+                .program
+                .scene(&self.snapshot.scene)
+                .is_some_and(|s| s.labels.contains_key(target))
+    }
+
     /// Evaluate a narrative condition against current variables.
     fn eval_cond(&self, cond: &StoryCond) -> bool {
         match cond {
@@ -1553,7 +1595,10 @@ impl StoryPlayer {
         match expr {
             StoryExpr::Value { value } => value.clone(),
             StoryExpr::Var { name } => self.vars.get(name),
-            StoryExpr::Logic { function } => self.logic_value(function),
+            StoryExpr::Logic { function, as_label } => match self.logic_value(function) {
+                StoryValue::String(s) if *as_label => StoryValue::String(crate::ir::label_slug(&s)),
+                v => v,
+            },
             StoryExpr::Neg { inner } => {
                 let v = self.eval_expr(inner);
                 if let Some(i) = v.as_i64() {

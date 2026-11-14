@@ -61,9 +61,17 @@ impl BranchMap {
             }
         };
 
+        // `goto logic.name` can lead to any scene: which one is only known when it runs.
+        fn any_scene(from: &str, scenes: &[String], record: &mut impl FnMut(&str, &str, &str)) {
+            for s in scenes {
+                record(from, s, "logic");
+            }
+        }
+
         fn walk_ops(
             from: &str,
             ops: &[StoryOp],
+            scenes: &[String],
             record: &mut impl FnMut(&str, &str, &str),
             endings: &mut Vec<String>,
         ) {
@@ -71,17 +79,19 @@ impl BranchMap {
                 match op {
                     StoryOp::Jump { target } => record(from, target, "jump"),
                     StoryOp::Call { target } => record(from, target, "call"),
+                    StoryOp::JumpLogic { .. } => any_scene(from, scenes, record),
                     StoryOp::Choice { options } => {
                         for opt in options {
                             for inner in &opt.body {
                                 match inner {
                                     StoryOp::Jump { target } => record(from, target, "choice"),
                                     StoryOp::Call { target } => record(from, target, "choice"),
+                                    StoryOp::JumpLogic { .. } => any_scene(from, scenes, record),
                                     StoryOp::If {
                                         then_ops, else_ops, ..
                                     } => {
-                                        walk_ops(from, then_ops, record, endings);
-                                        walk_ops(from, else_ops, record, endings);
+                                        walk_ops(from, then_ops, scenes, record, endings);
+                                        walk_ops(from, else_ops, scenes, record, endings);
                                     }
                                     StoryOp::End { ending } => endings.push(format!(
                                         "{}:{}",
@@ -96,8 +106,8 @@ impl BranchMap {
                     StoryOp::If {
                         then_ops, else_ops, ..
                     } => {
-                        walk_ops(from, then_ops, record, endings);
-                        walk_ops(from, else_ops, record, endings);
+                        walk_ops(from, then_ops, scenes, record, endings);
+                        walk_ops(from, else_ops, scenes, record, endings);
                     }
                     StoryOp::End { ending } => endings.push(format!(
                         "{}:{}",
@@ -111,7 +121,7 @@ impl BranchMap {
 
         for (name, scene) in &program.scenes {
             let mut rec = |f: &str, t: &str, r: &str| record_jump(f, t, r);
-            walk_ops(name, &scene.ops, &mut rec, &mut endings);
+            walk_ops(name, &scene.ops, &scenes, &mut rec, &mut endings);
         }
 
         // reachability from entry

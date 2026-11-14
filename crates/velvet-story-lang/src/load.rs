@@ -80,10 +80,24 @@ fn merge_includes(
     let items = std::mem::take(&mut file.items);
     for item in items {
         match item {
+            // The logic file is resolved here, once, against the folder of the file that names
+            // it (as an include is); building the program reads it from this path as it is.
             TopItem::Logic { path, span } => {
-                let resolved = resolve_include(base, &path).to_string_lossy().to_string();
+                let resolved = resolve_include(base, &path);
+                if !resolved.is_file() {
+                    let resolved_s = resolved.display().to_string();
+                    diags.push(
+                        StoryDiag::error_key(
+                            "VST072",
+                            &[("path", path.as_str()), ("resolved", resolved_s.as_str())],
+                            &file.file,
+                            span,
+                        )
+                        .with_node("logic"),
+                    );
+                }
                 out_items.push(TopItem::Logic {
-                    path: resolved,
+                    path: resolved.to_string_lossy().to_string(),
                     span,
                 });
             }

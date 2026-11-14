@@ -166,7 +166,7 @@ impl Parser {
                         s
                     }
                     _ => {
-                        self.error("VST011", &[], t.span);
+                        self.error("VST071", &[], t.span);
                         return None;
                     }
                 };

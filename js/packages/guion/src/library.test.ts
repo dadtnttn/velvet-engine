@@ -105,5 +105,11 @@ describe("GuionLibrary", () => {
     expect(problems.map((p) => p.message)).toEqual([
       expect.stringContaining("no tiene ninguna función «trato»"),
     ]);
+
+    const unlinked = await GuionLibrary.create();
+    unlinked.add("ana.md", "## inicio\n@decide trato -> fin\n**Ana:** —Hola.\n");
+    expect(unlinked.problems().map((p) => p.message)).toEqual([
+      expect.stringContaining("no tiene archivo de lógica (ana.vel"),
+    ]);
   });
 });

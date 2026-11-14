@@ -133,7 +133,7 @@ pub fn to_story_program_with_origins(
             }
         }
     }
-    check_logic_calls(&program)?;
+    check_logic_calls(file, &program)?;
 
     if !program.scenes.contains_key(&program.entry) {
         if let Some(s) = first_scene {
@@ -517,6 +517,7 @@ fn expr_to_story_expr(e: &Expr) -> Option<StoryExpr> {
         Expr::Str(s, _) => Some(StoryExpr::value(StoryValue::String(s.clone()))),
         Expr::Ident(name, _) if name.starts_with("logic.") => Some(StoryExpr::Logic {
             function: name["logic.".len()..].to_owned(),
+            as_label: false,
         }),
         Expr::Ident(name, _) => Some(StoryExpr::var(name.clone())),
         Expr::Unary {
@@ -596,11 +597,13 @@ fn collect_from_ops(ops: &[StoryOp], out: &mut Vec<(Option<String>, String)>) {
     }
 }
 
-/// Reads the logic file `path` of story `story_file` (a relative path is taken from the story's
-/// folder) and checks that it compiles.
+/// Reads the logic file `path` of story `story_file` and checks that it compiles. A story loaded
+/// from disk has the path already resolved against the folder of the file that names it
+/// (load.rs), and it is read as it is; a story parsed without loading still has it as written,
+/// and a relative path is then taken from the story's folder.
 fn load_logic(story_file: &str, path: &str, line: u32) -> Result<StoryLogic, ToProgramError> {
     let p = std::path::Path::new(path);
-    let full = if p.is_absolute() {
+    let full = if p.is_absolute() || p.is_file() {
         p.to_path_buf()
     } else {
         std::path::Path::new(story_file)
@@ -623,93 +626,94 @@ fn load_logic(story_file: &str, path: &str, line: u32) -> Result<StoryLogic, ToP
     })
 }
 
-/// Every `logic.name` of the program names a function its logic file exports (and there is one).
-fn check_logic_calls(program: &StoryProgram) -> Result<(), ToProgramError> {
+/// Every `logic.name` of the story names a function its logic file exports (and there is one).
+/// The calls are read from the story's source, so an error names the line of the call.
+fn check_logic_calls(file: &StoryFile, program: &StoryProgram) -> Result<(), ToProgramError> {
     let mut used = Vec::new();
-    for scene in program.scenes.values() {
-        logic_in_ops(&scene.ops, &mut used);
+    for item in &file.items {
+        if let TopItem::Scene(sc) = item {
+            logic_in_stmts(&sc.body, &mut used);
+        }
     }
-    if used.is_empty() {
+    let Some((first, line)) = used.first() else {
         return Ok(());
-    }
+    };
     let Some(logic) = &program.logic else {
         return Err(ToProgramError {
             message: format!(
-                "logic.{} is called, but the story declares no `logic \"file.vel\"`",
-                used[0]
+                "logic.{first} is called, but the story declares no `logic \"file.vel\"`"
             ),
-            line: 0,
+            line: *line,
         });
     };
     let functions =
         velvet_story::vs3_logic_functions(&logic.source, Some(&logic.path)).map_err(|e| {
             ToProgramError {
                 message: format!("logic file {}: {e}", logic.path),
-                line: 0,
+                line: *line,
             }
         })?;
-    for f in used {
+    for (f, line) in used {
         if !functions.contains(&f) {
             return Err(ToProgramError {
                 message: format!("logic.{f}: {} has no function `{f}`", logic.path),
-                line: 0,
+                line,
             });
         }
     }
     Ok(())
 }
 
-fn logic_in_ops(ops: &[StoryOp], out: &mut Vec<String>) {
-    for op in ops {
-        match op {
-            StoryOp::JumpLogic { function } => out.push(function.clone()),
-            StoryOp::Assign { value, .. } => logic_in_expr(value, out),
-            StoryOp::If {
-                cond,
-                then_ops,
-                else_ops,
-            } => {
-                logic_in_cond(cond, out);
-                logic_in_ops(then_ops, out);
-                logic_in_ops(else_ops, out);
+/// Every `logic.name` of `stmts` (a `goto`, a value or a condition), with its line.
+fn logic_in_stmts(stmts: &[Stmt], out: &mut Vec<(String, u32)>) {
+    for st in stmts {
+        match st {
+            Stmt::Goto { target, span } if target.starts_with("logic.") => {
+                out.push((target["logic.".len()..].to_owned(), span.line))
             }
-            StoryOp::Choice { options } => {
-                for o in options {
-                    logic_in_ops(&o.body, out);
+            Stmt::Set { value, .. } | Stmt::Add { value, .. } | Stmt::Sub { value, .. } => {
+                logic_in_expr(value, out)
+            }
+            Stmt::If {
+                cond,
+                then_body,
+                else_body,
+                ..
+            } => {
+                logic_in_expr(cond, out);
+                logic_in_stmts(then_body, out);
+                if let Some(e) = else_body {
+                    logic_in_stmts(e, out);
                 }
             }
+            Stmt::Choice { options, .. } => {
+                for o in options {
+                    logic_in_stmts(&o.body, out);
+                }
+            }
+            Stmt::CallCommand { args, .. } => {
+                for (_, v) in args {
+                    logic_in_expr(v, out);
+                }
+            }
+            Stmt::Pause {
+                duration: Some(d), ..
+            } => logic_in_expr(d, out),
             _ => {}
         }
     }
 }
 
-fn logic_in_expr(e: &StoryExpr, out: &mut Vec<String>) {
+fn logic_in_expr(e: &Expr, out: &mut Vec<(String, u32)>) {
     match e {
-        StoryExpr::Logic { function } => out.push(function.clone()),
-        StoryExpr::Binary { left, right, .. } => {
+        Expr::Ident(name, span) if name.starts_with("logic.") => {
+            out.push((name["logic.".len()..].to_owned(), span.line))
+        }
+        Expr::Binary { left, right, .. } => {
             logic_in_expr(left, out);
             logic_in_expr(right, out);
         }
-        StoryExpr::Neg { inner } => logic_in_expr(inner, out),
-        _ => {}
-    }
-}
-
-fn logic_in_cond(c: &StoryCond, out: &mut Vec<String>) {
-    match c {
-        StoryCond::Logic { function } => out.push(function.clone()),
-        StoryCond::Not { inner } => logic_in_cond(inner, out),
-        StoryCond::And { left, right } | StoryCond::Or { left, right } => {
-            logic_in_cond(left, out);
-            logic_in_cond(right, out);
-        }
-        StoryCond::Cmp { left, right, .. } => {
-            for o in [left, right] {
-                if let StoryOperand::Logic { function } = o {
-                    out.push(function.clone());
-                }
-            }
-        }
+        Expr::Unary { expr, .. } => logic_in_expr(expr, out),
         _ => {}
     }
 }

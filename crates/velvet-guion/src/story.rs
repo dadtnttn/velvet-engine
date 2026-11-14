@@ -4,13 +4,14 @@
 //! Every scene of every guion becomes a story scene named by its id (`<file id>.<label>`):
 //!
 //! - a line is dialogue (narration, sounds and the narrator have no speaker);
-//! - a choice is a story choice; an option's conditions are worked out just before the choice
-//!   into a hidden variable (`__opt_<scene>_<n>`), which the option requires; its effects run in
-//!   its body, then it jumps to its target (or goes on with the next line);
+//! - a choice is a story choice, and its question (`? …`) a narrator line just before it, as in a
+//!   visual-novel export; an option's conditions are worked out just before the choice into a
+//!   hidden variable (`__opt_<scene>_<n>`), which the option requires; its effects run in its
+//!   body, then it jumps to its target (or goes on with the next line);
 //! - `@si` is an `if` around a jump, `@salta` a jump, `@var` assignments, `@vn` a jump, `@fin` the
 //!   end, and a scene that runs on into the next jumps there;
 //! - `@decide name -> a, b` asks the logic file (`logic.name`, Velvet Script 3) and jumps to the
-//!   scene of the label it answers;
+//!   scene of the label it answers, read as a slug on both sides as a conversation reads it;
 //! - `@fondo` and `@musica` are the story's background and music; any other staging is a host
 //!   call `stage.<directive>` with the argument as `arg`.
 //!
@@ -137,7 +138,15 @@ pub fn compile_story(lib: &Library, entry: &str) -> Result<StoryProgram, String>
                             text: text.clone(),
                         });
                     }
-                    Step::Choice { options, .. } => {
+                    Step::Choice {
+                        prompt, options, ..
+                    } => {
+                        if let Some(p) = prompt.as_ref().filter(|p| !p.trim().is_empty()) {
+                            ops.push(StoryOp::Dialogue {
+                                speaker: None,
+                                text: p.clone(),
+                            });
+                        }
                         let mut arms = Vec::new();
                         for o in options {
                             let require = (!o.cond.is_empty()).then(|| {
@@ -177,11 +186,13 @@ pub fn compile_story(lib: &Library, entry: &str) -> Result<StoryProgram, String>
                     }),
                     Step::Set { effects } => ops.extend(effects.iter().map(assign)),
                     Step::Decide { name, to, .. } => {
+                        // the answer is kept as a label (slug), and compared with each label's
                         ops.push(StoryOp::Assign {
                             name: DECIDED.to_owned(),
                             assign_op: AssignOp::Set,
                             value: StoryExpr::Logic {
                                 function: name.clone(),
+                                as_label: true,
                             },
                         });
                         for t in to {
@@ -281,13 +292,64 @@ mod tests {
         let program = compile_story(&lib, "ana.inicio").expect("program");
         assert_eq!(
             play(program.clone(), 0),
-            vec!["Gracias.", "La puerta se cierra."],
-            "tea: the @si jump, then on into the next scene"
+            vec!["¿Qué?", "Gracias.", "La puerta se cierra."],
+            "the question, then tea: the @si jump, then on into the next scene"
         );
         assert_eq!(
             play(program, 1),
-            vec!["Bueno.", "Hum."],
+            vec!["¿Qué?", "Bueno.", "Hum."],
             "nothing: the logic file sends it to «recelo»"
         );
+    }
+
+    #[test]
+    fn decide_answers_are_read_as_labels_as_in_a_conversation() {
+        let mut lib = Library::new(Cast::new());
+        lib.add(
+            "---\nid: ana\n---\n## inicio\n@decide trato -> Recelo, otro.despedida\n**Ana:** —Bueno.\n@fin\n## recelo\n**Ana:** —Hum.\n@fin\n",
+            Path::new("ana.md"),
+        );
+        lib.add(
+            "---\nid: otro\n---\n## despedida\n**Otro:** —Adiós.\n@fin\n## charla\n@var confianza +1\n@fin\n",
+            Path::new("otro.md"),
+        );
+        lib.add_logic(
+            "ana",
+            "// @edition 3\nfunction trato(v: map) {\n    if v[\"confianza\"] >= 1 { return \"Otro.Despedida\" }\n    return \" RECELO \"\n}\n",
+            Path::new("ana.vel"),
+        );
+        assert!(lib.problems.is_empty(), "{:?}", lib.problems);
+        let program = compile_story(&lib, "ana.inicio").expect("program");
+        assert_eq!(
+            play(program.clone(), 0),
+            vec!["Hum."],
+            "« RECELO » is «Recelo»"
+        );
+        let mut trusted = program;
+        trusted
+            .initial_vars
+            .insert("confianza".to_owned(), StoryValue::Int(1));
+        assert_eq!(
+            play(trusted, 0),
+            vec!["Adiós."],
+            "«Otro.Despedida» is «otro.despedida», in the other guion"
+        );
+    }
+
+    #[test]
+    fn the_story_label_slug_is_the_guion_slug() {
+        for s in [
+            "Otro.Despedida",
+            " RECELO ",
+            "Ánimo, ñandú",
+            "3 cosas",
+            "a--b__c",
+            "",
+            "  ",
+            "Él dijo: «sí»",
+            "ÜBER alles",
+        ] {
+            assert_eq!(velvet_story::label_slug(s), slug(s), "{s:?}");
+        }
     }
 }

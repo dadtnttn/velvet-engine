@@ -57,7 +57,7 @@ Variable de entorno: `VELVET_STORY_LANG=en` (el flag `--lang` tiene prioridad).
 ## Lógica en Velvet Script 3
 
 Una historia puede declarar arriba su archivo de lógica, en Velvet Script 3 (`// @edition 3`),
-con una ruta relativa a la historia:
+con una ruta entre comillas relativa al archivo que la declara:
 
 ```velvet-story
 logic "reglas.vel"
@@ -82,12 +82,17 @@ function siguiente(v: map) {
 
 - `logic.nombre` llama a la función `nombre` con un solo argumento: un mapa con las variables de
   la historia. Vale como valor (`set`, comparaciones) y como condición (`if logic.rico:`).
-- `goto logic.nombre` salta a la escena cuyo nombre devuelve la función; si devuelve `""` (o algo
-  que no es texto), la escena sigue con la línea siguiente.
+- `goto logic.nombre` salta a la escena cuyo nombre devuelve la función; si devuelve `""`, algo
+  que no es texto o el nombre de una escena que no existe, la escena sigue con la línea siguiente
+  (lo último se avisa al ejecutar). El mapa de ramas cuenta un `goto logic.x` como un salto
+  posible a cualquier escena.
 - Cada llamada usa una sesión nueva: la lógica no guarda estado propio. Las variables siguen siendo
-  de la historia, así que las partidas guardadas no cambian.
-- Al compilar se comprueba que el archivo existe, compila y exporta cada función usada. Un
-  `logic.x` sin `logic "…"` es el diagnóstico `VST070`.
+  de la historia, así que las partidas guardadas no cambian: el hash del programa no incluye la
+  lógica, y editar el `.vel` no las invalida.
+- Al comprobar la historia, un `logic.x` (en un `goto`, un valor o una condición) sin `logic "…"`
+  es el diagnóstico `VST070`, `logic` sin ruta entre comillas es `VST071`, y un archivo de lógica
+  que no existe es `VST072`. Al compilar se comprueba además que el archivo compila y exporta cada
+  función usada; el error lleva la línea de la llamada.
 - El reproductor web (`web_story`) no ejecuta Velvet Script 3: un `goto logic.x` le llega como
   `logic_jump` y lo pasa de largo.
 

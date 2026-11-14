@@ -241,7 +241,9 @@ pub fn count_skippable_read_lines(player: &StoryPlayer, max: u32) -> u32 {
                 }
             }
             crate::ir::StoryOp::Choice { .. } | crate::ir::StoryOp::End { .. } => break,
-            crate::ir::StoryOp::Jump { .. } | crate::ir::StoryOp::Call { .. } => break,
+            crate::ir::StoryOp::Jump { .. }
+            | crate::ir::StoryOp::Call { .. }
+            | crate::ir::StoryOp::JumpLogic { .. } => break,
             _ => idx += 1,
         }
     }

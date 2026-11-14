@@ -28,6 +28,53 @@ impl Vs3BridgeError {
     }
 }
 
+/// One compiled logic file, kept with what it was compiled from.
+struct Compiled {
+    source: String,
+    file: Option<String>,
+    module: std::rc::Rc<velvet_script_vs3::Vs3Module>,
+}
+
+thread_local! {
+    /// The logic files compiled on this thread. A story calls its logic file on every `logic.name`
+    /// it meets, and compiling it is nearly all the cost of a call; every call still runs in a
+    /// fresh session of the module, so caching keeps no state between calls.
+    static COMPILED: std::cell::RefCell<Vec<Compiled>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// `source` compiled, from this thread's cache when it was compiled before.
+fn compiled(
+    source: &str,
+    file: Option<&str>,
+) -> Result<std::rc::Rc<velvet_script_vs3::Vs3Module>, Vs3BridgeError> {
+    let hit = COMPILED.with(|c| {
+        c.borrow()
+            .iter()
+            .find(|e| e.source == source && e.file.as_deref() == file)
+            .map(|e| e.module.clone())
+    });
+    if let Some(module) = hit {
+        return Ok(module);
+    }
+    let module = std::rc::Rc::new(
+        velvet_script_vs3::compile(source, file)
+            .map_err(|e| Vs3BridgeError::new(format!("vs3 compile: {e}")))?,
+    );
+    COMPILED.with(|c| {
+        let mut c = c.borrow_mut();
+        // A handful of logic files is the most a game has; past that, start over.
+        if c.len() >= 16 {
+            c.clear();
+        }
+        c.push(Compiled {
+            source: source.to_owned(),
+            file: file.map(str::to_owned),
+            module: module.clone(),
+        });
+    });
+    Ok(module)
+}
+
 /// Compile VS3 source and call `fn_name` with story-value arguments.
 ///
 /// Uses the shipped `velvet_script_vs3` compile → call path.
@@ -37,13 +84,30 @@ pub fn call_vs3_logic(
     fn_name: &str,
     args: &[StoryValue],
 ) -> Result<StoryValue, Vs3BridgeError> {
-    let module = velvet_script_vs3::compile(source, file)
-        .map_err(|e| Vs3BridgeError::new(format!("vs3 compile: {e}")))?;
+    let module = compiled(source, file)?;
     let vs_args: Vec<velvet_script_vs3::Value> = args.iter().map(story_to_vs3).collect();
     let out = module
         .call(fn_name, &vs_args)
         .map_err(|e| Vs3BridgeError::new(format!("vs3 call: {e}")))?;
     Ok(vs3_to_story(out))
+}
+
+/// Calls `fn_name` of a logic file with one argument, a map of `vars`, and returns its raw answer.
+fn call_with_vars<'a>(
+    source: &str,
+    file: Option<&str>,
+    fn_name: &str,
+    vars: impl IntoIterator<Item = (&'a String, &'a StoryValue)>,
+) -> Result<velvet_script_vs3::Value, Vs3BridgeError> {
+    let module = compiled(source, file)?;
+    let map: std::collections::BTreeMap<String, velvet_script_vs3::Value> = vars
+        .into_iter()
+        .map(|(k, v)| (k.clone(), story_to_vs3(v)))
+        .collect();
+    let arg = velvet_script_vs3::Value::Map(std::rc::Rc::new(std::cell::RefCell::new(map)));
+    module
+        .call(fn_name, &[arg])
+        .map_err(|e| Vs3BridgeError::new(format!("vs3 call: {e}")))
 }
 
 /// Compile VS3 source and call `fn_name` with one argument: a map of `vars` (a story's
@@ -54,17 +118,21 @@ pub fn call_vs3_with_vars<'a>(
     fn_name: &str,
     vars: impl IntoIterator<Item = (&'a String, &'a StoryValue)>,
 ) -> Result<StoryValue, Vs3BridgeError> {
-    let module = velvet_script_vs3::compile(source, file)
-        .map_err(|e| Vs3BridgeError::new(format!("vs3 compile: {e}")))?;
-    let map: std::collections::BTreeMap<String, velvet_script_vs3::Value> = vars
-        .into_iter()
-        .map(|(k, v)| (k.clone(), story_to_vs3(v)))
-        .collect();
-    let arg = velvet_script_vs3::Value::Map(std::rc::Rc::new(std::cell::RefCell::new(map)));
-    let out = module
-        .call(fn_name, &[arg])
-        .map_err(|e| Vs3BridgeError::new(format!("vs3 call: {e}")))?;
-    Ok(vs3_to_story(out))
+    call_with_vars(source, file, fn_name, vars).map(vs3_to_story)
+}
+
+/// [`call_vs3_with_vars`] for an answer that must be text (`goto logic.name`): the text, trimmed,
+/// or None when the function answers anything else (a number, a list, null) or only spaces.
+pub fn call_vs3_text_with_vars<'a>(
+    source: &str,
+    file: Option<&str>,
+    fn_name: &str,
+    vars: impl IntoIterator<Item = (&'a String, &'a StoryValue)>,
+) -> Result<Option<String>, Vs3BridgeError> {
+    Ok(match call_with_vars(source, file, fn_name, vars)? {
+        velvet_script_vs3::Value::String(s) if !s.trim().is_empty() => Some(s.trim().to_owned()),
+        _ => None,
+    })
 }
 
 /// The functions a VS3 logic file exports (it must compile).
@@ -72,9 +140,7 @@ pub fn vs3_logic_functions(
     source: &str,
     file: Option<&str>,
 ) -> Result<Vec<String>, Vs3BridgeError> {
-    velvet_script_vs3::compile(source, file)
-        .map(|m| m.function_names())
-        .map_err(|e| Vs3BridgeError::new(format!("vs3 compile: {e}")))
+    compiled(source, file).map(|m| m.function_names())
 }
 
 fn story_to_vs3(v: &StoryValue) -> velvet_script_vs3::Value {

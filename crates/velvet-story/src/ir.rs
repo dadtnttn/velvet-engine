@@ -204,7 +204,7 @@ pub enum StoryOp {
         name: String,
     },
     /// Jump to the scene the story's logic function answers with (`goto logic.name`); an empty
-    /// or non-text answer goes on with the next op.
+    /// or non-text answer, or one that names no scene or label, goes on with the next op.
     JumpLogic {
         /// Function of the story's logic file.
         function: String,
@@ -248,7 +248,40 @@ pub enum StoryExpr {
     Logic {
         /// Function name.
         function: String,
+        /// Read a text answer as a label ([`label_slug`]): lower case, accents off, words joined
+        /// by `_`, so `" Otro.Escena "` and `"otro_escena"` are the same answer. Guiones compile
+        /// `@decide` with it, to match the labels after `->` as a conversation does.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        as_label: bool,
     },
+}
+
+/// A label as an identifier: lower case, accents off, words joined by `_`, and an `s` before a
+/// leading digit. The same rule as velvet-guion's `slug`, which names guion scenes and labels.
+pub fn label_slug(text: &str) -> String {
+    let mut out = String::new();
+    for c in text.trim().chars() {
+        let c = match c {
+            'á' | 'à' | 'ä' | 'â' | 'Á' | 'À' => 'a',
+            'é' | 'è' | 'ë' | 'ê' | 'É' => 'e',
+            'í' | 'ì' | 'ï' | 'î' | 'Í' => 'i',
+            'ó' | 'ò' | 'ö' | 'ô' | 'Ó' => 'o',
+            'ú' | 'ù' | 'ü' | 'û' | 'Ú' => 'u',
+            'ñ' | 'Ñ' => 'n',
+            c => c.to_ascii_lowercase(),
+        };
+        if c.is_ascii_alphanumeric() {
+            out.push(c);
+        } else if !out.ends_with('_') && !out.is_empty() {
+            out.push('_');
+        }
+    }
+    let out = out.trim_end_matches('_').to_owned();
+    if out.starts_with(|c: char| c.is_ascii_digit()) {
+        format!("s{out}")
+    } else {
+        out
+    }
 }
 
 impl StoryExpr {
@@ -460,6 +493,9 @@ impl StoryProgram {
     ///
     /// Covers entry, title, scenes (ops/labels), and initial vars — enough to
     /// detect when a save is reopened against a different narrative program.
+    /// The logic file is left out: a save keeps its place in the scenes and the story's
+    /// variables, which editing the logic file does not move, and where the file was read from
+    /// says nothing about the story.
     pub fn content_hash(&self) -> String {
         use sha2::{Digest, Sha256};
         // JSON is deterministic enough for IndexMap (insertion order) + serde.
@@ -470,7 +506,6 @@ impl StoryProgram {
             "screens": &self.screens,
             "transforms": &self.transforms,
             "initial_vars": &self.initial_vars,
-            "logic": &self.logic,
         });
         let bytes = serde_json::to_vec(&payload).unwrap_or_default();
         let hash = Sha256::digest(&bytes);

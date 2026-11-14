@@ -224,10 +224,11 @@ is a problem too, and so is a `@decide` with no function or no label.
 ### Logic files
 
 A guion `<file>.md` can have a logic file beside it, `<file>.vel`, written in Velvet Script 3
-(`// @edition 3`, see [VELVET_SCRIPT_3.md](../language/VELVET_SCRIPT_3.md)). Each `@decide`
-calls one of its functions with a single argument, a map of the guion's variables (every variable
-the file reads or writes, 0 when unset), and the function answers with one of the labels listed
-after `->`, or `""` (or `null`) to go on with the next line:
+(`// @edition 3`, see [VELVET_SCRIPT_3.md](../language/VELVET_SCRIPT_3.md)). A `.vel` there that
+does not say `// @edition 3` (a classic Velvet story, say) is not a logic file and is left alone.
+Each `@decide` calls one of its functions with a single argument, a map of the story's variables
+(every variable the library's guiones read or write, 0 when unset), and the function answers with
+one of the labels listed after `->`, or `""` (or `null`) to go on with the next line:
 
 ```text
 @decide noche -> ly_despierto, ly_dormido
@@ -242,8 +243,11 @@ function noche(v: map) {
 ```
 
 The labels after `->` are the only places it can lead: they are checked like any other target,
-and an answer that is not one of them is reported at run time and play goes on. Each call runs in
-a fresh session, so the logic keeps no state of its own; the variables stay the story's.
+and an answer that is not one of them is reported at run time and play goes on. An answer is read
+as a label, the way labels are written anywhere in a guion (lower case, accents off, words joined
+by `_`): `"Otro.Despedida"` and `" otro_despedida "` both name `-> otro.despedida`, and play goes
+where that label leads. Each call runs in a fresh session, so the logic keeps no state of its own;
+the variables stay the story's.
 
 The Rust reader reads logic files with its `vs3` feature (`velvet-guion = { …, features = ["vs3"]
 }`); without it a `@decide` goes on with the next line. The JavaScript reader has no files to
@@ -251,25 +255,28 @@ look beside: give it each logic file with `GuionLibrary.addLogic(file, text)` af
 
 In a visual-novel export (`compile_vn`) a `@decide` is a crossroads node (`"pass": true`) with a
 `decide` object: `{"guion": <id>, "function": <name>, "routes": [{"label", "to"}…]}`, where each
-`to` is the node the label leads to, and `next` is where it goes with no answer. The host asks the
-library with `Library::decide_values(guion, function, variables)` and follows the route of the
-label it gets back.
+`to` is the node the label leads to, and `next` is where it goes with no answer. The labels are
+written as labels (`otro_despedida` for `-> otro.despedida`). The host asks the library with
+`Library::decide_values(guion, function, variables)`, which answers in that same form, and follows
+the route whose `label` it gets back.
 
 ### Compiled through Velvet Story
 
 With its `story` feature, velvet-guion compiles a library into a Velvet Story program:
 `compile_story(&library, "file.label")` returns the `velvet_story::StoryProgram` that
 `StoryPlayer` plays (see [VELVET_STORY.md](../language/VELVET_STORY.md)). Each scene becomes a
-story scene named by its id; lines are dialogue, choices are story choices (an option's conditions
-are worked out just before the choice), `@si` is an `if` around a jump, `@var` assignments,
-`@decide` calls the logic file through `logic.<function>` and jumps to the scene of the label it
-answers, `@fondo` and `@musica` are the background and music, and any other staging is a host call
+story scene named by its id; lines are dialogue, choices are story choices with their question as
+a narrator line just before them (an option's conditions are worked out just before the choice),
+`@si` is an `if` around a jump, `@var` assignments, `@decide` calls the logic file through
+`logic.<function>` and jumps to the scene of the label it answers (read as a label, as above),
+`@fondo` and `@musica` are the background and music, and any other staging is a host call
 `stage.<directive>` with its argument as `arg`. The variables start at 0. One program takes one
 logic file: a library whose guiones have several is refused.
 
 Played by `StoryPlayer`, a compiled guion shows the same lines in the same order and ends with the
-same variables as a [`Conversation`](#playing-a-conversation); this was checked on two complete
-stories of five parts each, a thousand random playthroughs per story.
+same variables as a [`Conversation`](#playing-a-conversation), where a choice's question is shown
+with the choice instead of as a line before it; this was checked on two complete stories of five
+parts each, a thousand random playthroughs per story.
 
 A target of a jump, an option or `@vn` must be a label of the same file, or a `file.label` of
 another file. For a label of this file, a missing target is a problem, reported on the line of
@@ -363,7 +370,7 @@ A file with problems still plays what it can. Each problem names its file and li
 | `opción ilegible: <text>` | An option whose conditions or effects are not valid. |
 | `no hay ninguna escena «<target>» en este guion` | A target label that this file does not have. |
 | `una elección sin opciones` | A choice with no options (reported once per scene). |
-| `@decide <function>: este guion no tiene archivo de lógica (<id>.vel)` | A `@decide` in a file with no logic file beside it. |
+| `@decide <function>: este guion no tiene archivo de lógica (<file>.vel, en Velvet Script 3: …)` | A `@decide` in a file with no logic file beside it (or one that is not Velvet Script 3). The JavaScript reader lists it in `problems()` until `addLogic` gives the guion its file. |
 | `@decide <function>: <path> no tiene ninguna función «<function>»` | The logic file does not export that function. |
 | `velvet-guion se compiló sin su función \`vs3\`: no lee archivos de lógica` | A logic file found by a reader built without the `vs3` feature. |
 | a Velvet Script 3 compile error | The logic file does not compile; the message is the compiler's, with its line. |

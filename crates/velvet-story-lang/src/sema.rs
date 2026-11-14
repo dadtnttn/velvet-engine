@@ -66,7 +66,74 @@ pub fn analyze(file: &StoryFile, cmds: &CommandRegistry) -> SemaResult {
         }
     }
 
+    // `logic.x` as a value or a condition needs the story's `logic "file.vel"` too (a `goto
+    // logic.x` is checked with the gotos)
+    if !file
+        .items
+        .iter()
+        .any(|i| matches!(i, TopItem::Logic { .. }))
+    {
+        for item in &file.items {
+            if let TopItem::Scene(sc) = item {
+                check_logic_values(&mut r, file, sc, &sc.body);
+            }
+        }
+    }
+
     r
+}
+
+/// VST070 for every `logic.x` read as a value or a condition, in a story with no logic file.
+fn check_logic_values(r: &mut SemaResult, file: &StoryFile, scene: &Scene, stmts: &[Stmt]) {
+    let origin = diag_file(file, scene);
+    for st in stmts {
+        match st {
+            Stmt::Set { value, .. } | Stmt::Add { value, .. } | Stmt::Sub { value, .. } => {
+                logic_reads(r, &origin, value)
+            }
+            Stmt::If {
+                cond,
+                then_body,
+                else_body,
+                ..
+            } => {
+                logic_reads(r, &origin, cond);
+                check_logic_values(r, file, scene, then_body);
+                if let Some(e) = else_body {
+                    check_logic_values(r, file, scene, e);
+                }
+            }
+            Stmt::Choice { options, .. } => {
+                for o in options {
+                    check_logic_values(r, file, scene, &o.body);
+                }
+            }
+            Stmt::CallCommand { args, .. } => {
+                for (_, v) in args {
+                    logic_reads(r, &origin, v);
+                }
+            }
+            Stmt::Pause {
+                duration: Some(d), ..
+            } => logic_reads(r, &origin, d),
+            _ => {}
+        }
+    }
+}
+
+fn logic_reads(r: &mut SemaResult, origin: &str, e: &Expr) {
+    match e {
+        Expr::Ident(name, span) if name.starts_with("logic.") => r.diags.push(
+            StoryDiag::error_key("VST070", &[("name", name.as_str())], origin, *span)
+                .with_node("logic"),
+        ),
+        Expr::Binary { left, right, .. } => {
+            logic_reads(r, origin, left);
+            logic_reads(r, origin, right);
+        }
+        Expr::Unary { expr, .. } => logic_reads(r, origin, expr),
+        _ => {}
+    }
 }
 
 fn collect_labels(r: &mut SemaResult, scene: &str, stmts: &[Stmt]) {

@@ -704,28 +704,213 @@ fn logic_file_answers_values_conditions_and_jumps() {
     let program = velvet_story_lang::load_story_program_from_path(&story).expect("program");
     assert!(program.logic.is_some());
     let r = run_story_program(program, 0, 200);
-    assert!(r.dialogue.iter().any(|l| l.contains("rico")), "{:?}", r.dialogue);
-    assert!(r.dialogue.iter().any(|l| l.contains("en_el_tesoro")), "{:?}", r.dialogue);
-    let premio = r.vars.iter().find(|(k, _)| k == "premio").map(|(_, v)| v.as_str());
+    assert!(
+        r.dialogue.iter().any(|l| l.contains("rico")),
+        "{:?}",
+        r.dialogue
+    );
+    assert!(
+        r.dialogue.iter().any(|l| l.contains("en_el_tesoro")),
+        "{:?}",
+        r.dialogue
+    );
+    let premio = r
+        .vars
+        .iter()
+        .find(|(k, _)| k == "premio")
+        .map(|(_, v)| v.as_str());
     assert_eq!(premio, Some("10"), "{:?}", r.vars);
     write(2);
-    let r = run_story_program(velvet_story_lang::load_story_program_from_path(&story).unwrap(), 0, 200);
-    assert!(!r.dialogue.iter().any(|l| l.contains("rico")), "{:?}", r.dialogue);
-    assert!(r.dialogue.iter().any(|l| l.contains("en_la_calle")), "{:?}", r.dialogue);
+    let r = run_story_program(
+        velvet_story_lang::load_story_program_from_path(&story).unwrap(),
+        0,
+        200,
+    );
+    assert!(
+        !r.dialogue.iter().any(|l| l.contains("rico")),
+        "{:?}",
+        r.dialogue
+    );
+    assert!(
+        r.dialogue.iter().any(|l| l.contains("en_la_calle")),
+        "{:?}",
+        r.dialogue
+    );
 }
 
 #[test]
 fn logic_calls_are_checked_against_the_logic_file() {
     use tempfile::tempdir;
     let dir = tempdir().unwrap();
-    std::fs::write(dir.path().join("rules.vel"), "// @edition 3\nfunction otra(v: map) { return \"\" }\n").unwrap();
+    std::fs::write(
+        dir.path().join("rules.vel"),
+        "// @edition 3\nfunction otra(v: map) { return \"\" }\n",
+    )
+    .unwrap();
     let story = dir.path().join("main.vstory");
-    std::fs::write(&story, "logic \"rules.vel\"\n\nscene start\ngoto logic.nada\n").unwrap();
-    let err = velvet_story_lang::load_story_program_from_path(&story).unwrap_err().to_string();
+    std::fs::write(
+        &story,
+        "logic \"rules.vel\"\n\nscene start\ngoto logic.nada\n",
+    )
+    .unwrap();
+    let err = velvet_story_lang::load_story_program_from_path(&story)
+        .unwrap_err()
+        .to_string();
     assert!(err.contains("no function `nada`"), "{err}");
 
     let cmds = CommandRegistry::builtin();
-    let c = velvet_story_lang::check_source("scene start\ngoto logic.siguiente\n", "x.vstory", &cmds);
+    let c =
+        velvet_story_lang::check_source("scene start\ngoto logic.siguiente\n", "x.vstory", &cmds);
     assert!(c.diags.iter().any(|d| d.code == "VST070"), "{:?}", c.diags);
-    assert!(!c.diags.iter().any(|d| d.code == "VST027"), "a logic jump is not a missing scene");
+    assert!(
+        !c.diags.iter().any(|d| d.code == "VST027"),
+        "a logic jump is not a missing scene"
+    );
+}
+
+#[test]
+fn logic_path_resolves_once_from_a_relative_story_path() {
+    // `velvet story run stories/main.vstory`: the story's path is relative, and its logic file
+    // must be read from stories/, not stories/stories/
+    let dir = format!(".tmp-logic-path-{}", std::process::id());
+    let stories = std::path::Path::new(&dir).join("stories");
+    std::fs::create_dir_all(&stories).unwrap();
+    std::fs::write(
+        stories.join("rules.vel"),
+        "// @edition 3\nfunction siguiente(v: map) { return \"fin\" }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        stories.join("main.vstory"),
+        "logic \"rules.vel\"\n\nscene start\ngoto logic.siguiente\n\nscene fin\nnarrator:\n    al_final\nend\n",
+    )
+    .unwrap();
+    let built = velvet_story_lang::load_story_program_from_path(&stories.join("main.vstory"));
+    let _ = std::fs::remove_dir_all(&dir);
+    let program = built.expect("a relative story path finds its logic file");
+    let r = run_story_program(program, 0, 100);
+    assert!(
+        r.dialogue.iter().any(|l| l.contains("al_final")),
+        "{:?}",
+        r.dialogue
+    );
+}
+
+#[test]
+fn logic_reads_and_files_are_checked_before_building() {
+    let cmds = CommandRegistry::builtin();
+    let c = velvet_story_lang::check_source(
+        "scene start\nset premio = logic.premio\nif logic.rico:\n    narrator:\n        rico\nend\n",
+        "x.vstory",
+        &cmds,
+    );
+    let vst070 = c.diags.iter().filter(|d| d.code == "VST070").count();
+    assert_eq!(vst070, 2, "a value and a condition: {:?}", c.diags);
+
+    let c = velvet_story_lang::check_source(
+        "logic reglas.vel\n\nscene start\nnarrator:\n    hola\nend\n",
+        "x.vstory",
+        &cmds,
+    );
+    let d = c.diags.iter().find(|d| d.code == "VST071").expect("VST071");
+    assert!(!d.display().contains("include"), "{}", d.display());
+
+    use tempfile::tempdir;
+    let dir = tempdir().unwrap();
+    let story = dir.path().join("main.vstory");
+    std::fs::write(
+        &story,
+        "logic \"falta.vel\"\n\nscene start\nnarrator:\n    hola\nend\n",
+    )
+    .unwrap();
+    let c = velvet_story_lang::check_path(&story, &cmds).unwrap();
+    assert!(c.diags.iter().any(|d| d.code == "VST072"), "{:?}", c.diags);
+}
+
+#[test]
+fn logic_errors_name_the_line_of_the_call() {
+    use tempfile::tempdir;
+    let dir = tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("rules.vel"),
+        "// @edition 3\nfunction otra(v: map) { return \"\" }\n",
+    )
+    .unwrap();
+    let story = dir.path().join("main.vstory");
+    std::fs::write(
+        &story,
+        "logic \"rules.vel\"\n\nscene start\nnarrator:\n    hola\nset x = logic.nada\nend\n",
+    )
+    .unwrap();
+    let err = velvet_story_lang::load_story_program_from_path(&story)
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("line 6"), "{err}");
+}
+
+#[test]
+fn a_logic_jump_that_names_no_scene_goes_on() {
+    use tempfile::tempdir;
+    let dir = tempdir().unwrap();
+    let story = dir.path().join("main.vstory");
+    std::fs::write(
+        &story,
+        "logic \"rules.vel\"\n\nscene start\ngoto logic.siguiente\nnarrator:\n    sigue\nend\n\nscene tesoro\nnarrator:\n    en_el_tesoro\nend\n",
+    )
+    .unwrap();
+    for answer in ["\"ninguna\"", "[\"tesoro\"]", "7"] {
+        std::fs::write(
+            dir.path().join("rules.vel"),
+            format!("// @edition 3\nfunction siguiente(v: map) {{ return {answer} }}\n"),
+        )
+        .unwrap();
+        let program = velvet_story_lang::load_story_program_from_path(&story).expect("program");
+        let r = run_story_program(program, 0, 100);
+        assert!(
+            r.dialogue.iter().any(|l| l.contains("sigue")),
+            "{answer}: {:?}",
+            r.dialogue
+        );
+        assert!(
+            !r.dialogue.iter().any(|l| l.contains("en_el_tesoro")),
+            "{answer}: {:?}",
+            r.dialogue
+        );
+    }
+}
+
+#[test]
+fn a_logic_jump_can_lead_to_any_scene_and_the_logic_is_not_in_the_hash() {
+    use tempfile::tempdir;
+    let dir = tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("rules.vel"),
+        "// @edition 3\nfunction siguiente(v: map) { return \"tesoro\" }\n",
+    )
+    .unwrap();
+    let story = dir.path().join("main.vstory");
+    std::fs::write(
+        &story,
+        "logic \"rules.vel\"\n\nscene start\ngoto logic.siguiente\n\nscene tesoro\nnarrator:\n    t\nend\n\nscene calle\nnarrator:\n    c\nend\n",
+    )
+    .unwrap();
+    let program = velvet_story_lang::load_story_program_from_path(&story).expect("program");
+    let map = velvet_story::BranchMap::analyze(&program);
+    assert!(
+        map.unreachable_scenes.is_empty(),
+        "{:?}",
+        map.unreachable_scenes
+    );
+    assert!(
+        map.unreachable_endings.is_empty(),
+        "{:?}",
+        map.unreachable_endings
+    );
+    let mut without = program.clone();
+    without.logic = None;
+    assert_eq!(
+        program.content_hash(),
+        without.content_hash(),
+        "saves don't depend on the logic file"
+    );
 }

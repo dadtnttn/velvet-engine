@@ -874,28 +874,71 @@ fn guion_vars(g: &Guion) -> BTreeSet<String> {
     out
 }
 
+/// Whether a `.vel` file is Velvet Script 3: it says `// @edition 3` (or `vs3`) in its first 40
+/// lines, as Velvet Script reads it. Other `.vel` files (classic Velvet stories) are not logic
+/// files.
+fn declares_vs3(source: &str) -> bool {
+    source.lines().take(40).any(|line| {
+        let t = line.trim();
+        let body = t
+            .strip_prefix("//")
+            .or_else(|| t.strip_prefix('#'))
+            .unwrap_or(t)
+            .trim();
+        body.strip_prefix("@edition")
+            .is_some_and(|n| matches!(n.trim(), "3" | "vs3" | "VS3"))
+    })
+}
+
 #[cfg(feature = "vs3")]
 mod vs3 {
     use std::cell::RefCell;
     use std::collections::BTreeMap;
     use std::rc::Rc;
 
-    use velvet_script_vs3::{compile, Value};
+    use velvet_script_vs3::{compile, Value, Vs3Module};
 
-    pub fn functions(source: &str, file: &str) -> Result<Vec<String>, String> {
-        compile(source, Some(file))
-            .map(|m| m.function_names())
-            .map_err(|e| e.to_string())
+    thread_local! {
+        /// The logic files compiled on this thread, with what they were compiled from: every
+        /// `@decide` calls its file, and compiling it is nearly all the cost of a call. Each call
+        /// still runs in a fresh session, so nothing carries over between calls.
+        static COMPILED: RefCell<Vec<(String, String, Rc<Vs3Module>)>> = const { RefCell::new(Vec::new()) };
     }
 
-    /// Calls `name(vars)` in a fresh session: a scene label, or None for an empty answer.
+    fn compiled(source: &str, file: &str) -> Result<Rc<Vs3Module>, String> {
+        let hit = COMPILED.with(|c| {
+            c.borrow()
+                .iter()
+                .find(|(s, f, _)| s == source && f == file)
+                .map(|(_, _, m)| m.clone())
+        });
+        if let Some(module) = hit {
+            return Ok(module);
+        }
+        let module = Rc::new(compile(source, Some(file)).map_err(|e| e.to_string())?);
+        COMPILED.with(|c| {
+            let mut c = c.borrow_mut();
+            // A handful of logic files is the most a game has; past that, start over.
+            if c.len() >= 16 {
+                c.clear();
+            }
+            c.push((source.to_owned(), file.to_owned(), module.clone()));
+        });
+        Ok(module)
+    }
+
+    pub fn functions(source: &str, file: &str) -> Result<Vec<String>, String> {
+        compiled(source, file).map(|m| m.function_names())
+    }
+
+    /// Calls `name(vars)` in a fresh session: the label it answers, or None for an empty answer.
     pub fn decide(
         source: &str,
         file: &str,
         name: &str,
         vars: BTreeMap<String, i64>,
     ) -> Result<Option<String>, String> {
-        let module = compile(source, Some(file)).map_err(|e| e.to_string())?;
+        let module = compiled(source, file)?;
         let map: BTreeMap<String, Value> =
             vars.into_iter().map(|(k, v)| (k, Value::Int(v))).collect();
         let answer = module
@@ -952,7 +995,9 @@ impl Library {
         }
     }
 
-    /// Reads the logic file of every guion that has one and checks each `@decide` against it.
+    /// Reads the logic file of every guion that has one and checks each `@decide` against it. A
+    /// guion's logic file is the `.vel` beside it with its name, when it is Velvet Script 3 (it
+    /// says `// @edition 3`); any other `.vel` there is something else, and is left alone.
     fn load_logic(&mut self) {
         let found: Vec<(String, PathBuf)> = self
             .guiones
@@ -962,6 +1007,7 @@ impl Library {
             .collect();
         for (id, path) in found {
             match std::fs::read_to_string(&path) {
+                Ok(source) if !declares_vs3(&source) => {}
                 Ok(source) => self.add_logic(&id, &source, &path),
                 Err(e) => self.problems.push(Problem {
                     file: path.display().to_string(),
@@ -989,9 +1035,15 @@ impl Library {
                         continue;
                     };
                     let message = match self.logic.get(&g.id) {
+                        // the file it is looked for in: the guion's own name, with `.vel`
                         None => Some(format!(
-                            "@decide {name}: este guion no tiene archivo de lógica ({}.vel)",
-                            g.id
+                            "@decide {name}: este guion no tiene archivo de lógica ({}, en Velvet \
+                             Script 3: `// @edition 3`)",
+                            g.path
+                                .with_extension("vel")
+                                .file_name()
+                                .map(|f| f.to_string_lossy().into_owned())
+                                .unwrap_or_else(|| format!("{}.vel", g.id))
                         )),
                         Some(l) if !l.functions.contains(name) => Some(format!(
                             "@decide {name}: {} no tiene ninguna función «{name}»",
@@ -1013,7 +1065,7 @@ impl Library {
     }
 
     /// What the logic of the guion at file index `file` answers to `@decide name`, given `vars`:
-    /// the scene to go to, or None to go on.
+    /// the label to go to (as [`slug`] gives it), or None to go on.
     pub fn decide(&self, file: usize, name: &str, vars: &Vars) -> Result<Option<String>, String> {
         let values: BTreeMap<String, i64> = vars
             .values
@@ -1024,8 +1076,10 @@ impl Library {
     }
 
     /// [`Self::decide`] for a host that keeps the story's variables itself (a visual novel playing
-    /// [`compile_vn`]'s nodes): guion `id`'s function `name`, given `vars`; the guion's variables
-    /// missing from `vars` read 0.
+    /// [`compile_vn`]'s nodes): guion `id`'s function `name`, given `vars`. Every variable of the
+    /// library's guiones that is missing from `vars` reads 0, as in a conversation. The answer
+    /// comes back as a label, [`slug`] of what the function said (`" Otro.Escena"` →
+    /// `otro_escena`): the form of the `label`s of a `decide` node's routes.
     pub fn decide_values(
         &self,
         id: &str,
@@ -1041,7 +1095,12 @@ impl Library {
             .logic
             .get(&g.id)
             .ok_or_else(|| format!("el guion «{}» no tiene archivo de lógica", g.id))?;
-        let mut values: BTreeMap<String, i64> = guion_vars(g).into_iter().map(|v| (v, 0)).collect();
+        let mut values: BTreeMap<String, i64> = self
+            .guiones
+            .iter()
+            .flat_map(guion_vars)
+            .map(|v| (v, 0))
+            .collect();
         values.extend(vars.iter().map(|(k, v)| (k.clone(), *v)));
         #[cfg(feature = "vs3")]
         return vs3::decide(
@@ -1049,7 +1108,8 @@ impl Library {
             &logic.path.display().to_string(),
             name,
             values,
-        );
+        )
+        .map(|answer| answer.map(|a| slug(&a)).filter(|a| !a.is_empty()));
         #[cfg(not(feature = "vs3"))]
         {
             let _ = (logic, name, values);
@@ -1414,9 +1474,12 @@ impl Conversation {
                         eprintln!("[guion] {}:{line}: @decide {name}: {e}", g.path.display());
                         None
                     });
+                    // the answer is a label (slug); it leads where the label it names, as written
+                    // after `->`, leads
                     match pick {
-                        Some(t) if to.iter().any(|x| slug(x) == slug(&t)) => {
-                            self.goto(lib, &t, vars)
+                        Some(t) if to.iter().any(|x| slug(x) == t) => {
+                            let to = to.iter().find(|x| slug(x) == t).cloned().unwrap_or(t);
+                            self.goto(lib, &to, vars)
                         }
                         Some(t) => {
                             eprintln!(
@@ -1916,6 +1979,7 @@ pub fn compile_vn(
                     }
                     // A crossroads that asks the logic file: `decide` names the guion and its
                     // function, and where each label leads; with no answer it goes on (`next`).
+                    // The labels are slugs, the form `Library::decide_values` answers in.
                     Step::Decide { name, to, .. } => {
                         let routes: Vec<serde_json::Value> = to
                             .iter()
@@ -2701,6 +2765,87 @@ function otra(v: map) { return \"\" }
                 .iter()
                 .any(|p| p.message.contains("no tiene ninguna función «trato»")),
             "{:?}",
+            lib.problems
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(feature = "vs3")]
+    #[test]
+    fn decide_reads_the_answer_as_a_label_and_goes_where_its_label_leads() {
+        let mut lib = Library::new(Cast::new());
+        lib.add(
+            "---\nid: ana\n---\n## inicio\n@decide trato -> Recelo, otro.despedida\n**Ana:** —Bueno.\n@fin\n## recelo\n**Ana:** —Hum.\n@fin\n",
+            Path::new("ana.md"),
+        );
+        // `confianza` is only another guion's variable: unset, the logic still reads it as 0
+        lib.add(
+            "---\nid: otro\n---\n## despedida\n**Otro:** —Adiós.\n@fin\n## charla\n@var confianza +1\n@fin\n",
+            Path::new("otro.md"),
+        );
+        lib.add_logic(
+            "ana",
+            "// @edition 3\nfunction trato(v: map) {\n    if v[\"confianza\"] >= 1 { return \"Otro.Despedida\" }\n    return \" RECELO \"\n}\n",
+            Path::new("ana.vel"),
+        );
+        assert!(lib.problems.is_empty(), "{:?}", lib.problems);
+        let one: BTreeMap<String, i64> = [("confianza".to_owned(), 1)].into();
+        assert_eq!(
+            lib.decide_values("ana", "trato", &BTreeMap::new())
+                .unwrap()
+                .as_deref(),
+            Some("recelo"),
+            "an unset variable of another guion reads 0, and the answer comes back as a label"
+        );
+        assert_eq!(
+            lib.decide_values("ana", "trato", &one).unwrap().as_deref(),
+            Some("otro_despedida")
+        );
+        let play = |confianza: i32| {
+            let mut vars = Vars::default();
+            vars.values.insert("confianza".to_owned(), confianza);
+            let c = Conversation::start(&lib, lib.find("ana.inicio", None).unwrap(), &mut vars);
+            match c.shown(&lib, &vars) {
+                Shown::Line { text, .. } => text,
+                other => panic!("{other:?}"),
+            }
+        };
+        assert_eq!(play(0), "Hum.", "« RECELO » is the label «Recelo»");
+        assert_eq!(
+            play(1),
+            "Adiós.",
+            "«Otro.Despedida» leads where «otro.despedida» leads"
+        );
+    }
+
+    #[test]
+    fn a_vel_that_is_not_velvet_script_3_is_not_a_logic_file() {
+        let dir = std::env::temp_dir().join(format!("velvet-guion-classic-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("prologo.md"),
+            "---\nid: inicio\n---\n## a\n**Ana:** —Hola.\n@fin\n",
+        )
+        .unwrap();
+        std::fs::write(dir.join("prologo.vel"), "scene main {\n    \"Hola\"\n}\n").unwrap();
+        let lib = Library::load(&dir, Cast::new());
+        assert!(lib.problems.is_empty(), "{:?}", lib.problems);
+        assert!(
+            lib.logic.is_empty(),
+            "a classic story beside a guion is left alone"
+        );
+        std::fs::write(
+            dir.join("prologo.md"),
+            "---\nid: inicio\n---\n## a\n@decide trato -> a\n**Ana:** —Hola.\n@fin\n",
+        )
+        .unwrap();
+        let lib = Library::load(&dir, Cast::new());
+        assert!(
+            lib.problems
+                .iter()
+                .any(|p| p.message.contains("(prologo.vel, en Velvet Script 3")),
+            "the problem names the file it is looked for in, not the id: {:?}",
             lib.problems
         );
         let _ = std::fs::remove_dir_all(&dir);

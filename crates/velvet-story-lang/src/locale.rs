@@ -452,6 +452,22 @@ fn template_message(loc: DiagLocale, code: &str) -> &'static str {
             DiagLocale::De => "`{name}` ruft die Logik auf, aber die Geschichte deklariert kein `logic \"datei.vel\"`.",
             DiagLocale::Zh => "`{name}` 调用了逻辑，但故事没有声明 `logic \"file.vel\"`。",
         },
+        "VST071" => match loc {
+            DiagLocale::Es => "Tras logic hace falta la ruta del archivo de lógica, entre comillas.",
+            DiagLocale::En => "logic requires the logic file's path, in quotes.",
+            DiagLocale::Ja => "logic の後には、引用符で囲んだロジックファイルのパスが必要です。",
+            DiagLocale::De => "Nach logic ist der Pfad der Logikdatei in Anführungszeichen erforderlich.",
+            DiagLocale::Zh => "logic 后面需要用引号括起来的逻辑文件路径。",
+        },
+        "VST072" => match loc {
+            DiagLocale::Es => {
+                "No se encuentra el archivo de lógica `{path}` (buscado en {resolved})."
+            }
+            DiagLocale::En => "Logic file `{path}` not found (looked in {resolved}).",
+            DiagLocale::Ja => "ロジックファイル `{path}` が見つかりません（検索: {resolved}）。",
+            DiagLocale::De => "Logikdatei `{path}` nicht gefunden (gesucht in {resolved}).",
+            DiagLocale::Zh => "找不到逻辑文件 `{path}`（查找于 {resolved}）。",
+        },
         "VST027" => match loc {
             DiagLocale::Es => "No existe la escena o etiqueta `{target}`.",
             DiagLocale::En => "Scene or label `{target}` does not exist.",
@@ -608,6 +624,14 @@ fn template_suggestion(loc: DiagLocale, code: &str) -> Option<&'static str> {
                 "Oben `logic \"regeln.vel\"` mit einer Velvet-Script-3-Datei ergänzen."
             }
             DiagLocale::Zh => "在开头添加指向 Velvet Script 3 文件的 `logic \"rules.vel\"`。",
+        }),
+        "VST071" => Some("logic \"reglas.vel\""),
+        "VST072" => Some(match loc {
+            DiagLocale::Es => "La ruta se toma desde la carpeta del archivo que la declara.",
+            DiagLocale::En => "The path is taken from the folder of the file that declares it.",
+            DiagLocale::Ja => "パスは、それを宣言したファイルのフォルダーから解釈されます。",
+            DiagLocale::De => "Der Pfad gilt ab dem Ordner der Datei, die ihn angibt.",
+            DiagLocale::Zh => "路径以声明它的文件所在的文件夹为起点。",
         }),
         "VST027" => Some(match loc {
             DiagLocale::Es => "Revisa el nombre o crea la escena con `scene …`.",

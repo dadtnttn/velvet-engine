@@ -523,9 +523,21 @@ impl GuionLibrary {
         json(&problems)
     }
 
-    /// Every problem of every guion added, in the order they were found.
+    /// Every problem of every guion added, in the order they were found; then the `@decide` steps
+    /// of the guiones that have not been given a logic file (`addLogic`) yet.
     pub fn problems(&self) -> String {
-        let problems: Vec<ProblemJson> = self.lib.problems.iter().map(ProblemJson::from).collect();
+        let mut problems: Vec<ProblemJson> =
+            self.lib.problems.iter().map(ProblemJson::from).collect();
+        for g in &self.lib.guiones {
+            if !self.lib.logic.contains_key(&g.id) {
+                problems.extend(
+                    self.lib
+                        .decide_problems(&g.id)
+                        .iter()
+                        .map(ProblemJson::from),
+                );
+            }
+        }
         json(&problems)
     }
 
