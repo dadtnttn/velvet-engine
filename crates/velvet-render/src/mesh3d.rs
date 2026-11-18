@@ -436,6 +436,17 @@ impl Material3D {
         }
     }
 
+    /// A sky dome that covers like a solid surface (it writes depth, so the passes after the scene
+    /// leave it be, and the ink outlines what stands against it) but is neither lit nor hazed: its
+    /// colour as given. Drawn far out round the camera, inside the far plane.
+    pub fn sky_solid(base_color: [f32; 4]) -> Self {
+        Self {
+            base_color,
+            texture: None,
+            occlusion_window: [0.0, 0.0, 0.0, -1.0],
+        }
+    }
+
     /// Whether this material adds light rather than covering what lies behind.
     pub fn is_additive(&self) -> bool {
         let x = self.occlusion_window[0];
@@ -3023,6 +3034,12 @@ pub struct Wgpu3DRenderer {
     /// Skip draws whose bounds are entirely off screen (on by default; off
     /// only to verify that culling never changes the image).
     pub frustum_culling: bool,
+    /// Meshes whose light is baked into them (by mesh id), with the least emission they give out
+    /// (their colour carries the light): of the frame's point lights only the first
+    /// `baked_light_limit` reach them (a torch, a spell); the rest light what moves.
+    baked_meshes: Vec<Option<f32>>,
+    /// How many of the frame's point lights (the first ones) still reach baked meshes.
+    pub baked_light_limit: usize,
     /// No haze at all, whatever the atmosphere says (a view from far above, for a map).
     pub no_fog: bool,
     camera_buffer: wgpu::Buffer,
@@ -3673,6 +3690,8 @@ impl Wgpu3DRenderer {
             last_shadow_full: false,
             last_draw_triangles: Vec::new(),
             frustum_culling: true,
+            baked_meshes: Vec::new(),
+            baked_light_limit: MAX_POINT_LIGHTS_3D,
             no_fog: false,
             camera_buffer,
             camera_bind_group,
@@ -4035,6 +4054,17 @@ impl Wgpu3DRenderer {
             mesh.updated.set(frame);
         }
         n as usize
+    }
+
+    /// Marks `mesh` as carrying its own (baked) light, giving out at least `glow` (its colour times
+    /// it, as an emission): only the first `baked_light_limit` point lights of a frame reach it.
+    /// `None` makes it an ordinary mesh again.
+    pub fn set_mesh_baked(&mut self, mesh: MeshHandle, glow: Option<f32>) {
+        let id = mesh.0 as usize;
+        if self.baked_meshes.len() <= id {
+            self.baked_meshes.resize(id + 1, None);
+        }
+        self.baked_meshes[id] = glow;
     }
 
     /// Poses a mesh from [`Self::upload_skinned_mesh`]: the GPU deforms it before the next frame
@@ -4725,6 +4755,15 @@ impl Wgpu3DRenderer {
             .iter()
             .map(|d| self.meshes.get(d.mesh.0 as usize).map(|m| m.bounds.get()))
             .collect();
+        let baked: Vec<Option<f32>> = draws
+            .iter()
+            .map(|d| self.baked_meshes.get(d.mesh.0 as usize).copied().flatten())
+            .collect();
+        let baked_bits = match self.baked_light_limit.min(local_light_count) {
+            0 => 0u32,
+            n if n >= 32 => u32::MAX,
+            n => (1u32 << n) - 1,
+        };
         let every = if local_light_count == 0 {
             0
         } else {
@@ -4775,17 +4814,25 @@ impl Wgpu3DRenderer {
                         };
                     }
                 }
-                let mask = if all_lights {
+                let mut mask = if all_lights {
                     every
                 } else {
                     bounds[draw_index].map_or(0, |b| {
                         light_mask(draw.transform, b, &local_light_positions, local_light_count)
                     })
                 };
+                let mut occlusion_window = draw.material.occlusion_window;
+                if let Some(glow) = baked[draw_index] {
+                    mask &= baked_bits;
+                    // (its light is in its colour: given out whatever the material says)
+                    if occlusion_window[0] >= 0.0 {
+                        occlusion_window[0] = occlusion_window[0].max(glow);
+                    }
+                }
                 let object = ObjectUniform {
                     model: draw.transform.to_cols_array(),
                     base_color: draw.material.base_color,
-                    occlusion_window: draw.material.occlusion_window,
+                    occlusion_window,
                     normal_matrix: normal_matrix(draw.transform),
                     light_mask: [mask, 0, 0, 0],
                 };
@@ -7243,6 +7290,10 @@ fn shade(input: VertexOut, cutout: bool) -> vec4<f32> {
             haze = 0.0;
         }
         return vec4<f32>(base * (1.0 - haze), clamp(object.base_color.a * input.color.a * albedo.a, 0.0, 1.0));
+    }
+    // A solid sky dome is neither lit nor hazed (`Material3D::sky_solid`).
+    if (object.occlusion_window.w < -0.5) {
+        return vec4<f32>(base, 1.0);
     }
     let luminance = dot(base, vec3<f32>(0.2126, 0.7152, 0.0722));
     // The source materials are authored around a 0.45 roughness. The old
