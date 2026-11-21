@@ -802,11 +802,9 @@ impl Presenter {
         if width == 0 || height == 0 || width.max(height) > self.texture_limit() {
             return false;
         }
-        if (width, height) != (self.config.width, self.config.height) {
-            self.config.width = width;
-            self.config.height = height;
-            self.surface.configure(&self.device, &self.config);
-        }
+        self.config.width = width;
+        self.config.height = height;
+        self.surface.configure(&self.device, &self.config);
         true
     }
 
