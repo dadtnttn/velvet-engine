@@ -118,6 +118,11 @@ impl<G: Game2D> App<G> {
     }
 
     fn frame(&mut self, event_loop: &ActiveEventLoop) {
+        if self.running.as_ref().and_then(|r| r.viewport).is_none() {
+            self.last = None;
+            self.behind = 0.0;
+            return;
+        }
         let now = Instant::now();
         let dt = self
             .last
@@ -421,9 +426,14 @@ impl<G: Game2D> ApplicationHandler for App<G> {
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
-        // A frame at every turn of the loop; the presentation waits for the screen (vsync).
+        // Only keep painting while there is a surface to present to and vsync can pace us.
         if let Some(running) = &self.running {
-            running.window.request_redraw();
+            if running.viewport.is_some() {
+                running.window.request_redraw();
+            } else {
+                self.last = None;
+                self.behind = 0.0;
+            }
         }
         event_loop.set_control_flow(ControlFlow::Wait);
     }
