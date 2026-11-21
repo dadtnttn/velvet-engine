@@ -385,6 +385,29 @@ pub fn open_url(app: &AndroidApp, url: &str) {
             jni_sig!("(Ljava/lang/String;Landroid/net/Uri;)V"),
             &[JValue::Object(&action), JValue::Object(&uri)],
         )?;
+        if url.starts_with("https://") || url.starts_with("http://") {
+            // Resolve web links against browsers, while sending the browser the requested URL.
+            // A plain ACTION_VIEW lets a verified app link take over.
+            let main = env.new_string("android.intent.action.MAIN")?;
+            let selector = env.new_object(
+                jni_str!("android/content/Intent"),
+                jni_sig!("(Ljava/lang/String;)V"),
+                &[JValue::Object(&main)],
+            )?;
+            let browser = env.new_string("android.intent.category.APP_BROWSER")?;
+            env.call_method(
+                &selector,
+                jni_str!("addCategory"),
+                jni_sig!("(Ljava/lang/String;)Landroid/content/Intent;"),
+                &[JValue::Object(&browser)],
+            )?;
+            env.call_method(
+                &intent,
+                jni_str!("setSelector"),
+                jni_sig!("(Landroid/content/Intent;)V"),
+                &[JValue::Object(&selector)],
+            )?;
+        }
         env.call_method(
             activity,
             jni_str!("startActivity"),
