@@ -51,7 +51,7 @@ pub mod touch;
 
 pub use error::PlatformError;
 pub use lifecycle::{AppState, Lifecycle, PlatformEvent};
-pub use locale::{posix_to_bcp47, system_locale};
+pub use locale::{posix_to_bcp47, system_locale, system_locales};
 
 use winit::event_loop::EventLoop;
 
