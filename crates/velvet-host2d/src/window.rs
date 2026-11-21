@@ -25,7 +25,7 @@ use crate::{Game2D, HostConfig};
 pub fn run<G: Game2D + 'static>(config: HostConfig, game: G) -> Result<(), Box<dyn Error>> {
     // The platform's event loop: on Android it is attached to the activity (see mobile.rs).
     let event_loop: EventLoop<()> = velvet_platform::event_loop()?;
-    let canvas = Canvas::new(config.logical_width, config.logical_height);
+    let canvas = Canvas::with_pixels(config.logical_width, config.logical_height, 1, 1);
     // QA: `VELVET_CAPTURE_AFTER=120:out.png` saves the canvas after that many frames and closes the window.
     let capture_after = std::env::var("VELVET_CAPTURE_AFTER").ok().and_then(|v| {
         let (frames, path) = v.split_once(':')?;
@@ -98,7 +98,10 @@ impl<G: Game2D> App<G> {
         let Some(running) = self.running.as_mut() else {
             return;
         };
-        running.presenter.resize(width, height);
+        if !running.presenter.resize(width, height) {
+            running.viewport = None;
+            return;
+        }
         // The logical size follows the window's shape as far as the game allows; the canvas is made again at it.
         let (lw, lh) = self.config.logical_for(width, height);
         running.viewport = Viewport::letterbox(width, height, lw, lh)
@@ -109,13 +112,30 @@ impl<G: Game2D> App<G> {
             self.game.logical_size_changed(lw, lh);
         }
         if let Some(v) = running.viewport {
-            let (pw, ph) = self.config.canvas_pixels(v.width, v.height);
-            if pw != self.canvas.pixel_width() || ph != self.canvas.pixel_height() {
-                self.canvas.resize_pixels(pw, ph);
-                self.game.pixels_changed(&self.canvas);
-            }
             if self.game.stage().is_some() {
                 self.game.stage_pixels_changed(v.width, v.height);
+            }
+            self.sync_canvas(v);
+        }
+    }
+
+    fn sync_canvas(&mut self, viewport: Viewport) {
+        let Some(running) = &self.running else {
+            return;
+        };
+        let staged = self.game.stage().is_some();
+        let (width, height) = if staged && !self.config.overlay {
+            (1, 1)
+        } else {
+            fit_texture(
+                self.config.canvas_pixels(viewport.width, viewport.height),
+                running.presenter.texture_limit(),
+            )
+        };
+        if (width, height) != (self.canvas.pixel_width(), self.canvas.pixel_height()) {
+            self.canvas.resize_pixels(width, height);
+            if !staged || self.config.overlay {
+                self.game.pixels_changed(&self.canvas);
             }
         }
     }
@@ -144,6 +164,10 @@ impl<G: Game2D> App<G> {
             event_loop.exit();
             return;
         }
+        let Some(viewport) = self.running.as_ref().and_then(|r| r.viewport) else {
+            return;
+        };
+        self.sync_canvas(viewport);
         let Some(running) = self.running.as_mut() else {
             return;
         };
@@ -163,10 +187,6 @@ impl<G: Game2D> App<G> {
             running.window.set_cursor_visible(shown);
             running.pointer_shown = shown;
         }
-        // A minimised window shows nothing: nothing is drawn nor sent to the graphics card.
-        let Some(viewport) = running.viewport else {
-            return;
-        };
         let staged = self.game.stage().is_some();
         if !staged || self.config.overlay {
             self.game.draw(&mut self.canvas);
@@ -208,7 +228,10 @@ impl<G: Game2D> App<G> {
         }
         let running = self.running.as_mut().ok_or("no window")?;
         let viewport = running.viewport.ok_or("a minimised window")?;
-        let (w, h) = self.config.canvas_pixels(viewport.width, viewport.height);
+        let (w, h) = fit_texture(
+            self.config.canvas_pixels(viewport.width, viewport.height),
+            running.presenter.texture_limit(),
+        );
         let stage = self.game.stage().ok_or("no stage")?;
         let pixels = running.presenter.capture_stage(stage, w, h);
         image::save_buffer(path, &pixels, w, h, image::ColorType::Rgba8)
@@ -509,6 +532,16 @@ struct Vertex { @builtin(position) position: vec4<f32>, @location(0) uv: vec2<f3
 }
 "#;
 
+// Keep the shape of the canvas when GPU limits call for fewer pixels.
+fn fit_texture((width, height): (u32, u32), limit: u32) -> (u32, u32) {
+    let longest = width.max(height);
+    if longest <= limit {
+        return (width.max(1), height.max(1));
+    }
+    let scale = |side| ((u64::from(side) * u64::from(limit) / u64::from(longest)) as u32).max(1);
+    (scale(width), scale(height))
+}
+
 fn window_surface_config(
     capabilities: &wgpu::SurfaceCapabilities,
     size: PhysicalSize<u32>,
@@ -523,6 +556,13 @@ fn window_surface_config(
 #[cfg(test)]
 mod surface_tests {
     use super::*;
+
+    #[test]
+    fn canvas_fits_the_device_limit_without_stretching() {
+        assert_eq!(fit_texture((7680, 4320), 4096), (4096, 2304));
+        assert_eq!(fit_texture((1920, 1080), 4096), (1920, 1080));
+        assert_eq!(fit_texture((1, u32::MAX), 4096), (1, 4096));
+    }
 
     #[test]
     fn incomplete_surface_capabilities_are_reported() {
@@ -635,6 +675,12 @@ impl Presenter {
         let capabilities = surface.get_capabilities(&adapter);
         let size = window.inner_size();
         let config = window_surface_config(&capabilities, size)?;
+        let limit = device.limits().max_texture_dimension_2d;
+        if config.width.max(config.height) > limit {
+            return Err(format!(
+                "window size exceeds the graphics texture limit ({limit})"
+            ));
+        }
         let format = config.format;
         surface.configure(&device, &config);
         let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -745,13 +791,20 @@ impl Presenter {
             .clone()
     }
 
-    fn resize(&mut self, width: u32, height: u32) {
-        if width == 0 || height == 0 {
-            return;
+    fn texture_limit(&self) -> u32 {
+        self.device.limits().max_texture_dimension_2d
+    }
+
+    fn resize(&mut self, width: u32, height: u32) -> bool {
+        if width == 0 || height == 0 || width.max(height) > self.texture_limit() {
+            return false;
         }
-        self.config.width = width;
-        self.config.height = height;
-        self.surface.configure(&self.device, &self.config);
+        if (width, height) != (self.config.width, self.config.height) {
+            self.config.width = width;
+            self.config.height = height;
+            self.surface.configure(&self.device, &self.config);
+        }
+        true
     }
 
     /// The texture for a canvas of a size, made again when the size changes.

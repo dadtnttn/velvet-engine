@@ -121,15 +121,9 @@ impl<G: Game2D> App<G> {
 }
 
 impl Presenter {
-    /// Makes the window's surface again and configures it at the window's size.
+    /// Makes the window's surface again. The host then applies the current window size.
     fn resume(&mut self) -> Result<(), wgpu::CreateSurfaceError> {
         self.surface.resume(&self.device)?;
-        let size = self.surface.window().inner_size();
-        if size.width > 0 && size.height > 0 {
-            self.config.width = size.width;
-            self.config.height = size.height;
-        }
-        self.surface.configure(&self.device, &self.config);
         Ok(())
     }
 }

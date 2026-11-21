@@ -530,6 +530,11 @@ impl StageRenderer {
                 continue;
             }
             let size = (canvas.pixel_width(), canvas.pixel_height());
+            if size.0.max(size.1) > device.limits().max_texture_dimension_2d {
+                // Do not keep showing an older version of a picture we can no longer upload.
+                self.pictures.remove(&key);
+                continue;
+            }
             let levels = self.levels_for(stage, id, picture, scale);
             match self.pictures.get_mut(&key) {
                 Some(g) if g.size == size && g.levels == levels => {
@@ -629,6 +634,13 @@ impl StageRenderer {
         viewport: [f32; 4],
         stage: &Stage,
     ) {
+        // Our depth and MSAA attachments must match the caller's target exactly.
+        if size.0 == 0
+            || size.1 == 0
+            || size.0.max(size.1) > device.limits().max_texture_dimension_2d
+        {
+            return;
+        }
         self.prepare(device, queue, stage, viewport[2] / stage.screen.x.max(1.0));
         let uid = stage.uid();
 
