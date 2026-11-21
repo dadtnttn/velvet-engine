@@ -311,10 +311,22 @@ impl<G: Game2D> App<G> {
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_millis())
             .unwrap_or(0);
-        let path = dir.join(format!("captura-{stamp}.png"));
-        match self.save_picture(&path) {
-            Ok(_) => eprintln!("[velvet-host2d] {}", path.display()),
-            Err(e) => eprintln!("[velvet-host2d] the screenshot failed: {e}"),
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static NEXT_CAPTURE: AtomicU64 = AtomicU64::new(0);
+        let pid = std::process::id();
+        let sequence = NEXT_CAPTURE.fetch_add(1, Ordering::Relaxed);
+        let name = format!("captura-{stamp}-{pid}-{sequence}");
+        let path = dir.join(format!("{name}.png"));
+        let temporary = dir.join(format!("{name}.tmp.png"));
+        let saved = self
+            .save_picture(&temporary)
+            .and_then(|_| std::fs::rename(&temporary, &path).map_err(|e| e.to_string()));
+        match saved {
+            Ok(()) => eprintln!("[velvet-host2d] {}", path.display()),
+            Err(e) => {
+                let _ = std::fs::remove_file(&temporary);
+                eprintln!("[velvet-host2d] the screenshot failed: {e}");
+            }
         }
     }
 }
