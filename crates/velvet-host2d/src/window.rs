@@ -336,22 +336,6 @@ fn host_shortcut(code: KeyCode, modifiers: ModifiersState) -> bool {
         || modifiers.alt_key() && matches!(code, KeyCode::Enter | KeyCode::NumpadEnter)
 }
 
-#[cfg(test)]
-mod shortcut_tests {
-    use super::*;
-
-    #[test]
-    fn only_modified_enter_is_a_host_shortcut() {
-        for code in [KeyCode::Enter, KeyCode::NumpadEnter] {
-            assert!(!host_shortcut(code, ModifiersState::empty()));
-            assert!(host_shortcut(code, ModifiersState::ALT));
-        }
-        for code in [KeyCode::F11, KeyCode::F12] {
-            assert!(host_shortcut(code, ModifiersState::empty()));
-        }
-    }
-}
-
 impl<G: Game2D> ApplicationHandler for App<G> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.running.is_some() {
@@ -566,40 +550,6 @@ fn window_surface_config(
     }
     velvet_platform::gpu::surface_config(capabilities, size.width, size.height)
         .ok_or_else(|| "no graphics surface format".into())
-}
-
-#[cfg(test)]
-mod surface_tests {
-    use super::*;
-
-    #[test]
-    fn canvas_fits_the_device_limit_without_stretching() {
-        assert_eq!(fit_texture((7680, 4320), 4096), (4096, 2304));
-        assert_eq!(fit_texture((1920, 1080), 4096), (1920, 1080));
-        assert_eq!(fit_texture((1, u32::MAX), 4096), (1, 4096));
-    }
-
-    #[test]
-    fn incomplete_surface_capabilities_are_reported() {
-        let size = PhysicalSize::new(640, 360);
-        let mut capabilities = wgpu::SurfaceCapabilities::default();
-        capabilities.alpha_modes.clear();
-        assert!(window_surface_config(&capabilities, size).is_err());
-
-        capabilities
-            .alpha_modes
-            .push(wgpu::CompositeAlphaMode::Opaque);
-        capabilities.formats.clear();
-        assert!(window_surface_config(&capabilities, size).is_err());
-
-        capabilities
-            .formats
-            .push(wgpu::TextureFormat::Rgba8UnormSrgb);
-        assert_eq!(
-            window_surface_config(&capabilities, size).unwrap().width,
-            640
-        );
-    }
 }
 
 /// Shows a canvas in the window.
@@ -1030,5 +980,55 @@ impl Presenter {
         frame.present();
         let _ = self.device.poll(wgpu::Maintain::Poll);
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod shortcut_tests {
+    use super::*;
+
+    #[test]
+    fn only_modified_enter_is_a_host_shortcut() {
+        for code in [KeyCode::Enter, KeyCode::NumpadEnter] {
+            assert!(!host_shortcut(code, ModifiersState::empty()));
+            assert!(host_shortcut(code, ModifiersState::ALT));
+        }
+        for code in [KeyCode::F11, KeyCode::F12] {
+            assert!(host_shortcut(code, ModifiersState::empty()));
+        }
+    }
+}
+
+#[cfg(test)]
+mod surface_tests {
+    use super::*;
+
+    #[test]
+    fn canvas_fits_the_device_limit_without_stretching() {
+        assert_eq!(fit_texture((7680, 4320), 4096), (4096, 2304));
+        assert_eq!(fit_texture((1920, 1080), 4096), (1920, 1080));
+        assert_eq!(fit_texture((1, u32::MAX), 4096), (1, 4096));
+    }
+
+    #[test]
+    fn incomplete_surface_capabilities_are_reported() {
+        let size = PhysicalSize::new(640, 360);
+        let mut capabilities = wgpu::SurfaceCapabilities::default();
+        capabilities.alpha_modes.clear();
+        assert!(window_surface_config(&capabilities, size).is_err());
+
+        capabilities
+            .alpha_modes
+            .push(wgpu::CompositeAlphaMode::Opaque);
+        capabilities.formats.clear();
+        assert!(window_surface_config(&capabilities, size).is_err());
+
+        capabilities
+            .formats
+            .push(wgpu::TextureFormat::Rgba8UnormSrgb);
+        assert_eq!(
+            window_surface_config(&capabilities, size).unwrap().width,
+            640
+        );
     }
 }

@@ -534,23 +534,6 @@ fn obu_size(bytes: &[u8]) -> Option<(usize, usize)> {
     None
 }
 
-#[cfg(test)]
-mod keyframe_tests {
-    use super::*;
-
-    #[test]
-    fn keyframe_search_handles_valid_and_invalid_obu_lengths() {
-        // A temporal delimiter followed by a sequence header.
-        assert!(starts_keyframe(&[0x12, 0, 0x0a, 1, 0]));
-        assert!(!starts_keyframe(&[0x12, 0, 0x32, 1, 0]));
-        assert!(!starts_keyframe(&[0xff; 16]));
-        assert!(!starts_keyframe(&[0x32, 0x80]));
-        assert!(!starts_keyframe(&[0x32, 0xff, 0x7f, 0x0a, 1, 0]));
-        assert!(!starts_keyframe(&[0x0a, 3, 0]));
-        assert!(!starts_keyframe(&[0x0e]));
-    }
-}
-
 impl Clip {
     /// Opens an IVF file of AV1, decoded with `threads` threads of the decoder's own (1: on the
     /// asking thread alone, none made).
@@ -651,5 +634,22 @@ impl Clip {
             .to_rgba()?;
         self.last = Some((index, rgba.clone()));
         Ok(rgba)
+    }
+}
+
+#[cfg(test)]
+mod keyframe_tests {
+    use super::*;
+
+    #[test]
+    fn keyframe_search_handles_valid_and_invalid_obu_lengths() {
+        // A temporal delimiter followed by a sequence header.
+        assert!(starts_keyframe(&[0x12, 0, 0x0a, 1, 0]));
+        assert!(!starts_keyframe(&[0x12, 0, 0x32, 1, 0]));
+        assert!(!starts_keyframe(&[0xff; 16]));
+        assert!(!starts_keyframe(&[0x32, 0x80]));
+        assert!(!starts_keyframe(&[0x32, 0xff, 0x7f, 0x0a, 1, 0]));
+        assert!(!starts_keyframe(&[0x0a, 3, 0]));
+        assert!(!starts_keyframe(&[0x0e]));
     }
 }
