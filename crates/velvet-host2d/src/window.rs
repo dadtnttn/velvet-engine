@@ -1,6 +1,7 @@
 //! The window: winit for the window and its events, wgpu to show the canvas (or the stage) letterboxed.
 
 use std::cell::RefCell;
+use std::collections::HashSet;
 use std::error::Error;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -46,6 +47,7 @@ pub fn run<G: Game2D + 'static>(config: HostConfig, game: G) -> Result<(), Box<d
         frames: 0,
         capture_after,
         modifiers: ModifiersState::empty(),
+        shortcut_keys: HashSet::new(),
     };
     event_loop.run_app(&mut app)?;
     match app.error {
@@ -72,6 +74,7 @@ struct App<G: Game2D> {
     capture_after: Option<(u64, std::path::PathBuf)>,
     /// The keyboard's modifiers held now (Alt+Enter goes fullscreen).
     modifiers: ModifiersState,
+    shortcut_keys: HashSet<KeyCode>,
 }
 
 struct Running {
@@ -290,6 +293,27 @@ impl<G: Game2D> App<G> {
     }
 }
 
+fn host_shortcut(code: KeyCode, modifiers: ModifiersState) -> bool {
+    matches!(code, KeyCode::F11 | KeyCode::F12)
+        || modifiers.alt_key() && matches!(code, KeyCode::Enter | KeyCode::NumpadEnter)
+}
+
+#[cfg(test)]
+mod shortcut_tests {
+    use super::*;
+
+    #[test]
+    fn only_modified_enter_is_a_host_shortcut() {
+        for code in [KeyCode::Enter, KeyCode::NumpadEnter] {
+            assert!(!host_shortcut(code, ModifiersState::empty()));
+            assert!(host_shortcut(code, ModifiersState::ALT));
+        }
+        for code in [KeyCode::F11, KeyCode::F12] {
+            assert!(host_shortcut(code, ModifiersState::empty()));
+        }
+    }
+}
+
 impl<G: Game2D> ApplicationHandler for App<G> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.running.is_some() {
@@ -389,25 +413,30 @@ impl<G: Game2D> ApplicationHandler for App<G> {
                 if let PhysicalKey::Code(code) = event.physical_key {
                     match event.state {
                         ElementState::Pressed => {
-                            if code == KeyCode::F12 && !event.repeat {
-                                self.screenshot();
+                            if self.shortcut_keys.contains(&code) {
+                                return;
                             }
-                            // F11 or Alt+Enter: fullscreen (borderless, on the window's own screen), or back.
-                            let enter = matches!(code, KeyCode::Enter | KeyCode::NumpadEnter);
-                            if !event.repeat
-                                && (code == KeyCode::F11 || enter && self.modifiers.alt_key())
-                            {
-                                if let Some(running) = &self.running {
+                            if !event.repeat && host_shortcut(code, self.modifiers) {
+                                self.shortcut_keys.insert(code);
+                                if code == KeyCode::F12 {
+                                    self.screenshot();
+                                } else if let Some(running) = &self.running {
                                     let full = running.window.fullscreen().is_none();
                                     running.window.set_fullscreen(
                                         full.then_some(Fullscreen::Borderless(None)),
                                     );
                                     self.game.fullscreen_changed(full);
                                 }
+                                return;
                             }
                             self.input.push(InputEvent::KeyDown(code));
                         }
-                        ElementState::Released => self.input.push(InputEvent::KeyUp(code)),
+                        ElementState::Released => {
+                            if self.shortcut_keys.remove(&code) {
+                                return;
+                            }
+                            self.input.push(InputEvent::KeyUp(code));
+                        }
                     }
                 }
                 if event.state == ElementState::Pressed {
