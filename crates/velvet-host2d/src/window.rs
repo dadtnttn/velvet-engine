@@ -233,7 +233,10 @@ impl<G: Game2D> App<G> {
             running.presenter.texture_limit(),
         );
         let stage = self.game.stage().ok_or("no stage")?;
-        let pixels = running.presenter.capture_stage(stage, w, h);
+        let pixels = running
+            .presenter
+            .stage_renderer()
+            .try_render_rgba(stage, w, h)?;
         image::save_buffer(path, &pixels, w, h, image::ColorType::Rgba8)
             .map_err(|e| e.to_string())?;
         Ok((w, h))
@@ -1017,10 +1020,5 @@ impl Presenter {
         frame.present();
         let _ = self.device.poll(wgpu::Maintain::Poll);
         Ok(())
-    }
-
-    /// The stage drawn again at a size and read back (sRGB RGBA), for screenshots and captures.
-    fn capture_stage(&mut self, stage: &Stage, width: u32, height: u32) -> Vec<u8> {
-        self.stage_renderer().render_rgba(stage, width, height)
     }
 }
