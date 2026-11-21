@@ -47,11 +47,12 @@ struct Fragment {
 
 @vertex
 fn vs_main(v: Instance) -> Fragment {
-    var corners = array<vec2<f32>, 6>(
-        vec2<f32>(0.0, 0.0), vec2<f32>(1.0, 0.0), vec2<f32>(0.0, 1.0),
-        vec2<f32>(1.0, 0.0), vec2<f32>(1.0, 1.0), vec2<f32>(0.0, 1.0),
+    // Two triangles covering (0,0)-(1,1): (0,0), (1,0), (0,1), (1,0), (1,1), (0,1).
+    // Computed with bitmasks instead of indexing a local array, which OpenGL ES 3.0 SwiftShader drops.
+    let c = vec2<f32>(
+        f32((0x1Au >> v.index) & 1u),
+        f32((0x34u >> v.index) & 1u),
     );
-    let c = corners[v.index];
     let model = mat4x4<f32>(v.m0, v.m1, v.m2, v.m3);
     var out: Fragment;
     if (v.flags.y > 0.5) {

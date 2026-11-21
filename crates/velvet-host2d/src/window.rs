@@ -489,8 +489,16 @@ struct Vertex { @builtin(position) position: vec4<f32>, @location(0) uv: vec2<f3
     v.uv = uv;
     return v;
 }
+fn to_srgb(c: vec3<f32>) -> vec3<f32> {
+    let lo = c * 12.92;
+    let hi = 1.055 * pow(max(c, vec3<f32>(0.0)), vec3<f32>(1.0 / 2.4)) - 0.055;
+    return select(hi, lo, c <= vec3<f32>(0.0031308));
+}
 @fragment fn fs_main(v: Vertex) -> @location(0) vec4<f32> {
     return vec4<f32>(textureSample(source, filtering, v.uv).rgb, 1.0);
+}
+@fragment fn fs_main_srgb(v: Vertex) -> @location(0) vec4<f32> {
+    return vec4<f32>(to_srgb(textureSample(source, filtering, v.uv).rgb), 1.0);
 }
 @fragment fn fs_overlay(v: Vertex) -> @location(0) vec4<f32> {
     return textureSample(source, filtering, v.uv);
@@ -513,10 +521,24 @@ struct Presenter {
     overlay: wgpu::RenderPipeline,
     /// The stage's renderer for the window (also draws its captures).
     stage: Option<SharedRenderer>,
+    /// Format used by the stage renderer (sRGB even when the window surface is linear).
+    stage_format: wgpu::TextureFormat,
+    /// Render the stage into an offscreen sRGB target and blit to the surface (needed on linear surfaces and OpenGL
+    /// backends whose default framebuffer ignores external depth attachments).
+    stage_indirect: bool,
+    /// Offscreen sRGB target when `stage_indirect` is true.
+    stage_target: Option<StageTarget>,
     /// Multisample count supported for the stage's colour and depth targets (4 or 1).
     stage_samples: u32,
     /// See [`crate::HostConfig::frugal`].
     frugal: bool,
+}
+
+/// Offscreen sRGB target for a stage before blitting to the window surface.
+struct StageTarget {
+    view: wgpu::TextureView,
+    exact: wgpu::BindGroup,
+    size: (u32, u32),
 }
 
 /// The canvas's texture, and its bindings with each sampler.
@@ -591,18 +613,28 @@ impl Presenter {
             .copied()
             .find(wgpu::TextureFormat::is_srgb)
             .unwrap_or(capabilities.formats[0]);
-        let msaa_ok = adapter
-            .get_texture_format_features(format)
-            .flags
-            .contains(wgpu::TextureFormatFeatureFlags::MULTISAMPLE_X4)
+        let info = adapter.get_info();
+        let stage_indirect = !format.is_srgb() || info.backend == wgpu::Backend::Gl;
+        let stage_format = if stage_indirect {
+            wgpu::TextureFormat::Rgba8UnormSrgb
+        } else {
+            format
+        };
+        // wgpu-hal's GLES backend reports MULTISAMPLE_X4 unconditionally without querying
+        // per-format GL_SAMPLES; on Android GLES drivers (including SwiftShader / gfxstream)
+        // Depth32Float + sRGB multisample renderbuffers fail with GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE.
+        let msaa_ok = !(cfg!(target_os = "android") && info.backend == wgpu::Backend::Gl)
+            && adapter
+                .get_texture_format_features(stage_format)
+                .flags
+                .contains(wgpu::TextureFormatFeatureFlags::MULTISAMPLE_X4)
             && adapter
                 .get_texture_format_features(wgpu::TextureFormat::Depth32Float)
                 .flags
                 .contains(wgpu::TextureFormatFeatureFlags::MULTISAMPLE_X4);
         let stage_samples = if msaa_ok { 4 } else { 1 };
-        let info = adapter.get_info();
         eprintln!(
-            "[velvet-host2d] GPU: {} ({:?}, {:?}), format={format:?}, msaa={stage_samples}x",
+            "[velvet-host2d] GPU: {} ({:?}, {:?}), format={format:?}, stage={stage_format:?}, msaa={stage_samples}x",
             info.name, info.backend, info.device_type
         );
         let size = window.inner_size();
@@ -647,7 +679,7 @@ impl Presenter {
             bind_group_layouts: &[&layout],
             push_constant_ranges: &[],
         });
-        let make = |entry: &str, blend: Option<wgpu::BlendState>| {
+        let make = |entry: &str, target_format: wgpu::TextureFormat, blend: Option<wgpu::BlendState>| {
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some("velvet-host2d"),
                 layout: Some(&pipeline_layout),
@@ -662,7 +694,7 @@ impl Presenter {
                     entry_point: Some(entry),
                     compilation_options: Default::default(),
                     targets: &[Some(wgpu::ColorTargetState {
-                        format,
+                        format: target_format,
                         blend,
                         write_mask: wgpu::ColorWrites::ALL,
                     })],
@@ -674,9 +706,14 @@ impl Presenter {
                 cache: None,
             })
         };
-        let pipeline = make("fs_main", None);
+        let pipeline = make(
+            if format.is_srgb() { "fs_main" } else { "fs_main_srgb" },
+            format,
+            None,
+        );
         let overlay = make(
             "fs_overlay",
+            stage_format,
             Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
         );
         let sampler = |filter| {
@@ -703,6 +740,9 @@ impl Presenter {
             source: None,
             overlay,
             stage: None,
+            stage_format,
+            stage_indirect,
+            stage_target: None,
             stage_samples,
             frugal,
         })
@@ -713,7 +753,7 @@ impl Presenter {
         let (device, queue, format, samples, frugal) = (
             &self.device,
             &self.queue,
-            self.config.format,
+            self.stage_format,
             self.stage_samples,
             self.frugal,
         );
@@ -859,6 +899,43 @@ impl Presenter {
         Ok(())
     }
 
+    /// Offscreen sRGB target for the stage, made again when the viewport's pixel size changes.
+    fn stage_target(&mut self, size: (u32, u32)) -> &StageTarget {
+        if self.stage_target.as_ref().map(|t| t.size) != Some(size) {
+            let texture = self.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("velvet-host2d-stage"),
+                size: wgpu::Extent3d {
+                    width: size.0.max(1),
+                    height: size.1.max(1),
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: self.stage_format,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            });
+            let view = texture.create_view(&Default::default());
+            let exact = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("velvet-host2d-stage"),
+                layout: &self.layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(&view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(&self.nearest),
+                    },
+                ],
+            });
+            self.stage_target = Some(StageTarget { view, exact, size });
+        }
+        self.stage_target.as_ref().expect("made above")
+    }
+
     /// Shows a stage, and the canvas over it if given.
     fn present_stage(
         &mut self,
@@ -904,33 +981,61 @@ impl Presenter {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("velvet-host2d stage"),
             });
-        let format = self.config.format;
-        let shared = self.stage_renderer();
-        let mut renderer = shared.renderer.borrow_mut();
+        let stage_format = self.stage_format;
+        let indirect = self.stage_indirect;
         let rect = [
             viewport.x as f32,
             viewport.y as f32,
             viewport.width as f32,
             viewport.height as f32,
         ];
-        renderer.render(
-            &self.device,
-            &self.queue,
-            &mut encoder,
-            &view,
-            format,
-            (self.config.width, self.config.height),
-            rect,
-            stage,
-        );
-        if let (Some(canvas), Some(source)) = (overlay, self.source.as_ref()) {
+        if indirect {
+            self.stage_target((viewport.width, viewport.height));
+        }
+        let shared = self.stage_renderer();
+        let mut renderer = shared.renderer.borrow_mut();
+        if indirect {
+            let st = self.stage_target.as_ref().expect("made above");
+            let stage_rect = [0.0, 0.0, viewport.width as f32, viewport.height as f32];
+            renderer.render(
+                &self.device,
+                &self.queue,
+                &mut encoder,
+                &st.view,
+                stage_format,
+                (viewport.width, viewport.height),
+                stage_rect,
+                stage,
+            );
+            if let (Some(canvas), Some(source)) = (overlay, self.source.as_ref()) {
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("velvet-host2d overlay"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &st.view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Load,
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                });
+                let same = (canvas.pixel_width(), canvas.pixel_height())
+                    == (viewport.width, viewport.height);
+                pass.set_pipeline(&self.overlay);
+                pass.set_bind_group(0, if same { &source.exact } else { &source.smooth }, &[]);
+                pass.set_viewport(stage_rect[0], stage_rect[1], stage_rect[2], stage_rect[3], 0.0, 1.0);
+                pass.draw(0..3, 0..1);
+            }
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("velvet-host2d overlay"),
+                label: Some("velvet-host2d blit"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &view,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
+                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
                         store: wgpu::StoreOp::Store,
                     },
                 })],
@@ -938,12 +1043,43 @@ impl Presenter {
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
-            let same =
-                (canvas.pixel_width(), canvas.pixel_height()) == (viewport.width, viewport.height);
-            pass.set_pipeline(&self.overlay);
-            pass.set_bind_group(0, if same { &source.exact } else { &source.smooth }, &[]);
+            pass.set_pipeline(&self.pipeline);
+            pass.set_bind_group(0, &st.exact, &[]);
             pass.set_viewport(rect[0], rect[1], rect[2], rect[3], 0.0, 1.0);
             pass.draw(0..3, 0..1);
+        } else {
+            renderer.render(
+                &self.device,
+                &self.queue,
+                &mut encoder,
+                &view,
+                stage_format,
+                (self.config.width, self.config.height),
+                rect,
+                stage,
+            );
+            if let (Some(canvas), Some(source)) = (overlay, self.source.as_ref()) {
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("velvet-host2d overlay"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Load,
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                });
+                let same = (canvas.pixel_width(), canvas.pixel_height())
+                    == (viewport.width, viewport.height);
+                pass.set_pipeline(&self.overlay);
+                pass.set_bind_group(0, if same { &source.exact } else { &source.smooth }, &[]);
+                pass.set_viewport(rect[0], rect[1], rect[2], rect[3], 0.0, 1.0);
+                pass.draw(0..3, 0..1);
+            }
         }
         drop(renderer);
         self.queue.submit(Some(encoder.finish()));
