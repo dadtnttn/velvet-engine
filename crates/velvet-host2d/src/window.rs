@@ -381,6 +381,11 @@ impl<G: Game2D> ApplicationHandler for App<G> {
             WindowEvent::Resized(size) => self.resized(size.width, size.height),
             WindowEvent::CursorMoved { position, .. } => self.pointer_to(position.x, position.y),
             WindowEvent::Focused(focused) => {
+                if !focused {
+                    self.modifiers = ModifiersState::empty();
+                    self.shortcut_keys.clear();
+                    self.input.release_all();
+                }
                 if let Some(running) = self.running.as_mut() {
                     running.focused = focused;
                     if !focused && running.on_picture {

@@ -46,6 +46,7 @@ pub struct Input {
     pointer: Option<Point>,
     buttons: HashSet<Button>,
     keys: HashSet<KeyCode>,
+    last_pressed_at: Option<Point>,
     /// Seconds since the game started (the steps' clock).
     pub time: f32,
 }
@@ -99,10 +100,14 @@ impl Input {
             InputEvent::PointerLeft => self.pointer = None,
             InputEvent::PointerDown { button, at } => {
                 self.buttons.insert(*button);
+                self.last_pressed_at = Some(*at);
                 self.pointer = Some(*at);
             }
             InputEvent::PointerUp { button, .. } => {
                 self.buttons.remove(button);
+                if self.buttons.is_empty() {
+                    self.last_pressed_at = None;
+                }
             }
             InputEvent::KeyDown(k) => {
                 // A held key repeats: only its first press counts as an event.
@@ -116,6 +121,19 @@ impl Input {
             InputEvent::Wheel(_) | InputEvent::Text(_) => {}
         }
         self.events.push(event);
+    }
+
+    /// Releases held inputs when the window loses focus.
+    pub(crate) fn release_all(&mut self) {
+        self.events.extend(self.keys.drain().map(InputEvent::KeyUp));
+        if let Some(at) = self.pointer.or(self.last_pressed_at) {
+            self.events.extend(
+                self.buttons
+                    .drain()
+                    .map(|button| InputEvent::PointerUp { button, at }),
+            );
+        }
+        self.last_pressed_at = None;
     }
 
     /// Ends a step: the events are done, the state stays.
@@ -144,6 +162,33 @@ mod tests {
         assert!(input.button_down(Button::Left) && input.key_down(KeyCode::Space));
         assert!(!input.key_pressed(KeyCode::Space));
         assert_eq!(input.time, 0.5);
+    }
+
+    #[test]
+    fn losing_focus_releases_keys_and_buttons_outside_the_picture() {
+        let mut input = Input::new();
+        let at = Point::new(10.0, 20.0);
+        input.push(InputEvent::KeyDown(KeyCode::ControlLeft));
+        input.push(InputEvent::PointerDown {
+            button: Button::Left,
+            at,
+        });
+        input.push(InputEvent::PointerLeft);
+        input.end_step(0.0);
+        input.release_all();
+        input.release_all();
+        assert_eq!(
+            input.events(),
+            &[
+                InputEvent::KeyUp(KeyCode::ControlLeft),
+                InputEvent::PointerUp {
+                    button: Button::Left,
+                    at
+                },
+            ],
+        );
+        assert!(!input.key_down(KeyCode::ControlLeft));
+        assert!(!input.button_down(Button::Left));
     }
 
     #[test]
