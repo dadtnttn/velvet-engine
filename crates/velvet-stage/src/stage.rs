@@ -591,6 +591,10 @@ impl Stage {
         let Some(canvas) = self.picture(card.picture) else {
             return false;
         };
+        if canvas.is_released() {
+            // The GPU still has the picture, but only its bounds can be picked now.
+            return true;
+        }
         let k = canvas.k();
         let x = (point.x * k)
             .floor()
@@ -618,6 +622,17 @@ impl Stage {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_released_picture_can_still_be_picked_by_its_bounds() {
+        let mut stage = Stage::new(100.0, 100.0);
+        let mut canvas = Canvas::new(100.0, 100.0);
+        canvas.release_pixels();
+        let picture = stage.add_picture(canvas);
+        let card = stage.add_card(Card::screen(picture, 100.0, 100.0).pickable());
+        assert_eq!(stage.pick(Vec2::new(50.0, 50.0)).unwrap().card, card);
+        assert!(stage.pick(Vec2::new(110.0, 50.0)).is_none());
+    }
 
     fn stage_with_floor() -> (Stage, CardId) {
         let mut stage = Stage::new(1920.0, 1080.0);
