@@ -530,35 +530,43 @@ pub struct Clip {
 
 /// Does this temporal unit begin a keyframe (does it carry a sequence header, as encoders put
 /// before every keyframe)?
-fn starts_keyframe(tu: &[u8]) -> bool {
-    let mut i = 0;
-    while i < tu.len() {
-        let header = tu[i];
+fn starts_keyframe(mut tu: &[u8]) -> bool {
+    while let Some((&header, rest)) = tu.split_first() {
         let obu_type = (header >> 3) & 0x0f;
         let has_ext = header & 0x04 != 0;
         let has_size = header & 0x02 != 0;
-        if obu_type == 1 {
-            return true;
-        }
-        let mut j = i + 1 + usize::from(has_ext);
-        if !has_size {
+        let Some(rest) = rest.get(usize::from(has_ext)..) else {
             return false;
+        };
+        if !has_size {
+            // A size-less OBU occupies the rest of the temporal unit.
+            return obu_type == 1 && !rest.is_empty();
         }
-        // leb128 size
-        let mut size = 0usize;
-        let mut shift = 0;
-        loop {
-            let Some(&b) = tu.get(j) else { return false };
-            size |= ((b & 0x7f) as usize) << shift;
-            j += 1;
-            if b & 0x80 == 0 {
-                break;
-            }
-            shift += 7;
+        let Some((size, prefix)) = obu_size(rest) else {
+            return false;
+        };
+        let payload = &rest[prefix..];
+        let Some(remaining) = payload.get(size..) else {
+            return false;
+        };
+        if obu_type == 1 {
+            return size != 0;
         }
-        i = j + size;
+        tu = remaining;
     }
     false
+}
+
+// AV1 leb128 fields have at most eight bytes, even on 64-bit hosts.
+fn obu_size(bytes: &[u8]) -> Option<(usize, usize)> {
+    let mut size = 0u64;
+    for (index, &byte) in bytes.iter().take(8).enumerate() {
+        size |= u64::from(byte & 0x7f) << (index * 7);
+        if byte & 0x80 == 0 {
+            return Some((usize::try_from(size).ok()?, index + 1));
+        }
+    }
+    None
 }
 
 impl Clip {
@@ -576,12 +584,15 @@ impl Clip {
             return Err(Error::Container("not an AV1 IVF file".into()));
         }
         let header = u16::from_le_bytes([bytes[6], bytes[7]]) as usize;
+        if !(32..=bytes.len()).contains(&header) {
+            return Err(Error::Container("invalid IVF header size".into()));
+        }
         let mut at = header;
         let mut frames = Vec::new();
-        while at + 12 <= bytes.len() {
+        while bytes.len() - at >= 12 {
             let size = u32::from_le_bytes(bytes[at..at + 4].try_into().expect("4")) as usize;
             let start = at + 12;
-            if start + size > bytes.len() {
+            if size > bytes.len() - start {
                 break;
             }
             frames.push((start, size));
@@ -659,5 +670,22 @@ impl Clip {
             .to_rgba()?;
         self.last = Some((index, rgba.clone()));
         Ok(rgba)
+    }
+}
+
+#[cfg(test)]
+mod keyframe_tests {
+    use super::*;
+
+    #[test]
+    fn keyframe_search_handles_valid_and_invalid_obu_lengths() {
+        // A temporal delimiter followed by a sequence header.
+        assert!(starts_keyframe(&[0x12, 0, 0x0a, 1, 0]));
+        assert!(!starts_keyframe(&[0x12, 0, 0x32, 1, 0]));
+        assert!(!starts_keyframe(&[0xff; 16]));
+        assert!(!starts_keyframe(&[0x32, 0x80]));
+        assert!(!starts_keyframe(&[0x32, 0xff, 0x7f, 0x0a, 1, 0]));
+        assert!(!starts_keyframe(&[0x0a, 3, 0]));
+        assert!(!starts_keyframe(&[0x0e]));
     }
 }

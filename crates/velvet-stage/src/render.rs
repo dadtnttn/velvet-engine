@@ -5,13 +5,12 @@
 use std::collections::HashMap;
 use std::ops::Range;
 use std::sync::atomic::Ordering;
+use std::sync::Weak;
 
 use bytemuck::{Pod, Zeroable};
 use velvet_math::Mat4;
 
-use crate::stage::{
-    Blend, CardId, Picture, PictureId, Space, Stage, DROPPED_STAGES, MAX_LIGHTS, STAGES_WATCHED,
-};
+use crate::stage::{Blend, CardId, Picture, PictureId, Space, Stage, MAX_LIGHTS};
 
 /// The globals of a frame, as the shader reads them.
 #[repr(C)]
@@ -85,6 +84,7 @@ pub struct StageRenderer {
     capacity: usize,
     /// By the stage's number and the picture's.
     pictures: HashMap<(u64, PictureId), GpuPicture>,
+    stages: HashMap<u64, Weak<()>>,
     white: wgpu::BindGroup,
     targets: Option<Targets>,
 }
@@ -129,7 +129,6 @@ impl StageRenderer {
         format: wgpu::TextureFormat,
         samples: u32,
     ) -> StageRenderer {
-        STAGES_WATCHED.store(true, Ordering::Relaxed);
         Self::build(device, queue, format, samples, true)
     }
 
@@ -340,6 +339,7 @@ impl StageRenderer {
             instances,
             capacity,
             pictures: HashMap::new(),
+            stages: HashMap::new(),
             white,
             targets: None,
         }
@@ -509,12 +509,9 @@ impl StageRenderer {
         let mut written = 0usize;
         let frugal_strips = self.frugal;
         if self.frugal {
-            if let Ok(mut gone) = DROPPED_STAGES.lock() {
-                if !gone.is_empty() {
-                    self.pictures.retain(|(owner, _), _| !gone.contains(owner));
-                    gone.clear();
-                }
-            }
+            self.stages.entry(uid).or_insert_with(|| stage.lifetime());
+            self.stages
+                .retain(|_, lifetime| lifetime.strong_count() != 0);
         }
         for (id, picture) in stage.pictures() {
             let key = (uid, id);
@@ -530,6 +527,11 @@ impl StageRenderer {
                 continue;
             }
             let size = (canvas.pixel_width(), canvas.pixel_height());
+            if size.0.max(size.1) > device.limits().max_texture_dimension_2d {
+                // Do not keep showing an older version of a picture we can no longer upload.
+                self.pictures.remove(&key);
+                continue;
+            }
             let levels = self.levels_for(stage, id, picture, scale);
             match self.pictures.get_mut(&key) {
                 Some(g) if g.size == size && g.levels == levels => {
@@ -563,12 +565,11 @@ impl StageRenderer {
             }
             picture.uploaded.store(true, Ordering::Relaxed);
         }
-        let frugal = self.frugal;
         self.pictures.retain(|(owner, id), _| {
             if *owner == uid {
                 stage.picture(*id).is_some()
             } else {
-                frugal
+                self.stages.contains_key(owner)
             }
         });
     }
@@ -629,6 +630,13 @@ impl StageRenderer {
         viewport: [f32; 4],
         stage: &Stage,
     ) {
+        // Our depth and MSAA attachments must match the caller's target exactly.
+        if size.0 == 0
+            || size.1 == 0
+            || size.0.max(size.1) > device.limits().max_texture_dimension_2d
+        {
+            return;
+        }
         self.prepare(device, queue, stage, viewport[2] / stage.screen.x.max(1.0));
         let uid = stage.uid();
 

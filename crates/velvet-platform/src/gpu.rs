@@ -230,7 +230,10 @@ impl SurfaceSlot {
         let surface = self.instance.create_surface(self.window.clone())?;
         if let Some(config) = &mut self.config {
             let size = self.window.inner_size();
-            if size.width > 0 && size.height > 0 {
+            if size.width > 0
+                && size.height > 0
+                && size.width.max(size.height) <= device.limits().max_texture_dimension_2d
+            {
                 config.width = size.width;
                 config.height = size.height;
                 surface.configure(device, config);

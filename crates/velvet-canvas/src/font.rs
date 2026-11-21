@@ -85,6 +85,7 @@ const SHAPED_KEPT: usize = 4096;
 type Shaped = HashMap<(String, bool), Arc<Vec<Placed>>>;
 
 /// A character of a script written from right to left: Hebrew, Arabic and their neighbours.
+#[cfg(feature = "shaping")]
 fn backwards(c: char) -> bool {
     matches!(c as u32, 0x0590..=0x08FF | 0xFB1D..=0xFDFF | 0xFE70..=0xFEFF)
 }
@@ -117,14 +118,31 @@ fn opens(c: char) -> bool {
     "（〔［｛〈《「『【〘〖｟«“‘([{".contains(c)
 }
 
+/// Base direction used by the bidirectional algorithm for each line.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum BaseDirection {
+    /// Infer the direction from the first strong character.
+    #[default]
+    Auto,
+    LeftToRight,
+    RightToLeft,
+}
+
 /// The stretches of a line in the order they are seen, each with whether it reads from right to left.
-fn visual_runs(text: &str) -> Vec<(&str, bool)> {
-    if !text.chars().any(backwards) {
-        return vec![(text, false)];
-    }
+fn visual_runs(text: &str, direction: BaseDirection) -> Vec<(&str, bool)> {
     #[cfg(feature = "shaping")]
     {
-        let info = unicode_bidi::BidiInfo::new(text, None);
+        use unicode_bidi::Level;
+
+        if direction != BaseDirection::RightToLeft && !text.chars().any(backwards) {
+            return vec![(text, false)];
+        }
+        let level = match direction {
+            BaseDirection::Auto => None,
+            BaseDirection::LeftToRight => Some(Level::ltr()),
+            BaseDirection::RightToLeft => Some(Level::rtl()),
+        };
+        let info = unicode_bidi::BidiInfo::new(text, level);
         let mut runs = Vec::new();
         for paragraph in &info.paragraphs {
             let (levels, ranges) = info.visual_runs(paragraph, paragraph.range.clone());
@@ -137,6 +155,7 @@ fn visual_runs(text: &str) -> Vec<(&str, bool)> {
     }
     #[cfg(not(feature = "shaping"))]
     {
+        let _ = direction;
         vec![(text, false)]
     }
 }
@@ -171,6 +190,7 @@ impl std::error::Error for FontError {}
 #[derive(Clone)]
 pub struct Font {
     inner: Arc<Inner>,
+    direction: BaseDirection,
 }
 
 struct Inner {
@@ -231,6 +251,7 @@ impl Font {
         let ascent = font.ascent_unscaled();
         let descent = font.descent_unscaled();
         Ok(Font {
+            direction: BaseDirection::Auto,
             inner: Arc::new(Inner {
                 font,
                 face_index,
@@ -249,6 +270,7 @@ impl Font {
     /// This font again, with other pictures or other fonts behind it.
     fn again(&self, pictures: Option<Pictures>, fallbacks: Vec<Font>) -> Font {
         Font {
+            direction: self.direction,
             inner: Arc::new(Inner {
                 font: self.inner.font.clone(),
                 face_index: self.inner.face_index,
@@ -266,7 +288,7 @@ impl Font {
 
     /// This font with pictures for what a font of outlines cannot draw: colour emoji. `pictures` is asked once for
     /// each emoji written, and its picture is drawn in the character's place, a little larger than the letters. An
-    /// emoji it has no picture for is drawn as the font's own glyph, or left out when the font has none; the marks
+    /// emoji it has no picture for is drawn as a glyph from the font chain, or left out when none has it; the marks
     /// that only modify an emoji (variation selectors, the joiner, skin tones) take no room.
     pub fn with_pictures(&self, pictures: Pictures) -> Font {
         self.again(Some(pictures), self.inner.fallbacks.clone())
@@ -281,6 +303,15 @@ impl Font {
     }
 
     /// The font of the chain at a place: 0 is this one, 1 the first behind it.
+    /// Shares this font's glyphs and caches with an explicit base direction.
+    /// With the shaping feature, both measurement and painting use this direction.
+    pub fn with_base_direction(&self, direction: BaseDirection) -> Font {
+        Font {
+            inner: Arc::clone(&self.inner),
+            direction,
+        }
+    }
+
     fn font_at(&self, index: usize) -> &Font {
         match index {
             0 => self,
@@ -319,7 +350,7 @@ impl Font {
             .clone();
         match picture {
             Some(picture) => Drawn::Picture(picture),
-            None if id.0 == 0 => Drawn::Nothing,
+            None if id.0 == 0 && self.font_for(c) == 0 => Drawn::Nothing,
             None => Drawn::Glyph(id),
         }
     }
@@ -484,7 +515,7 @@ impl Font {
     /// The stretches of a line in the order they are seen: which font of the chain draws each, and how.
     fn items(&self, text: &str) -> Vec<Item> {
         let mut items: Vec<Item> = Vec::new();
-        for (piece, reversed) in visual_runs(text) {
+        for (piece, reversed) in visual_runs(text, self.direction) {
             let from = items.len();
             for c in piece.chars() {
                 // (a place where a line may end: nothing to draw)
@@ -822,6 +853,17 @@ pub(crate) mod tests {
         Font::from_bytes(std::fs::read(path).expect("the test font")).expect("a font")
     }
 
+    #[cfg(feature = "shaping")]
+    #[test]
+    fn an_explicit_rtl_line_stays_rtl_when_latin_comes_first() {
+        let text = "ab \u{05D0}\u{05D1}";
+        let automatic = visual_runs(text, BaseDirection::Auto);
+        let forced = visual_runs(text, BaseDirection::RightToLeft);
+        assert_eq!(automatic[0], ("ab ", false));
+        assert_eq!(forced[0], (" \u{05D0}\u{05D1}", true));
+        assert_eq!(forced[1], ("ab", false));
+    }
+
     #[test]
     fn measure_grows_with_the_text_and_the_size() {
         let font = test_font();
@@ -882,6 +924,22 @@ pub(crate) mod tests {
     fn fixture(name: &str) -> Font {
         let path = format!("{}/tests/fixtures/{name}", env!("CARGO_MANIFEST_DIR"));
         Font::from_bytes(std::fs::read(path).expect("the fixture font")).expect("a font")
+    }
+
+    #[test]
+    fn a_missing_picture_uses_a_symbol_from_the_fallback_font() {
+        let primary = fixture("NotoSansHebrew-subset.ttf");
+        let fallback = test_font();
+        let symbol = "\u{2122}";
+        let font = primary
+            .with_fallbacks(std::slice::from_ref(&fallback))
+            .with_pictures(Arc::new(|_| None));
+        let laid = font.layout(symbol, 30.0, 0.0);
+        assert!(laid.glyphs[0].path.is_some());
+        assert_eq!(
+            font.measure(symbol, 30.0, 0.0),
+            fallback.measure(symbol, 30.0, 0.0)
+        );
     }
 
     #[test]
