@@ -10,7 +10,7 @@ use std::time::Instant;
 use velvet_canvas::{Canvas, Point};
 use velvet_stage::{SharedRenderer, Stage, StageRenderer};
 use winit::application::ApplicationHandler;
-use winit::dpi::PhysicalSize;
+use winit::dpi::{LogicalSize, PhysicalSize};
 use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{KeyCode, ModifiersState, PhysicalKey};
@@ -327,7 +327,7 @@ impl<G: Game2D> ApplicationHandler for App<G> {
                 self.config.window_width,
                 self.config.window_height,
             ))
-            .with_min_inner_size(PhysicalSize::new(
+            .with_min_inner_size(LogicalSize::new(
                 self.config.min_width,
                 self.config.min_height,
             ))
@@ -379,6 +379,12 @@ impl<G: Game2D> ApplicationHandler for App<G> {
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::Resized(size) => self.resized(size.width, size.height),
+            WindowEvent::ScaleFactorChanged { .. } => {
+                if let Some(running) = &self.running {
+                    let size = running.window.inner_size();
+                    self.resized(size.width, size.height);
+                }
+            }
             WindowEvent::CursorMoved { position, .. } => self.pointer_to(position.x, position.y),
             WindowEvent::Focused(focused) => {
                 if !focused {
@@ -503,6 +509,44 @@ struct Vertex { @builtin(position) position: vec4<f32>, @location(0) uv: vec2<f3
 }
 "#;
 
+fn window_surface_config(
+    capabilities: &wgpu::SurfaceCapabilities,
+    size: PhysicalSize<u32>,
+) -> Result<wgpu::SurfaceConfiguration, String> {
+    if capabilities.alpha_modes.is_empty() {
+        return Err("no graphics surface alpha mode".into());
+    }
+    velvet_platform::gpu::surface_config(capabilities, size.width, size.height)
+        .ok_or_else(|| "no graphics surface format".into())
+}
+
+#[cfg(test)]
+mod surface_tests {
+    use super::*;
+
+    #[test]
+    fn incomplete_surface_capabilities_are_reported() {
+        let size = PhysicalSize::new(640, 360);
+        let mut capabilities = wgpu::SurfaceCapabilities::default();
+        capabilities.alpha_modes.clear();
+        assert!(window_surface_config(&capabilities, size).is_err());
+
+        capabilities
+            .alpha_modes
+            .push(wgpu::CompositeAlphaMode::Opaque);
+        capabilities.formats.clear();
+        assert!(window_surface_config(&capabilities, size).is_err());
+
+        capabilities
+            .formats
+            .push(wgpu::TextureFormat::Rgba8UnormSrgb);
+        assert_eq!(
+            window_surface_config(&capabilities, size).unwrap().width,
+            640
+        );
+    }
+}
+
 /// Shows a canvas in the window.
 struct Presenter {
     /// The window's surface, dropped while Android has the app in the background.
@@ -589,23 +633,9 @@ impl Presenter {
             .await
             .map_err(|e| format!("the graphics device: {e}"))?;
         let capabilities = surface.get_capabilities(&adapter);
-        let format = capabilities
-            .formats
-            .iter()
-            .copied()
-            .find(wgpu::TextureFormat::is_srgb)
-            .unwrap_or(capabilities.formats[0]);
         let size = window.inner_size();
-        let config = wgpu::SurfaceConfiguration {
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format,
-            width: size.width.max(1),
-            height: size.height.max(1),
-            present_mode: wgpu::PresentMode::AutoVsync,
-            alpha_mode: capabilities.alpha_modes[0],
-            view_formats: vec![],
-            desired_maximum_frame_latency: 2,
-        };
+        let config = window_surface_config(&capabilities, size)?;
+        let format = config.format;
         surface.configure(&device, &config);
         let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("velvet-host2d"),

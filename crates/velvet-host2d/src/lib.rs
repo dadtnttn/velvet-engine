@@ -59,10 +59,13 @@ pub struct HostConfig {
     /// [`Game2D::logical_size_changed`]. Left at the authored size, the picture keeps its shape, with bars.
     pub max_logical_width: f32,
     pub max_logical_height: f32,
-    /// The window's first size and its smallest size, in pixels.
+    /// The window's initial width in physical pixels.
     pub window_width: u32,
+    /// The window's initial height in physical pixels.
     pub window_height: u32,
+    /// The minimum window width in logical (DPI-independent) pixels.
     pub min_width: u32,
+    /// The minimum window height in logical (DPI-independent) pixels.
     pub min_height: u32,
     /// Draw at the window's own pixels (true) or at the logical size, scaled by the graphics card (false).
     pub native: bool,
