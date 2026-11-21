@@ -23,17 +23,17 @@ impl Offscreen {
             descriptor.backends = wgpu::Backends::DX12;
         }
         let instance = wgpu::Instance::new(&descriptor.with_env());
-        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-            power_preference: wgpu::PowerPreference::default(),
-            compatible_surface: None,
-            force_fallback_adapter: false,
-        }))
+        let adapter = pollster::block_on(velvet_platform::gpu::request_adapter_for(
+            &instance,
+            None,
+            wgpu::PowerPreference::default(),
+        ))
         .ok_or("no graphics adapter")?;
         let (device, queue) = pollster::block_on(adapter.request_device(
             &wgpu::DeviceDescriptor {
                 label: Some("velvet-stage offscreen"),
                 required_features: wgpu::Features::empty(),
-                required_limits: wgpu::Limits::default(),
+                required_limits: velvet_platform::gpu::supported_limits(&adapter),
                 memory_hints: wgpu::MemoryHints::MemoryUsage,
             },
             None,
@@ -45,7 +45,18 @@ impl Offscreen {
         } else {
             StageRenderer::new
         };
-        let renderer = make(&device, &queue, FORMAT, 4);
+        let info = adapter.get_info();
+        // GLES can advertise four samples even when the driver cannot combine color and depth.
+        let has_msaa = info.backend != wgpu::Backend::Gl
+            && [FORMAT, wgpu::TextureFormat::Depth32Float]
+                .into_iter()
+                .all(|format| {
+                    adapter
+                        .get_texture_format_features(format)
+                        .flags
+                        .contains(wgpu::TextureFormatFeatureFlags::MULTISAMPLE_X4)
+                });
+        let renderer = make(&device, &queue, FORMAT, if has_msaa { 4 } else { 1 });
         Ok(Offscreen {
             device,
             queue,

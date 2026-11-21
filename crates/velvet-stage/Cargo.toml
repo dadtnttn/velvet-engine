@@ -8,6 +8,7 @@ description = "2.5D stages for Velvet Engine: pictures painted with velvet-canva
 [dependencies]
 velvet-canvas = { path = "../velvet-canvas" }
 velvet-math = { path = "../velvet-math" }
+velvet-platform = { path = "../velvet-platform" }
 wgpu = { workspace = true }
 bytemuck = { workspace = true }
 pollster = { workspace = true }

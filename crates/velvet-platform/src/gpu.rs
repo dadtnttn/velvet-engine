@@ -57,22 +57,50 @@ pub async fn request_adapter(
     surface: &wgpu::Surface<'_>,
     power_preference: wgpu::PowerPreference,
 ) -> Option<wgpu::Adapter> {
-    if cfg!(target_os = "android") {
-        for backends in [wgpu::Backends::VULKAN, wgpu::Backends::GL] {
-            if let Some(adapter) = instance
-                .enumerate_adapters(backends)
+    request_adapter_for(instance, Some(surface), power_preference).await
+}
+
+/// Chooses an adapter for a window or offscreen renderer. An explicit adapter name is a
+/// case-insensitive substring. An unavailable override returns None, so callers can report it.
+pub async fn request_adapter_for(
+    instance: &wgpu::Instance,
+    surface: Option<&wgpu::Surface<'_>>,
+    power_preference: wgpu::PowerPreference,
+) -> Option<wgpu::Adapter> {
+    let force_fallback = std::env::var("WGPU_FORCE_FALLBACK_ADAPTER")
+        .is_ok_and(|value| value == "1" || value.eq_ignore_ascii_case("true"));
+    if let Ok(name) = std::env::var("WGPU_ADAPTER_NAME") {
+        let name = name.trim().to_lowercase();
+        if !name.is_empty() {
+            return instance
+                .enumerate_adapters(wgpu::Backends::all())
                 .into_iter()
-                .find(|a| a.is_surface_supported(surface))
-            {
-                return Some(adapter);
+                .find(|adapter| {
+                    let info = adapter.get_info();
+                    (!force_fallback || info.device_type == wgpu::DeviceType::Cpu)
+                        && surface.is_none_or(|s| adapter.is_surface_supported(s))
+                        && info.name.to_lowercase().contains(&name)
+                });
+        }
+    }
+    if !force_fallback && cfg!(target_os = "android") {
+        if let Some(surface) = surface {
+            for backends in [wgpu::Backends::VULKAN, wgpu::Backends::GL] {
+                if let Some(adapter) = instance
+                    .enumerate_adapters(backends)
+                    .into_iter()
+                    .find(|a| a.is_surface_supported(surface))
+                {
+                    return Some(adapter);
+                }
             }
         }
     }
     instance
         .request_adapter(&wgpu::RequestAdapterOptions {
             power_preference,
-            compatible_surface: Some(surface),
-            force_fallback_adapter: false,
+            compatible_surface: surface,
+            force_fallback_adapter: force_fallback,
         })
         .await
 }
