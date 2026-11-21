@@ -23,17 +23,29 @@ impl Viewport {
         logical_width: f32,
         logical_height: f32,
     ) -> Option<Viewport> {
-        if window_width == 0 || window_height == 0 || logical_width <= 0.0 || logical_height <= 0.0
-        {
+        Self::letterbox_in(0, 0, window_width, window_height, logical_width, logical_height)
+    }
+
+    /// The largest centred rectangle of the logical aspect inside the sub-rectangle
+    /// `(area_x, area_y, area_width, area_height)` (such as the screen's safe area outside display
+    /// cutouts), or None for an empty area.
+    pub fn letterbox_in(
+        area_x: u32,
+        area_y: u32,
+        area_width: u32,
+        area_height: u32,
+        logical_width: f32,
+        logical_height: f32,
+    ) -> Option<Viewport> {
+        if area_width == 0 || area_height == 0 || logical_width <= 0.0 || logical_height <= 0.0 {
             return None;
         }
-        let scale =
-            (window_width as f32 / logical_width).min(window_height as f32 / logical_height);
-        let width = ((logical_width * scale).round() as u32).clamp(1, window_width);
-        let height = ((logical_height * scale).round() as u32).clamp(1, window_height);
+        let scale = (area_width as f32 / logical_width).min(area_height as f32 / logical_height);
+        let width = ((logical_width * scale).round() as u32).clamp(1, area_width);
+        let height = ((logical_height * scale).round() as u32).clamp(1, area_height);
         Some(Viewport {
-            x: (window_width - width) / 2,
-            y: (window_height - height) / 2,
+            x: area_x + (area_width - width) / 2,
+            y: area_y + (area_height - height) / 2,
             width,
             height,
             logical_width,
@@ -44,14 +56,26 @@ impl Viewport {
     /// The whole window, if its shape is within `tolerance` of the picture's (0.04 is 4 %): a maximised window that
     /// is nearly the right shape gets no thin bars, and a stretch that small can't be seen. Otherwise as it was.
     pub fn filling(self, window_width: u32, window_height: u32, tolerance: f32) -> Viewport {
-        let window = window_width as f32 / window_height.max(1) as f32;
+        self.filling_in(0, 0, window_width, window_height, tolerance)
+    }
+
+    /// Like [`Self::filling`], within the given area.
+    pub fn filling_in(
+        self,
+        area_x: u32,
+        area_y: u32,
+        area_width: u32,
+        area_height: u32,
+        tolerance: f32,
+    ) -> Viewport {
+        let window = area_width as f32 / area_height.max(1) as f32;
         let picture = self.logical_width / self.logical_height;
         if tolerance > 0.0 && (window / picture - 1.0).abs() <= tolerance {
             Viewport {
-                x: 0,
-                y: 0,
-                width: window_width,
-                height: window_height,
+                x: area_x,
+                y: area_y,
+                width: area_width,
+                height: area_height,
                 ..self
             }
         } else {

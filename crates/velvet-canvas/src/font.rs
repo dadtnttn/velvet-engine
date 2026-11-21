@@ -175,6 +175,7 @@ pub struct Font {
 
 struct Inner {
     font: FontArc,
+    face_index: u32,
     units_per_em: f32,
     ascent: f32,
     descent: f32,
@@ -202,20 +203,37 @@ impl Font {
     /// A font from bytes that stay for the whole run (a file mapped into memory: only the pages read take memory, and
     /// they are the system's to take back).
     pub fn from_static(bytes: &'static [u8]) -> Result<Font, FontError> {
-        Font::with(FontArc::try_from_slice(bytes).map_err(|e| FontError(e.to_string()))?)
+        Self::from_static_index(bytes, 0)
+    }
+
+    /// Reads face `index` of a TrueType/OpenType font collection (`.ttc`/`.otc`) from static bytes.
+    pub fn from_static_index(bytes: &'static [u8], index: u32) -> Result<Font, FontError> {
+        let font = ab_glyph::FontRef::try_from_slice_and_index(bytes, index)
+            .map(FontArc::new)
+            .map_err(|e| FontError(e.to_string()))?;
+        Font::with(font, index)
     }
 
     pub fn from_bytes(bytes: Vec<u8>) -> Result<Font, FontError> {
-        Font::with(FontArc::try_from_vec(bytes).map_err(|e| FontError(e.to_string()))?)
+        Self::from_bytes_index(bytes, 0)
     }
 
-    fn with(font: FontArc) -> Result<Font, FontError> {
+    /// Reads face `index` of a TrueType/OpenType font collection (`.ttc`/`.otc`) from owned bytes.
+    pub fn from_bytes_index(bytes: Vec<u8>, index: u32) -> Result<Font, FontError> {
+        let font = ab_glyph::FontVec::try_from_vec_and_index(bytes, index)
+            .map(FontArc::new)
+            .map_err(|e| FontError(e.to_string()))?;
+        Font::with(font, index)
+    }
+
+    fn with(font: FontArc, face_index: u32) -> Result<Font, FontError> {
         let units_per_em = font.units_per_em().unwrap_or(1000.0);
         let ascent = font.ascent_unscaled();
         let descent = font.descent_unscaled();
         Ok(Font {
             inner: Arc::new(Inner {
                 font,
+                face_index,
                 units_per_em,
                 ascent,
                 descent,
@@ -233,6 +251,7 @@ impl Font {
         Font {
             inner: Arc::new(Inner {
                 font: self.inner.font.clone(),
+                face_index: self.inner.face_index,
                 units_per_em: self.inner.units_per_em,
                 ascent: self.inner.ascent,
                 descent: self.inner.descent,
@@ -600,7 +619,9 @@ impl Font {
             return found.clone();
         }
         let mut placed = Vec::new();
-        if let Some(face) = rustybuzz::Face::from_slice(self.inner.font.font_data(), 0) {
+        if let Some(face) =
+            rustybuzz::Face::from_slice(self.inner.font.font_data(), self.inner.face_index)
+        {
             let mut buffer = rustybuzz::UnicodeBuffer::new();
             buffer.push_str(letters);
             buffer.set_direction(if reversed {

@@ -168,6 +168,20 @@ pub fn show_keyboard(show: bool) {
     let _ = show;
 }
 
+/// Opens a URL in the system browser on Android (returns `true` if handled, `false` on desktop).
+pub fn open_url(url: &str) -> bool {
+    #[cfg(target_os = "android")]
+    {
+        if let Some(app) = crate::android::app() {
+            crate::android::open_url(&app, url);
+            return true;
+        }
+    }
+    #[cfg(not(target_os = "android"))]
+    let _ = url;
+    false
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

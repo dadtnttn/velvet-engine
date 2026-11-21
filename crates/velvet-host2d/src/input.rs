@@ -33,6 +33,11 @@ pub enum InputEvent {
     },
     /// The wheel turned: positive away from the player, in lines.
     Wheel(f32),
+    /// A directional touch swipe (`dx < 0` left, `dx > 0` right; `dy < 0` up, `dy > 0` down).
+    Swipe {
+        dx: f32,
+        dy: f32,
+    },
     KeyDown(KeyCode),
     KeyUp(KeyCode),
     /// Text typed (already composed by the system).
@@ -113,7 +118,7 @@ impl Input {
             InputEvent::KeyUp(k) => {
                 self.keys.remove(k);
             }
-            InputEvent::Wheel(_) | InputEvent::Text(_) => {}
+            InputEvent::Wheel(_) | InputEvent::Swipe { .. } | InputEvent::Text(_) => {}
         }
         self.events.push(event);
     }

@@ -78,6 +78,8 @@ struct Running {
     window: Arc<Window>,
     presenter: Presenter,
     viewport: Option<Viewport>,
+    window_size: (u32, u32),
+    safe_area: velvet_platform::screen::Insets,
     /// Where the pointer is, in window pixels.
     cursor: Option<(f64, f64)>,
     /// True while the pointer is on the picture.
@@ -95,11 +97,24 @@ impl<G: Game2D> App<G> {
         let Some(running) = self.running.as_mut() else {
             return;
         };
+        running.window_size = (width, height);
         running.presenter.resize(width, height);
-        // The logical size follows the window's shape as far as the game allows; the canvas is made again at it.
-        let (lw, lh) = self.config.logical_for(width, height);
-        running.viewport = Viewport::letterbox(width, height, lw, lh)
-            .map(|v| v.filling(width, height, self.config.fill_near_shape));
+        self.update_viewport();
+    }
+
+    /// Recomputes the letterbox viewport for the current window size and display-cutout safe area.
+    fn update_viewport(&mut self) {
+        let Some(running) = self.running.as_mut() else {
+            return;
+        };
+        let (width, height) = running.window_size;
+        let insets = velvet_platform::screen::safe_area();
+        running.safe_area = insets;
+        let (sx, sy, sw, sh) = insets.safe_rect(width, height);
+        // The logical size follows the safe area's shape as far as the game allows.
+        let (lw, lh) = self.config.logical_for(sw, sh);
+        running.viewport = Viewport::letterbox_in(sx, sy, sw, sh, lw, lh)
+            .map(|v| v.filling_in(sx, sy, sw, sh, self.config.fill_near_shape));
         if (lw, lh) != (self.canvas.width(), self.canvas.height()) {
             let (pw, ph) = (self.canvas.pixel_width(), self.canvas.pixel_height());
             self.canvas = Canvas::with_pixels(lw, lh, pw, ph);
@@ -118,6 +133,15 @@ impl<G: Game2D> App<G> {
     }
 
     fn frame(&mut self, event_loop: &ActiveEventLoop) {
+        if !self.mobile.is_visible() {
+            return;
+        }
+        if let Some(running) = self.running.as_ref() {
+            if velvet_platform::screen::safe_area() != running.safe_area {
+                self.update_viewport();
+            }
+        }
+        self.mobile_poll();
         let now = Instant::now();
         let dt = self
             .last
@@ -139,21 +163,27 @@ impl<G: Game2D> App<G> {
         let Some(running) = self.running.as_mut() else {
             return;
         };
-        // The game asked for fullscreen or a window (its settings).
+        // The game asked for fullscreen or a window (its settings); Android stays immersive.
         if let Some(full) = self.game.take_fullscreen_request() {
-            if full != running.window.fullscreen().is_some() {
+            if !cfg!(target_os = "android") && full != running.window.fullscreen().is_some() {
                 running
                     .window
                     .set_fullscreen(full.then_some(Fullscreen::Borderless(None)));
             }
-            self.game.fullscreen_changed(full);
+            self.game.fullscreen_changed(if cfg!(target_os = "android") {
+                true
+            } else {
+                full
+            });
         }
         // The system's arrow hides while the game draws its own pointer, over the picture only (on the bars it is the
         // window's).
-        let shown = self.game.shows_pointer() || !running.on_picture;
-        if shown != running.pointer_shown {
-            running.window.set_cursor_visible(shown);
-            running.pointer_shown = shown;
+        if !cfg!(target_os = "android") {
+            let shown = self.game.shows_pointer() || !running.on_picture;
+            if shown != running.pointer_shown {
+                running.window.set_cursor_visible(shown);
+                running.pointer_shown = shown;
+            }
         }
         // A minimised window shows nothing: nothing is drawn nor sent to the graphics card.
         let Some(viewport) = running.viewport else {
@@ -292,7 +322,7 @@ impl<G: Game2D> ApplicationHandler for App<G> {
             self.resume();
             return;
         }
-        let attributes = Window::default_attributes()
+        let mut attributes = Window::default_attributes()
             .with_title(self.config.title.clone())
             .with_inner_size(PhysicalSize::new(
                 self.config.window_width,
@@ -302,12 +332,14 @@ impl<G: Game2D> ApplicationHandler for App<G> {
                 self.config.min_width,
                 self.config.min_height,
             ))
-            .with_maximized(self.config.maximized)
-            .with_fullscreen(
+            .with_maximized(self.config.maximized);
+        if !cfg!(target_os = "android") {
+            attributes = attributes.with_fullscreen(
                 self.config
                     .fullscreen
                     .then_some(Fullscreen::Borderless(None)),
             );
+        }
         let window = match event_loop.create_window(attributes) {
             Ok(w) => Arc::new(w),
             Err(e) => {
@@ -329,18 +361,22 @@ impl<G: Game2D> ApplicationHandler for App<G> {
             self.game.stage_renderer_ready(presenter.stage_renderer());
         }
         let size = window.inner_size();
+        let scale_factor = window.scale_factor();
         self.running = Some(Running {
             window,
             presenter,
             viewport: None,
+            window_size: (size.width, size.height),
+            safe_area: velvet_platform::screen::Insets::ZERO,
             cursor: None,
             on_picture: false,
             focused: true,
             pointer_shown: true,
         });
+        self.mobile.set_scale_factor(scale_factor);
+        self.started();
         self.resized(size.width, size.height);
         self.last = Some(Instant::now());
-        self.started();
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
@@ -421,9 +457,11 @@ impl<G: Game2D> ApplicationHandler for App<G> {
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
-        // A frame at every turn of the loop; the presentation waits for the screen (vsync).
-        if let Some(running) = &self.running {
-            running.window.request_redraw();
+        // A frame at every turn of the loop while visible; never spin while suspended in the background.
+        if self.mobile.is_visible() {
+            if let Some(running) = &self.running {
+                running.window.request_redraw();
+            }
         }
         event_loop.set_control_flow(ControlFlow::Wait);
     }
@@ -475,6 +513,8 @@ struct Presenter {
     overlay: wgpu::RenderPipeline,
     /// The stage's renderer for the window (also draws its captures).
     stage: Option<SharedRenderer>,
+    /// Multisample count supported for the stage's colour and depth targets (4 or 1).
+    stage_samples: u32,
     /// See [`crate::HostConfig::frugal`].
     frugal: bool,
 }
@@ -551,6 +591,20 @@ impl Presenter {
             .copied()
             .find(wgpu::TextureFormat::is_srgb)
             .unwrap_or(capabilities.formats[0]);
+        let msaa_ok = adapter
+            .get_texture_format_features(format)
+            .flags
+            .contains(wgpu::TextureFormatFeatureFlags::MULTISAMPLE_X4)
+            && adapter
+                .get_texture_format_features(wgpu::TextureFormat::Depth32Float)
+                .flags
+                .contains(wgpu::TextureFormatFeatureFlags::MULTISAMPLE_X4);
+        let stage_samples = if msaa_ok { 4 } else { 1 };
+        let info = adapter.get_info();
+        eprintln!(
+            "[velvet-host2d] GPU: {} ({:?}, {:?}), format={format:?}, msaa={stage_samples}x",
+            info.name, info.backend, info.device_type
+        );
         let size = window.inner_size();
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
@@ -649,22 +703,28 @@ impl Presenter {
             source: None,
             overlay,
             stage: None,
+            stage_samples,
             frugal,
         })
     }
 
     /// The stage's renderer, made the first time.
     fn stage_renderer(&mut self) -> SharedRenderer {
-        let (device, queue, format, frugal) =
-            (&self.device, &self.queue, self.config.format, self.frugal);
+        let (device, queue, format, samples, frugal) = (
+            &self.device,
+            &self.queue,
+            self.config.format,
+            self.stage_samples,
+            self.frugal,
+        );
         self.stage
             .get_or_insert_with(|| SharedRenderer {
                 device: device.clone(),
                 queue: queue.clone(),
                 renderer: Rc::new(RefCell::new(if frugal {
-                    StageRenderer::frugal(device, queue, format, 4)
+                    StageRenderer::frugal(device, queue, format, samples)
                 } else {
-                    StageRenderer::new(device, queue, format, 4)
+                    StageRenderer::new(device, queue, format, samples)
                 })),
                 format,
             })

@@ -84,6 +84,10 @@ pub struct HostConfig {
     /// How far the window's shape may be from the picture's and still be filled, with no bars (0.04 is 4 %; 0 keeps
     /// the exact shape).
     pub fill_near_shape: f32,
+    /// Recognise touch gestures (tap on release, long press as right click, vertical swipe as wheel,
+    /// horizontal swipe as `InputEvent::Swipe`) instead of turning touch start straight into a
+    /// mouse press. Useful for games where a tap, a long press and a swipe do different things.
+    pub touch_gestures: bool,
 }
 
 impl HostConfig {
@@ -107,6 +111,7 @@ impl HostConfig {
             fullscreen: false,
             frugal: false,
             fill_near_shape: 0.0,
+            touch_gestures: false,
         }
     }
 

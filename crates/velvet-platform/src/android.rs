@@ -4,7 +4,7 @@
 //! The activity is `android.app.NativeActivity`, driven by winit's NativeActivity backend
 //! (`android-activity`). No Java code ships in the APK.
 
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -21,6 +21,7 @@ use crate::screen::{Insets, Orientation};
 static APP: Mutex<Option<AndroidApp>> = Mutex::new(None);
 static RUNS: AtomicU32 = AtomicU32::new(0);
 static SAFE_AREA: Mutex<Insets> = Mutex::new(Insets::ZERO);
+static IMMERSIVE: AtomicBool = AtomicBool::new(false);
 
 /// The running activity, once the game was entered through `android_main!`.
 pub fn app() -> Option<AndroidApp> {
@@ -156,6 +157,7 @@ const LEGACY_IMMERSIVE: i32 = 0x100 | 0x200 | 0x400 | 0x2 | 0x4 | 0x1000;
 /// moment. Android brings the bars back after some events, so this is applied again on resume and
 /// focus (see [`crate::Lifecycle`]).
 pub fn set_immersive(app: &AndroidApp, immersive: bool) {
+    IMMERSIVE.store(immersive, Ordering::Relaxed);
     let sdk = sdk_version();
     on_ui_thread(app, "immersive mode", move |env, activity| {
         let window = window(env, activity)?;
@@ -276,6 +278,7 @@ pub fn refresh_safe_area(app: &AndroidApp) {
         if insets.is_null() {
             return Ok(());
         }
+        let immersive = IMMERSIVE.load(Ordering::Relaxed);
         let read = if sdk >= 30 {
             let class = jni_str!("android/view/WindowInsets$Type");
             let bars = env
@@ -284,12 +287,15 @@ pub fn refresh_safe_area(app: &AndroidApp) {
             let cutout = env
                 .call_static_method(class, jni_str!("displayCutout"), jni_sig!("()I"), &[])?
                 .i()?;
+            // In immersive mode system bars are hidden (transient on swipe), so reserve only the
+            // permanent display cutout.
+            let mask = if immersive { cutout } else { bars | cutout };
             let sides = env
                 .call_method(
                     &insets,
                     jni_str!("getInsets"),
                     jni_sig!("(I)Landroid/graphics/Insets;"),
-                    &[JValue::Int(bars | cutout)],
+                    &[JValue::Int(mask)],
                 )?
                 .l()?;
             let mut side = |name: &JNIStr| -> jni::errors::Result<u32> {
@@ -308,11 +314,15 @@ pub fn refresh_safe_area(app: &AndroidApp) {
                     .i()?
                     .max(0) as u32)
             };
-            let mut found = Insets {
-                left: get(&insets, jni_str!("getSystemWindowInsetLeft"))?,
-                top: get(&insets, jni_str!("getSystemWindowInsetTop"))?,
-                right: get(&insets, jni_str!("getSystemWindowInsetRight"))?,
-                bottom: get(&insets, jni_str!("getSystemWindowInsetBottom"))?,
+            let mut found = if immersive {
+                Insets::ZERO
+            } else {
+                Insets {
+                    left: get(&insets, jni_str!("getSystemWindowInsetLeft"))?,
+                    top: get(&insets, jni_str!("getSystemWindowInsetTop"))?,
+                    right: get(&insets, jni_str!("getSystemWindowInsetRight"))?,
+                    bottom: get(&insets, jni_str!("getSystemWindowInsetBottom"))?,
+                }
             };
             if sdk >= 28 {
                 let cutout = env
@@ -354,4 +364,33 @@ pub fn show_keyboard(app: &AndroidApp, show: bool) {
     } else {
         app.hide_soft_input(true);
     }
+}
+
+/// Opens a URL in the user's browser via `Intent.ACTION_VIEW`.
+pub fn open_url(app: &AndroidApp, url: &str) {
+    let url = url.to_string();
+    on_ui_thread(app, "opening URL", move |env, activity| {
+        let jurl = env.new_string(&url)?;
+        let uri = env
+            .call_static_method(
+                jni_str!("android/net/Uri"),
+                jni_str!("parse"),
+                jni_sig!("(Ljava/lang/String;)Landroid/net/Uri;"),
+                &[JValue::Object(&jurl)],
+            )?
+            .l()?;
+        let action = env.new_string("android.intent.action.VIEW")?;
+        let intent = env.new_object(
+            jni_str!("android/content/Intent"),
+            jni_sig!("(Ljava/lang/String;Landroid/net/Uri;)V"),
+            &[JValue::Object(&action), JValue::Object(&uri)],
+        )?;
+        env.call_method(
+            activity,
+            jni_str!("startActivity"),
+            jni_sig!("(Landroid/content/Intent;)V"),
+            &[JValue::Object(&intent)],
+        )?;
+        Ok(())
+    });
 }

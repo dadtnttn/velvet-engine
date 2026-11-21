@@ -1145,6 +1145,41 @@ impl Library {
         lib
     }
 
+    /// Loads guiones and optional Velvet Script 3 `.vel` logic files already read from any source
+    /// (such as packaged Android APK assets), in the order given.
+    pub fn load_with(
+        cast: Cast,
+        guiones: &[(PathBuf, String)],
+        logic: &[(PathBuf, String)],
+    ) -> Self {
+        let mut lib = Self::new(cast);
+        for (path, text) in guiones {
+            lib.add(text, path);
+        }
+        let logic_by_stem: BTreeMap<String, (&PathBuf, &String)> = logic
+            .iter()
+            .filter_map(|(path, source)| {
+                let stem = path.file_stem()?.to_str()?;
+                Some((slug(stem), (path, source)))
+            })
+            .collect();
+        let ids: Vec<String> = lib.guiones.iter().map(|g| g.id.clone()).collect();
+        for id in ids {
+            if let Some((path, source)) = logic_by_stem.get(&id) {
+                if declares_vs3(source) {
+                    lib.add_logic(&id, source, path);
+                }
+            }
+        }
+        let problems: Vec<Problem> = lib
+            .guiones
+            .iter()
+            .flat_map(|g| lib.decide_problems(&g.id))
+            .collect();
+        lib.problems.extend(problems);
+        lib
+    }
+
     /// The variables that playing the scene at `at` can set or change, with everything it leads
     /// to in the guiones (its jumps, its options' scenes, the scenes that follow on from it).
     pub fn vars_set_from(&self, at: (usize, usize)) -> BTreeSet<String> {
