@@ -621,7 +621,7 @@ mod tests {
         let mut canvas = Canvas::new(100.0, 100.0);
         canvas.release_pixels();
         let picture = stage.add_picture(canvas);
-        let card = stage.add_card(Card::screen(picture, 0.0, 0.0, 100.0, 100.0).pickable());
+        let card = stage.add(Card::screen(picture, 0.0, 0.0, 100.0, 100.0).pickable());
         assert_eq!(stage.pick(Vec2::new(50.0, 50.0)).unwrap().card, card);
         assert!(stage.pick(Vec2::new(110.0, 50.0)).is_none());
     }
