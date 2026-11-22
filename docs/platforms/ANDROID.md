@@ -116,7 +116,7 @@ says otherwise (`to = ""` packs the folder's contents at the root). Hidden files
 |---------|--------------|
 | `velvet android doctor` | Toolchain check and connected devices (installs nothing) |
 | `velvet android build -p game [--abi arm64-v8a] [--debug] [-j 6]` | The native library per ABI, checked (ELF machine, 16 KB pages, needed libraries) |
-| `velvet android apk -p game [--sign debug\|release\|none] [--out x.apk]` | Build, package, `zipalign -P 16`, sign with apksigner, then verify and print the contents |
+| `velvet android apk -p game [--version-name x.y.z] [--sign debug\|release\|none] [--out x.apk]` | Build, package, `zipalign -P 16`, sign with apksigner, then verify and print the contents |
 | `velvet android aab -p game [--sign release] [--check]` | An app bundle via bundletool, signed with jarsigner; `--check` also makes the universal APK Play would serve and verifies it |
 | `velvet android sign <file> --sign release` | Sign an existing APK or AAB again |
 | `velvet android verify <file>` | `apksigner verify --print-certs` / `jarsigner -verify` + `bundletool validate`, alignment, ABIs, assets, manifest (`aapt2 dump badging`) |

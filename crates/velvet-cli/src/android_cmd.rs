@@ -37,6 +37,9 @@ pub enum AndroidCommand {
         build: BuildArgs,
         #[command(flatten)]
         sign: SignArgs,
+        /// Override the APK's version name and derive its version code from it.
+        #[arg(long)]
+        version_name: Option<String>,
         /// Where to write the APK (default: `target/velvet-android/<package>/<profile>/`).
         #[arg(long)]
         out: Option<PathBuf>,
@@ -212,9 +215,15 @@ pub fn cmd_android(command: AndroidCommand) -> Result<()> {
             target,
             build,
             sign,
+            version_name,
             out,
         } => {
-            let project = load(&target)?;
+            let mut project = load(&target)?;
+            if let Some(name) = version_name {
+                project.config.version_name = Some(name);
+                project.config.version_code = None;
+                project.version_code().map_err(|e| anyhow!(e))?;
+            }
             let tools = toolchain(&project)?;
             let key = sign.key(&tools, &search_dirs(&project))?;
             let options = build.options()?;

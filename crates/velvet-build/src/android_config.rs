@@ -363,7 +363,7 @@ pub fn version_code_from(version: &str) -> Option<u32> {
     if minor >= 1000 || patch >= 1000 {
         return None;
     }
-    let code = major.checked_mul(1_000_000)? + minor * 1000 + patch;
+    let code = major.checked_mul(1_000_000)?.checked_add(minor * 1000 + patch)?;
     (code > 0 && code <= MAX_VERSION_CODE).then_some(code)
 }
 
@@ -431,6 +431,7 @@ mod tests {
         assert_eq!(version_code_from("0.2.2+fix2"), Some(2002));
         assert_eq!(version_code_from("2.0.0-beta.1"), Some(2_000_000));
         assert_eq!(version_code_from("0.0.0"), None);
+        assert_eq!(version_code_from("4294.999.999"), None);
         assert_eq!(version_code_from("x"), None);
         assert_eq!(parse_hex_color("#1a2B3c"), Some([0x1a, 0x2b, 0x3c]));
         assert_eq!(
