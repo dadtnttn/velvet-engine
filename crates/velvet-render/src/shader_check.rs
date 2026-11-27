@@ -67,7 +67,14 @@ fn constant_sets(name: &str) -> Vec<HashMap<String, f64>> {
     if name == "mesh" {
         [0.0, 1.0]
             .into_iter()
-            .map(|normal_map| HashMap::from([("NORMAL_MAP".to_string(), normal_map)]))
+            .flat_map(|normal_map| {
+                [0.0, 1.0].into_iter().map(move |clip_plane| {
+                    HashMap::from([
+                        ("NORMAL_MAP".to_string(), normal_map),
+                        ("CLIP_PLANE".to_string(), clip_plane),
+                    ])
+                })
+            })
             .collect()
     } else {
         vec![HashMap::new()]
