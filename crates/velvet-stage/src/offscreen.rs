@@ -138,7 +138,7 @@ impl SharedRenderer {
     }
 }
 
-/// Draws a stage into a texture of its own and reads it back (for a renderer made for [`FORMAT`]).
+/// Draws a stage into a texture of its own and reads it back (for a renderer made for `FORMAT`).
 /// Returns an empty vector when the capture cannot be read.
 pub fn render_rgba(
     device: &wgpu::Device,
