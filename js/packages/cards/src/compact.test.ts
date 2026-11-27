@@ -15,13 +15,15 @@ it('uses each stack height in JS and in Rust output placement, including after l
       for(let j=0;j<i%3;j++)board.dropOn(board.spawn('wood',0,0),base);
     }
     const source=board.cards().find(c=>c.id===bush)!;
-    const near={x:Math.fround(source.x+1),y:source.y};
-    const expected=board.freeSpot(near,placement.footprint,{stackOffset:placement.stackOffset});
+    const near = { x: Math.fround(Math.fround(source.x) + 1), y: source.y };
+    const expected = board.freeSpot(near, placement.footprint, { stackOffset: placement.stackOffset });
     board.takeEvents();
-    const output=board.tick(2).find(e=>e.event==='card_spawned');
-    expect(output).toMatchObject({x:expected!.x,y:expected!.y});
-    const restored=await Board.load(catalog,board.save(),{outputPlacement:placement});
-    expect(restored.outputPlacement()).toEqual({...placement,stackOffset:Math.fround(.35)});
+    const output = board.tick(2).find((event) => event.event === "card_spawned");
+    expect(output).toBeDefined();
+    // Rust sends binary32 values as their shortest round-tripping decimal strings in JSON.
+    expect({ x: Math.fround(output!.x), y: Math.fround(output!.y) }).toEqual(expected);
+    const restored = await Board.load(catalog, board.save(), { outputPlacement: placement });
+    expect(restored.outputPlacement()).toEqual(placement);
     restored.free();board.free();
   }
 });
