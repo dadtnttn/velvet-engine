@@ -363,7 +363,9 @@ pub fn version_code_from(version: &str) -> Option<u32> {
     if minor >= 1000 || patch >= 1000 {
         return None;
     }
-    let code = major.checked_mul(1_000_000)?.checked_add(minor * 1000 + patch)?;
+    let code = major
+        .checked_mul(1_000_000)?
+        .checked_add(minor * 1000 + patch)?;
     (code > 0 && code <= MAX_VERSION_CODE).then_some(code)
 }
 

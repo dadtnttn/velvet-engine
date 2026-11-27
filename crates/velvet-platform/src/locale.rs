@@ -41,10 +41,7 @@ pub fn system_locale() -> Option<String> {
 /// `es_ES.UTF-8@euro` → `es-ES`; `C`, `POSIX` and empty values → `None`.
 pub fn posix_to_bcp47(value: &str) -> Option<String> {
     let tag = value.split(['.', '@']).next()?.trim();
-    if tag.is_empty()
-        || tag.eq_ignore_ascii_case("c")
-        || tag.eq_ignore_ascii_case("posix")
-    {
+    if tag.is_empty() || tag.eq_ignore_ascii_case("c") || tag.eq_ignore_ascii_case("posix") {
         return None;
     }
     Some(tag.replace('_', "-"))
@@ -53,7 +50,9 @@ pub fn posix_to_bcp47(value: &str) -> Option<String> {
 fn push_unique_tag(out: &mut Vec<String>, raw: &str) {
     if let Some(tag) = posix_to_bcp47(raw) {
         if !tag.eq_ignore_ascii_case("und")
-            && !out.iter().any(|existing| existing.eq_ignore_ascii_case(&tag))
+            && !out
+                .iter()
+                .any(|existing| existing.eq_ignore_ascii_case(&tag))
         {
             out.push(tag);
         }
@@ -107,7 +106,10 @@ pub(crate) fn parse_multi_sz(words: &[u16]) -> Vec<String> {
     let mut out = Vec::new();
     let mut start = 0;
     while start < words.len() {
-        let len = words[start..].iter().position(|&c| c == 0).unwrap_or(words.len() - start);
+        let len = words[start..]
+            .iter()
+            .position(|&c| c == 0)
+            .unwrap_or(words.len() - start);
         if len == 0 {
             break;
         }
@@ -135,7 +137,12 @@ fn windows_ui_languages() -> Vec<String> {
     let mut count = 0u32;
     // SAFETY: passing a null buffer queries the required length in UTF-16 code units.
     let _ = unsafe {
-        GetUserPreferredUILanguages(MUI_LANGUAGE_NAME, &mut count, std::ptr::null_mut(), &mut len)
+        GetUserPreferredUILanguages(
+            MUI_LANGUAGE_NAME,
+            &mut count,
+            std::ptr::null_mut(),
+            &mut len,
+        )
     };
     let cap = (len as usize).max(512);
     let mut buffer = vec![0u16; cap];
@@ -157,7 +164,8 @@ fn windows_ui_languages() -> Vec<String> {
     if out.is_empty() {
         let mut name_buf = [0u16; 85];
         // SAFETY: `name_buf` is a writable UTF-16 buffer of length 85 (`LOCALE_NAME_MAX_LENGTH`).
-        let written = unsafe { GetUserDefaultLocaleName(name_buf.as_mut_ptr(), name_buf.len() as i32) };
+        let written =
+            unsafe { GetUserDefaultLocaleName(name_buf.as_mut_ptr(), name_buf.len() as i32) };
         if written > 0 {
             let first: Vec<u16> = name_buf.iter().copied().take_while(|&c| c != 0).collect();
             let s = String::from_utf16_lossy(&first);
@@ -205,7 +213,12 @@ fn android_jni_locales(app: &crate::android::AndroidApp) -> Vec<String> {
             return None;
         }
         let tags_obj = env
-            .call_method(list, jni_str!("toLanguageTags"), jni_sig!("()Ljava/lang/String;"), &[])
+            .call_method(
+                list,
+                jni_str!("toLanguageTags"),
+                jni_sig!("()Ljava/lang/String;"),
+                &[],
+            )
             .ok()?
             .l()
             .ok()?;
@@ -423,6 +436,8 @@ mod tests {
             Some("es_ES:en_US"),
         )
         .is_empty());
-        assert!(posix_locales_from_vars(Some("C.UTF-8"), None, Some("ja_JP.UTF-8"), None).is_empty());
+        assert!(
+            posix_locales_from_vars(Some("C.UTF-8"), None, Some("ja_JP.UTF-8"), None).is_empty()
+        );
     }
 }

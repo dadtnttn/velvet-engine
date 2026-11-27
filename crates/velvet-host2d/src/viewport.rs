@@ -23,7 +23,14 @@ impl Viewport {
         logical_width: f32,
         logical_height: f32,
     ) -> Option<Viewport> {
-        Self::letterbox_in(0, 0, window_width, window_height, logical_width, logical_height)
+        Self::letterbox_in(
+            0,
+            0,
+            window_width,
+            window_height,
+            logical_width,
+            logical_height,
+        )
     }
 
     /// The largest centred rectangle of the logical aspect inside the sub-rectangle
