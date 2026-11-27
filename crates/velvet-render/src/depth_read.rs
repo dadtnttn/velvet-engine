@@ -61,15 +61,21 @@ impl DepthRead {
     }
 }
 
-/// Whether the device runs on OpenGL (ES). wgpu builds its GL backend only on Unix systems other
-/// than Apple's (Linux, Android); elsewhere there is none to ask about.
+/// Whether the device runs on OpenGL (ES). wgpu 24 enables its native GL backend on Windows
+/// and on non-Apple Unix targets, including Android.
 fn is_gl(device: &wgpu::Device) -> bool {
-    #[cfg(all(unix, not(target_vendor = "apple"), not(target_arch = "wasm32")))]
+    #[cfg(any(
+        windows,
+        all(unix, not(target_vendor = "apple"), not(target_arch = "wasm32"))
+    ))]
     {
         // SAFETY: the callback only looks whether there is a GL device; it keeps nothing.
         unsafe { device.as_hal::<wgpu::hal::api::Gles, _, _>(|gl| gl.is_some()) }
     }
-    #[cfg(not(all(unix, not(target_vendor = "apple"), not(target_arch = "wasm32"))))]
+    #[cfg(not(any(
+        windows,
+        all(unix, not(target_vendor = "apple"), not(target_arch = "wasm32"))
+    )))]
     {
         let _ = device;
         false
