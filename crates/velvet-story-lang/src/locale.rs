@@ -76,6 +76,10 @@ impl DiagLocale {
 /// scopes for multi-document concurrent validation.
 static DEFAULT_LOCALE: RwLock<DiagLocale> = RwLock::new(DiagLocale::Es);
 
+// Keep tests that set the process default from interfering across test cases.
+#[cfg(test)]
+pub(crate) static DEFAULT_LOCALE_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 thread_local! {
     /// Stack of scoped locales for the current thread (Studio multi-doc safe).
     static LOCALE_STACK: RefCell<Vec<DiagLocale>> = const { RefCell::new(Vec::new()) };
@@ -713,6 +717,7 @@ mod tests {
 
     #[test]
     fn scoped_locale_overrides_default_without_mutating_default() {
+        let _default_lock = DEFAULT_LOCALE_TEST_LOCK.lock().unwrap();
         set_diag_locale(DiagLocale::Es);
         let es_default = diag_message("VST027", &[("target", "x")]);
         let en_scoped = with_diag_locale(DiagLocale::En, || {
@@ -731,6 +736,7 @@ mod tests {
         use std::sync::mpsc;
         use std::thread;
 
+        let _default_lock = DEFAULT_LOCALE_TEST_LOCK.lock().unwrap();
         let (tx, rx) = mpsc::channel();
         let pairs = [
             (DiagLocale::En, "scene"),

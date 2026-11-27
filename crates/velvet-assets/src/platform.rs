@@ -175,10 +175,7 @@ impl AssetVariant {
                 let _ = loc;
             }
         }
-        if self.path_needs_texture_budget(profile) {
-            return false;
-        }
-        true
+        !self.path_needs_texture_budget(profile)
     }
 
     fn path_needs_texture_budget(&self, profile: &PlatformProfile) -> bool {

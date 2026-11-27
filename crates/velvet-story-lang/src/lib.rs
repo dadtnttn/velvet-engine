@@ -249,6 +249,7 @@ end
         use std::sync::mpsc;
         use std::thread;
 
+        let _default_lock = crate::locale::DEFAULT_LOCALE_TEST_LOCK.lock().unwrap();
         let src = "scene a\ngoto missing_xyz\n";
         let (tx, rx) = mpsc::channel();
         let mut handles = Vec::new();

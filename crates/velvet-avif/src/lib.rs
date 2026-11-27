@@ -447,8 +447,8 @@ fn decode_avif_inner(bytes: &[u8]) -> Result<RgbaImage> {
             };
             px.0[3] = av;
             if parsed.premultiplied_alpha && av > 0 && av < 255 {
-                for c in 0..3 {
-                    px.0[c] = ((px.0[c] as u32 * 255 + av as u32 / 2) / av as u32).min(255) as u8;
+                for channel in px.0.iter_mut().take(3) {
+                    *channel = ((*channel as u32 * 255 + av as u32 / 2) / av as u32).min(255) as u8;
                 }
             }
         }
